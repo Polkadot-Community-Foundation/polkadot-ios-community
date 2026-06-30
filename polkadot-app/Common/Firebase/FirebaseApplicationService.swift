@@ -208,7 +208,7 @@ private extension String {
     static func chains() -> String {
         #if UNSTABLE
             "chains_v2"
-        #elseif NIGHTLY
+        #elseif NIGHTLY || DEV
             "chains_v2"
         #else
             "chains"

@@ -1,5 +1,5 @@
-OTHER_SWIFT_FLAGS = $(inherited) "-DNIGHTLY" "-DTESTNET_FEATURE" "-DW3S"
+OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DW3S"
 
-APP_NAME = Polkadot
+APP_NAME = Polkadot Dev
 BUNDLE = io.pcf.polkadotapp.dev
 DEEPLINK = polkadotapp
