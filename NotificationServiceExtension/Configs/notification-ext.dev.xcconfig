@@ -1,0 +1,3 @@
+OTHER_SWIFT_FLAGS = $(inherited)
+BUNDLE = io.pcf.polkadotapp.dev.NotificationServiceExtension
+APP_MAIN_BUNDLE = io.pcf.polkadotapp.dev
