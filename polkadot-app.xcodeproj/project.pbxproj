@@ -1533,7 +1533,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "io.paritytech.polkadotapp.polkadot-appTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.pcf.polkadotapp.dev.polkadot-appTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1578,7 +1578,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "io.paritytech.polkadotapp.polkadot-appIntegrationTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.pcf.polkadotapp.dev.polkadot-appIntegrationTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
