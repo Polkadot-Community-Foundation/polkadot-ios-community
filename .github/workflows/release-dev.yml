@@ -1,12 +1,12 @@
 name: Release (Dev)
 
 # Archives the polkadot-app iOS client in the DEV configuration and uploads it to
-# TestFlight. The Dev build is the PUBLIC developer build: it reuses the same testnet
-# contour as Nightly (it carries the same -DNIGHTLY / -DTESTNET_FEATURE / -DW3S flags
-# and reads `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah /
-# nightly-people / nightly-bulletin in KnownChains.swift) but ships under its own
-# bundle id and its own Firebase app, so it can be distinguished from Nightly by an RC
-# app-id condition. Network wiring is delivered at runtime from Firebase Remote Config
+# TestFlight. The Dev build is the PUBLIC developer build: it MIRRORS Nightly's testnet
+# contour via its own dedicated flag (it carries -DDEV / -DTESTNET_FEATURE / -DW3S, and
+# every network gate is `#elseif NIGHTLY || DEV`, so it reads `chains_v2`, resolving chains
+# by the fixed ids nightly-relay / nightly-ah / nightly-people / nightly-bulletin in
+# KnownChains.swift) but ships under its own bundle id and its own Firebase app, so it can
+# be distinguished from Nightly by an RC app-id condition. Network wiring is delivered at runtime from Firebase Remote Config
 # (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
 # project whose GoogleService-Info plist you supply below.
 #
