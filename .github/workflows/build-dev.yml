@@ -1,15 +1,22 @@
 name: Build (Dev, unsigned)
 
-# Compile-only lane for the Dev configuration: builds the app (and its embedded
-# NotificationServiceExtension) for a generic iOS device WITHOUT code signing, so it
-# needs no Apple Developer portal registration, no provisioning profile and no App
-# Store Connect API key. Its job is to catch build-process issues early — Swift
-# compile errors behind the -DDEV flag (`#elseif NIGHTLY || DEV` gates), pbxproj
-# configuration mistakes in the Dev build configuration, SwiftPM resolution — before
-# the signed TestFlight lane (release-dev.yml) is exercised.
+# Unsigned build + simulator verification lane for the Dev configuration — no Apple
+# Developer portal, provisioning profile or App Store Connect key needed. Two jobs in one:
+#  1. Compile check: catches Swift errors behind the -DDEV flag (`#elseif NIGHTLY || DEV`
+#     gates), pbxproj mistakes in the Dev build configuration, SwiftPM resolution.
+#  2. Behaviour check: boots an iOS Simulator on the runner, installs and launches the
+#     Dev app, and verifies the build's identity and config resolution:
+#       - static: bundle id is the production io.pcf.polkadotapp and the baked
+#         GoogleService-Info.plist is the PRODUCTION Firebase iOS app (shared by design);
+#       - runtime: after the Remote Config fetch, the app container must hold DEVNET
+#         endpoints (the `build_channel=dev` custom signal matched `dev_build_ios`) and
+#         must NOT hold any production endpoint — a dev build silently resolving prod
+#         config is the failure class this lane exists to catch.
+#     Screenshot + app log + leak report are uploaded as artifacts.
 #
 # Required repository secrets (already used by release-dev.yml):
-#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the .dev Firebase app's GoogleService-Info.plist
+#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the PRODUCTION Firebase iOS app's
+#                                        GoogleService-Info.plist (shared with the Dev build)
 #   W3S_AUTH_KEY                         auth keypair seed (hex); optional for compiling —
 #                                        inject-keys.sh falls back to an empty value.
 
@@ -49,15 +56,72 @@ jobs:
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
-      - name: Build (Dev, no code signing)
+      - name: Build (Dev, iOS Simulator, no code signing)
         run: |
           set -o pipefail
           xcodebuild \
             -project polkadot-app.xcodeproj \
             -scheme polkadot-app \
             -configuration Dev \
-            -destination 'generic/platform=iOS' \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Static identity check (bundle id + baked Firebase app)
+        run: |
+          APP=$(find build/Build/Products/Dev-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          GAID=$(/usr/libexec/PlistBuddy -c 'Print :GOOGLE_APP_ID' "$APP/GoogleService-Info.plist")
+          GBID=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' "$APP/GoogleService-Info.plist")
+          echo "bundle id:        $BID"
+          echo "firebase app id:  $GAID"
+          echo "firebase bundle:  $GBID"
+          test "$BID" = "io.pcf.polkadotapp"
+          test "$GAID" = "1:165923692956:ios:c04e0ded2c4de002d72859"
+          test "$GBID" = "io.pcf.polkadotapp"
+
+      - name: Boot simulator and launch the app
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c "
+          import json, sys
+          devs = [d for r in json.load(sys.stdin)['devices'].values() for d in r
+                  if d.get('isAvailable') and 'iPhone' in d['name']]
+          print(devs[0]['udid'])")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" io.pcf.polkadotapp
+          sleep 90
+
+      - name: Runtime config-leak check (must resolve DEVNET, never prod)
+        run: |
+          xcrun simctl io "$UDID" screenshot startup.png
+          xcrun simctl spawn "$UDID" log show --last 4m \
+            --predicate 'processImagePath CONTAINS "polkadot-app"' > app-log.txt || true
+          CONTAINER=$(xcrun simctl get_app_container "$UDID" io.pcf.polkadotapp data)
+          echo "app data container: $CONTAINER"
+          # Remote Config persists the values it fetched+activated in the data container.
+          grep -a -r -l "polkadotcommunity.foundation" "$CONTAINER" 2>/dev/null > dev-marker-files.txt || true
+          grep -a -r -l -e "polkadot-app-stg.parity.io" -e "previewnet.substrate.dev" \
+            "$CONTAINER" 2>/dev/null > prod-leak-files.txt || true
+          echo "--- files holding DEVNET endpoints (expected >=1):"; cat dev-marker-files.txt
+          echo "--- files holding PRODUCTION endpoints (expected none):"; cat prod-leak-files.txt
+          test -s dev-marker-files.txt    # RC fetched + activated devnet values
+          test ! -s prod-leak-files.txt   # no production endpoint resolved/persisted
+
+      - name: Upload verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-sim-verification
+          path: |
+            startup.png
+            app-log.txt
+            dev-marker-files.txt
+            prod-leak-files.txt
+          if-no-files-found: warn
