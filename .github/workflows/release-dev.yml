@@ -1,27 +1,30 @@
 name: Release (Dev)
 
-# Archives the polkadot-app iOS client in the DEV configuration and uploads it to
-# TestFlight. The Dev build is the PUBLIC developer build: it MIRRORS Nightly's testnet
-# contour via its own dedicated flag (it carries -DDEV / -DTESTNET_FEATURE / -DW3S, and
-# every network gate is `#elseif NIGHTLY || DEV`, so it reads `chains_v2`, resolving chains
-# by the fixed ids nightly-relay / nightly-ah / nightly-people / nightly-bulletin in
-# KnownChains.swift) but ships under its own bundle id and its own Firebase app, so it can
-# be distinguished from Nightly by an RC app-id condition. Network wiring is delivered at runtime from Firebase Remote Config
+# Archives the polkadot-app iOS client in the DEV configuration and distributes it to the
+# external TestFlight group "Products Devnet". The Dev build is the PUBLIC developer build:
+# it MIRRORS Nightly's testnet contour via its own dedicated flag (it carries -DDEV /
+# -DTESTNET_FEATURE / -DW3S, and every network gate is `#elseif NIGHTLY || DEV`, so it reads
+# `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah / nightly-people /
+# nightly-bulletin in KnownChains.swift). It ships under the PRODUCTION bundle id
+# io.pcf.polkadotapp (one app record — TestFlight-only records get binned) and the production
+# Firebase app; Remote Config tells the builds apart by the `build_channel=dev` CUSTOM SIGNAL
+# the Dev build sets at startup (FirebaseApplicationService), matched by the `dev_build_ios`
+# condition. Network wiring is delivered at runtime from Firebase Remote Config
 # (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
 # project whose GoogleService-Info plist you supply below.
 #
-# ⚠️ App ID registration (user-gated): the bundle id io.pcf.polkadotapp.dev (and its
-#    NotificationServiceExtension, io.pcf.polkadotapp.dev.NotificationServiceExtension)
-#    must be registered in App Store Connect / the Apple Developer portal with a matching
-#    provisioning profile before this workflow can sign and upload. Automatic signing
-#    (-allowProvisioningUpdates) provisions both once the App IDs exist.
+# Build numbers are stamped from the CI run number (CURRENT_PROJECT_VERSION) so repeated
+# uploads of the same marketing version are accepted. The first build of each version sent
+# to the external group goes through Beta App Review before testers receive it.
 #
 # Required repository secrets:
-#   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key)
+#   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key; needs the
+#                                        App Manager role to manage TestFlight groups)
 #   APP_STORE_CONNECT_ISSUER_ID          API issuer id
 #   APP_STORE_CONNECT_KEY_CONTENT        base64 of the .p8 private key
 #   APPLE_TEAM_ID                        Developer team id (for signing + ExportOptions)
-#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the .dev Firebase app's GoogleService-Info.plist
+#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the PRODUCTION Firebase iOS app's
+#                                        GoogleService-Info.plist (shared with the Dev build)
 #   W3S_AUTH_KEY                         auth keypair seed (hex; required for W3S flows)
 # Optional: POSTHOG_API_KEY, SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN,
 #   MELD_BASIC_AUTH_TOKEN.
@@ -102,6 +105,7 @@ jobs:
             -authenticationKeyIssuerID "$ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             archive
 
       - name: Export signed .ipa
@@ -115,15 +119,25 @@ jobs:
             -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
             -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
-      - name: Upload to TestFlight
+      - name: Distribute to TestFlight group "Products Devnet"
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
           echo "Uploading $IPA"
-          xcrun altool --upload-app -f "$IPA" -t ios \
-            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          jq -n \
+            --arg key_id "$KEY_ID" \
+            --arg issuer_id "$ISSUER_ID" \
+            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > asc_api_key.json
+          fastlane pilot upload \
+            --api_key_path asc_api_key.json \
+            --ipa "$IPA" \
+            --distribute_external true \
+            --groups "Products Devnet" \
+            --changelog "Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
 
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
