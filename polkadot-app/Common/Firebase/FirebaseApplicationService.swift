@@ -47,20 +47,26 @@ final class FirebaseApplicationService: RemoteConfigManaging {
     // MARK: Public methods
 
     func fetchRemoteConfigValues() {
-        remoteConfig.fetchAndActivate { [weak self] status, error in
-            guard let self else {
-                return
-            }
+        #if DEV
+            // The Dev build shares the production bundle id and Firebase app; Remote Config
+            // tells the builds apart by this custom signal, so it must be set before the
+            // first fetch or that fetch resolves the production config.
+            Task { [weak self] in
+                guard let self else {
+                    return
+                }
 
-            defer {
-                handleRemoteConfigStatus(status)
-            }
+                do {
+                    try await remoteConfig.setCustomSignals(["build_channel": .string("dev")])
+                } catch {
+                    logger.error("Failed to set RemoteConfig custom signals: \(error)")
+                }
 
-            if let error {
-                delegate?.remoteConfig(didFinishLoading: .failure(error))
-                return
+                performFetchAndActivate()
             }
-        }
+        #else
+            performFetchAndActivate()
+        #endif
     }
 
     func asyncWaitChainsForRemoteConfigValues() -> CompoundOperationWrapper<[RemoteChainModel]> {
@@ -119,6 +125,23 @@ final class FirebaseApplicationService: RemoteConfigManaging {
 
 private extension FirebaseApplicationService {
     // MARK: Private methods
+
+    private func performFetchAndActivate() {
+        remoteConfig.fetchAndActivate { [weak self] status, error in
+            guard let self else {
+                return
+            }
+
+            defer {
+                handleRemoteConfigStatus(status)
+            }
+
+            if let error {
+                delegate?.remoteConfig(didFinishLoading: .failure(error))
+                return
+            }
+        }
+    }
 
     private func configurationRemoteConfigSettings() {
         let remoteConfigSettings = RemoteConfigSettings()
