@@ -34,6 +34,9 @@ on:
   push:
     tags: ['ios-dev-v*']
 
+permissions:
+  contents: write
+
 jobs:
   testflight:
     runs-on: macos-15
@@ -137,6 +140,8 @@ jobs:
             --ipa "$IPA" \
             --distribute_external true \
             --groups "Products Devnet" \
+            --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
+            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
             --changelog "Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
 
       - name: Upload .ipa artifact
@@ -145,6 +150,63 @@ jobs:
           name: polkadot-ios-dev
           path: build/*.ipa
           if-no-files-found: warn
+
+      - name: Resolve TestFlight public link (Products Devnet)
+        id: tflink
+        if: startsWith(github.ref, 'refs/tags/ios-dev-v')
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography 2>/dev/null \
+            || python3 -m pip install --quiet pyjwt cryptography || true
+          python3 - >> "$GITHUB_OUTPUT" <<'EOF' || echo "link=" >> "$GITHUB_OUTPUT"
+          import json, os, time, urllib.request, jwt
+
+          key_id, issuer = os.environ["KEY_ID"], os.environ["ISSUER_ID"]
+          key = open(f"private_keys/AuthKey_{key_id}.p8").read()
+          now = int(time.time())
+          token = jwt.encode(
+              {"iss": issuer, "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
+              key, algorithm="ES256", headers={"kid": key_id},
+          )
+
+          def call(method, url, body=None):
+              req = urllib.request.Request(
+                  url, method=method, data=json.dumps(body).encode() if body else None,
+                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+              )
+              return json.loads(urllib.request.urlopen(req).read())
+
+          base = "https://api.appstoreconnect.apple.com/v1/betaGroups"
+          group = call("GET", base + "?filter[name]=Products%20Devnet")["data"][0]
+          link = group["attributes"].get("publicLink")
+          if not link:
+              patched = call("PATCH", f"{base}/{group['id']}", {"data": {
+                  "type": "betaGroups", "id": group["id"],
+                  "attributes": {"publicLinkEnabled": True},
+              }})
+              link = patched["data"]["attributes"].get("publicLink") or ""
+          print(f"link={link}")
+          EOF
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/ios-dev-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            iOS developer build for the Paseo products devnet, under the production bundle id
+            `io.pcf.polkadotapp` with devnet config resolved at runtime via Remote Config.
+
+            **Distribution is TestFlight-only** (App Store-signed builds cannot be sideloaded, so
+            no installable binary is attached): external group **Products Devnet**.
+            ${{ steps.tflink.outputs.link != '' && format('👉 **Join and install:** {0}', steps.tflink.outputs.link) || 'Join link: see App Store Connect → TestFlight → Products Devnet (public link).' }}
+
+            The first build of each version becomes available to the group once Beta App Review
+            approves it.
 
       # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
       # (ExportOptions method=ad-hoc) and run
