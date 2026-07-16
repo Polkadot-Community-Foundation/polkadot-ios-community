@@ -3,9 +3,9 @@ import Foundation
 enum SharedContainerGroup {
     static var name: String {
         #if F_DEV
-            return "group.paritytech.polkadotapp.develop"
+            return "group.pcf.polkadotapp.develop"
         #else
-            return "group.paritytech.polkadotapp"
+            return "group.pcf.polkadotapp"
         #endif
     }
 
