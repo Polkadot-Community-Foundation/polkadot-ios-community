@@ -58,7 +58,7 @@ enum AppConfig {
         static var chatChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewNetPeople
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoPeople
             #else
                 KnownChainId.releasePeople
@@ -68,7 +68,7 @@ enum AppConfig {
         static var usernameChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewNetPeople
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoPeople
             #else
                 KnownChainId.releasePeople
@@ -78,7 +78,7 @@ enum AppConfig {
         static var bulletInChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewNetBulletIn
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoBulletIn
             #else
                 KnownChainId.releaseBulletIn
@@ -88,7 +88,7 @@ enum AppConfig {
         static var fundingChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewAH
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoAH
             #else
                 KnownChainId.releaseAH
@@ -98,7 +98,7 @@ enum AppConfig {
         static var swappingChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewAH
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoAH
             #else
                 KnownChainId.releaseAH
@@ -108,7 +108,7 @@ enum AppConfig {
         static var assethubChain: ChainModel.Id {
             #if UNSTABLE
                 KnownChainId.previewAH
-            #elseif NIGHTLY
+            #elseif NIGHTLY || DEV
                 KnownChainId.paseoAH
             #else
                 KnownChainId.releaseAH

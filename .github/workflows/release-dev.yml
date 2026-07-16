@@ -1,0 +1,154 @@
+name: Release (Dev)
+
+# Archives the polkadot-app iOS client in the DEV configuration and distributes it to the
+# external TestFlight group "Products Devnet". The Dev build is the PUBLIC developer build:
+# it MIRRORS Nightly's testnet contour via its own dedicated flag (it carries -DDEV /
+# -DTESTNET_FEATURE / -DW3S, and every network gate is `#elseif NIGHTLY || DEV`, so it reads
+# `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah / nightly-people /
+# nightly-bulletin in KnownChains.swift). It ships under the PRODUCTION bundle id
+# io.pcf.polkadotapp (one app record — TestFlight-only records get binned) and the production
+# Firebase app; Remote Config tells the builds apart by the `build_channel=dev` CUSTOM SIGNAL
+# the Dev build sets at startup (FirebaseApplicationService), matched by the `dev_build_ios`
+# condition. Network wiring is delivered at runtime from Firebase Remote Config
+# (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
+# project whose GoogleService-Info plist you supply below.
+#
+# Build numbers are stamped from the CI run number (CURRENT_PROJECT_VERSION) so repeated
+# uploads of the same marketing version are accepted. The first build of each version sent
+# to the external group goes through Beta App Review before testers receive it.
+#
+# Required repository secrets:
+#   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key; needs the
+#                                        App Manager role to manage TestFlight groups)
+#   APP_STORE_CONNECT_ISSUER_ID          API issuer id
+#   APP_STORE_CONNECT_KEY_CONTENT        base64 of the .p8 private key
+#   APPLE_TEAM_ID                        Developer team id (for signing + ExportOptions)
+#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the PRODUCTION Firebase iOS app's
+#                                        GoogleService-Info.plist (shared with the Dev build)
+#   W3S_AUTH_KEY                         auth keypair seed (hex; required for W3S flows)
+# Optional: POSTHOG_API_KEY, SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN,
+#   MELD_BASIC_AUTH_TOKEN.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['ios-dev-v*']
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    env:
+      RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Provide GoogleService-Info.plist (.dev Firebase app)
+        env:
+          GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
+        run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+
+      - name: Generate build-time config (CIKeys)
+        env:
+          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
+        run: ./Scripts/inject-keys.sh
+
+      - name: Install App Store Connect API key
+        id: asc
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          KEY_B64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          mkdir -p ./private_keys ~/.appstoreconnect/private_keys
+          echo "$KEY_B64" | base64 --decode > "./private_keys/AuthKey_${KEY_ID}.p8"
+          cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
+          echo "key_path=$PWD/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve SwiftPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+
+      - name: Write ExportOptions.plist
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          EOF
+
+      - name: Archive (Dev)
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          xcodebuild \
+            -project polkadot-app.xcodeproj \
+            -scheme polkadot-app \
+            -configuration Dev \
+            -archivePath build/polkadot-app.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            archive
+
+      - name: Export signed .ipa
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/polkadot-app.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/ \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
+
+      - name: Distribute to TestFlight group "Products Devnet"
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
+          echo "Uploading $IPA"
+          jq -n \
+            --arg key_id "$KEY_ID" \
+            --arg issuer_id "$ISSUER_ID" \
+            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > asc_api_key.json
+          fastlane pilot upload \
+            --api_key_path asc_api_key.json \
+            --ipa "$IPA" \
+            --distribute_external true \
+            --groups "Products Devnet" \
+            --changelog "Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: polkadot-ios-dev
+          path: build/*.ipa
+          if-no-files-found: warn
+
+      # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
+      # (ExportOptions method=ad-hoc) and run
+      #   firebase appdistribution:distribute build/polkadot-app.ipa \
+      #     --app "$FIREBASE_APP_ID" --groups "$FIREBASE_GROUPS"
+      # authenticated via a service account with Firebase App Distribution Admin.
+      # The .dev Firebase app id is 1:165923692956:ios:3d940e376173f34bd72859.
