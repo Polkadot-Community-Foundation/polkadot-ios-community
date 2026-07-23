@@ -1,0 +1,52 @@
+name: TestFlight prune (Dev)
+
+# Expire older TestFlight builds so only the latest N stay available to a beta
+# group. Scoped to a single external group (default "Products Devnet"); Nightly /
+# production builds that share the app record io.pcf.polkadotapp are never touched.
+#
+# Dry-run by default: it only LISTS what would be expired. Expiry (irreversible —
+# Apple has no un-expire) runs only when dispatched with apply=true.
+#
+# Reuses the same App Store Connect API secrets as release-dev.yml:
+#   APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID / APP_STORE_CONNECT_KEY_CONTENT
+# The key must have the App Manager role to manage TestFlight builds.
+
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: 'TestFlight beta group name'
+        default: 'Products Devnet'
+      keep:
+        description: 'How many most-recent builds to keep active'
+        default: '1'
+      apply:
+        description: 'Actually expire (unchecked = dry-run list only)'
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: testflight-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet pyjwt cryptography requests
+      - name: Prune TestFlight builds
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_B64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+          BUNDLE_ID: io.pcf.polkadotapp
+          GROUP: ${{ inputs.group }}
+          KEEP: ${{ inputs.keep }}
+          APPLY: ${{ inputs.apply }}
+        run: python3 .github/scripts/testflight_prune.py
