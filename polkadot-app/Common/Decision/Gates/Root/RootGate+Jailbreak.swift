@@ -12,7 +12,10 @@ extension RootGate {
         }
 
         func evaluate() -> RootDestination? {
-            #if !DEBUG
+            // The public Dev/W3S build (‑DDEV) is a testnet developer build distributed via
+            // TestFlight; jailbroken devices are a legitimate tester setup there, so the block is
+            // compiled out for DEV as well as DEBUG. Nightly and Release keep the gate active.
+            #if !DEBUG && !DEV
                 if detector.isJailbroken() {
                     logger.error("Jailbreak detected - blocking app execution")
                     return .jailbroken
