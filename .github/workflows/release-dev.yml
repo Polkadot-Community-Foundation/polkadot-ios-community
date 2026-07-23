@@ -93,6 +93,12 @@ jobs:
 
       - name: Archive (Dev)
         env:
+          # The scheme has a pre-action that re-runs Scripts/inject-keys.sh on every
+          # build, so CIKeys.generated.swift is regenerated here and W3S_AUTH_KEY must
+          # be in scope — otherwise it is overwritten with an empty seed and the built
+          # app sends AuthorizeValueTransfer: None, so all coinage (CASH) calls are
+          # CallFiltered on the devnet People/Asset Hub value-transfer filter.
+          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}

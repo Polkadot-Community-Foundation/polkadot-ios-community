@@ -50,6 +50,11 @@ jobs:
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
       - name: Build (Dev, no code signing)
+        env:
+          # The scheme pre-action re-runs Scripts/inject-keys.sh on every build, so
+          # W3S_AUTH_KEY must be in scope here too or CIKeys.generated.swift is rewritten
+          # with an empty seed (keeps this lane consistent with release-dev.yml).
+          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
         run: |
           set -o pipefail
           xcodebuild \
