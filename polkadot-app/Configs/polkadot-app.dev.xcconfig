@@ -1,5 +1,10 @@
 OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DW3S"
 
+# Resolves ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon$(ICON_SUFFIX). Without it
+# this config falls back to the empty default and the public DEV build ships the
+# production AppIcon — the debug and devci configs already set it.
+ICON_SUFFIX = Dev
+
 APP_NAME = Polkadot Dev
 BUNDLE = io.pcf.polkadotapp
 DEEPLINK = polkadotapp
