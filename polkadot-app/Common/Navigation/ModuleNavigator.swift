@@ -28,37 +28,47 @@ extension ModuleNavigator: ModuleNavigating {
             return
         }
 
-        view.select(tab: .chat)
-        let tabNavigation = view.view(for: .chat) as? UINavigationController
+        let navigate = { [weak view] in
+            guard let view else { return }
 
-        if case let .existingChat(chat) = model {
-            let existing = tabNavigation?.viewControllers
-                .compactMap { $0 as? ChatViewController }
-                .first(where: { $0.presenter.chatId == chat })
-            if let existing {
-                tabNavigation?.popToViewController(existing, animated: true)
+            view.select(tab: .chat)
+            let tabNavigation = view.view(for: .chat) as? UINavigationController
+
+            if case let .existingChat(chat) = model {
+                let existing = tabNavigation?.viewControllers
+                    .compactMap { $0 as? ChatViewController }
+                    .first(where: { $0.presenter.chatId == chat })
+                if let existing {
+                    tabNavigation?.popToViewController(existing, animated: true)
+                    return
+                }
+            }
+
+            guard
+                let contactList = tabNavigation?.viewControllers.first as? ContactsListViewController
+            else {
                 return
             }
+            let contactListPresenter = contactList.presenter as? ContactsListPresenter
+            contactListPresenter?.wireframe.showChat(from: contactList, for: model)
+
+            // removing intermediate chats
+            guard
+                let tabNavigation,
+                tabNavigation.viewControllers.count > 2,
+                let rootViewController = tabNavigation.viewControllers.first,
+                let topViewController = tabNavigation.viewControllers.last
+            else {
+                return
+            }
+            tabNavigation.viewControllers = [rootViewController, topViewController]
         }
 
-        guard
-            let contactList = tabNavigation?.viewControllers.first as? ContactsListViewController
-        else {
-            return
-        }
-        let contactListPresenter = contactList.presenter as? ContactsListPresenter
-        contactListPresenter?.wireframe.showChat(from: contactList, for: model)
-
-        // removing intermediate chats
-        guard
-            let tabNavigation,
-            tabNavigation.viewControllers.count > 2,
-            let rootViewController = tabNavigation.viewControllers.first,
-            let topViewController = tabNavigation.viewControllers.last
-        else {
-            return
-        }
-        tabNavigation.viewControllers = [rootViewController, topViewController]
+        // A chat notification tap must land on the conversation even when a
+        // Browse/product page is presented modally on top of the tab bar.
+        // Dismiss it first, otherwise the chat is selected *behind* the open
+        // page and nothing appears to happen — see products-devnet-issues#2.
+        ModalDismiss.dismissingPresented(on: view, then: navigate)
     }
 
     func openProduct(page: ProductPage) {
@@ -91,10 +101,6 @@ extension ModuleNavigator: ModuleNavigating {
             navigation.present(productViewNavigation, animated: true)
         }
 
-        if tabBar.presentedViewController != nil {
-            tabBar.dismiss(animated: false, completion: navigate)
-        } else {
-            navigate()
-        }
+        ModalDismiss.dismissingPresented(on: tabBar, then: navigate)
     }
 }
