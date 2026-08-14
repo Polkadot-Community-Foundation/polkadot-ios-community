@@ -24,7 +24,7 @@ extension ModuleNavigator: ModuleNavigating {
     }
 
     func openChat(_ model: ChatOpenModel) {
-        guard let view = UIWindow.keyWindow?.rootViewController as? MainTabBarViewController else {
+        guard let view = UIApplication.shared.mainTabBarController else {
             return
         }
 
@@ -76,31 +76,12 @@ extension ModuleNavigator: ModuleNavigating {
             return
         }
 
-        let navigate = { [weak tabBar] in
-            guard let tabBar else { return }
-            tabBar.select(tab: .browse)
-
-            guard let navigation = tabBar.view(for: .browse) as? UINavigationController else {
-                return
-            }
-
-            let targetDomain = page.host.toDotDomain()
-            let existing = navigation.viewControllers
-                .compactMap { $0 as? SPAViewController }
-                .first(where: { $0.configuration.page.host.toDotDomain() == targetDomain })
-            if let existing {
-                navigation.popToViewController(existing, animated: true)
-                return
-            }
-
-            guard let productView = SPAViewFactory.createView(page: page) else {
-                return
-            }
-            let productViewNavigation = SPAViewFactory.makeCardNavigationController(for: productView)
-            productViewNavigation.modalPresentationStyle = .fullScreen
-            navigation.present(productViewNavigation, animated: true)
+        // The de-duplication this used to do by hand is now upstream's
+        // (`browserCoordinator.findOrCreateTab`), but the SPA is still mounted *inside* the
+        // tab bar, so a page presented modally on top would hide it. Keep dismissing first,
+        // for the same reason as `openChat` above — see products-devnet-issues#2.
+        ModalDismiss.dismissingPresented(on: tabBar) { [weak tabBar] in
+            tabBar?.openProduct(page: page)
         }
-
-        ModalDismiss.dismissingPresented(on: tabBar, then: navigate)
     }
 }

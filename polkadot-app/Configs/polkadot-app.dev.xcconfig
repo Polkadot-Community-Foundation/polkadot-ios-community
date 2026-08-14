@@ -1,5 +1,4 @@
-OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DW3S"
+#include "../../Configs/base.dev.xcconfig"
 
-APP_NAME = Polkadot Dev
-BUNDLE = io.pcf.polkadotapp
-DEEPLINK = polkadotapp
+OTHER_SWIFT_FLAGS = $(inherited) $(BASE_SWIFT_FLAGS)
+BUNDLE = $(APP_MAIN_BUNDLE)
