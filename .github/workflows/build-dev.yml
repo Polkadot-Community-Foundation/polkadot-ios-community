@@ -123,10 +123,13 @@ jobs:
           W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
         run: |
           set -o pipefail
+          # No -configuration override: the Dev configuration builds without testability, so
+          # `@testable import polkadot_app` fails to compile. The scheme's own Debug
+          # configuration has ENABLE_TESTABILITY, and the migrator and the Core Data model are
+          # identical across configurations, so nothing under test is configuration-specific.
           xcodebuild \
             -project polkadot-app.xcodeproj \
             -scheme polkadot-appTests \
-            -configuration Dev \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:polkadot-appTests/UserStorageMigratorTests \
             CODE_SIGNING_ALLOWED=NO \
