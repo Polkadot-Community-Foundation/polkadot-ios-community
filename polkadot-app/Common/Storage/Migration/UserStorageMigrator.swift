@@ -53,12 +53,35 @@ extension UserStorageMigrator: StorageMigrating {
         ]
 
         do {
-            try psc.addPersistentStore(
-                ofType: NSSQLiteStoreType,
-                configurationName: nil,
+            try addPersistentStore(to: psc, options: options)
+        } catch where Self.isUnmigratableStore(error) {
+            // 0.10.0 squashed UserDataModel 1...36 into UserDataModel41, so a store written by
+            // any earlier build has no source model left in the bundle and Core Data cannot
+            // infer a mapping. Nothing can migrate it, so drop it and start clean rather than
+            // crashing on every launch.
+            //
+            // Neither keys nor funds live in this store: the wallet entropy is in the keychain
+            // (and optionally iCloud, via Settings -> Backup), the username is Identity-pallet
+            // state keyed by account id, and CoinKeypairFactory derives coin keys from the root
+            // entropy along `//pps//coin`, so CoinageBackupRecoveryService re-derives coins and
+            // vouchers by scanning the chain. What is lost is local-only state, chiefly chat
+            // history — see the release notes for this build.
+            (Logger.shared as LoggerProtocol).error(
+                "User store predates \(destinationVersion.rawValue) and cannot be migrated, "
+                    + "recreating it: \(error)"
+            )
+
+            try? psc.destroyPersistentStore(
                 at: storeURL,
+                ofType: NSSQLiteStoreType,
                 options: options
             )
+
+            do {
+                try addPersistentStore(to: psc, options: options)
+            } catch {
+                fatalError("Failed to recreate persistent store: \(error)")
+            }
         } catch {
             fatalError("Failed to migrate persistent store: \(error)")
         }
@@ -72,5 +95,35 @@ extension UserStorageMigrator: StorageMigrating {
                 completion()
             }
         }
+    }
+}
+
+// MARK: - Private
+
+private extension UserStorageMigrator {
+    func addPersistentStore(
+        to coordinator: NSPersistentStoreCoordinator,
+        options: [AnyHashable: Any]
+    ) throws {
+        try coordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: storeURL,
+            options: options
+        )
+    }
+
+    /// True only when the store cannot be migrated because the model that wrote it is no longer
+    /// shipped — as opposed to a transient failure (disk full, permissions, a locked file), where
+    /// destroying the store would throw away recoverable user data.
+    static func isUnmigratableStore(_ error: Error) -> Bool {
+        let error = error as NSError
+
+        guard error.domain == NSCocoaErrorDomain else {
+            return false
+        }
+
+        return error.code == NSPersistentStoreIncompatibleVersionHashError
+            || error.code == NSMigrationMissingSourceModelError
     }
 }
