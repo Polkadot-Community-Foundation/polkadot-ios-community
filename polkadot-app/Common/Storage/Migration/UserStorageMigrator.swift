@@ -98,6 +98,27 @@ extension UserStorageMigrator: StorageMigrating {
     }
 }
 
+// MARK: - Error classification
+
+extension UserStorageMigrator {
+    /// True only when the store cannot be migrated because the model that wrote it is no longer
+    /// shipped — as opposed to a transient failure (disk full, permissions, a locked file), where
+    /// destroying the store would throw away recoverable user data.
+    ///
+    /// Not private so `UserStorageMigratorTests` can pin the classification: widening it is how
+    /// this turns from a crash fix into data loss.
+    static func isUnmigratableStore(_ error: Error) -> Bool {
+        let error = error as NSError
+
+        guard error.domain == NSCocoaErrorDomain else {
+            return false
+        }
+
+        return error.code == NSPersistentStoreIncompatibleVersionHashError
+            || error.code == NSMigrationMissingSourceModelError
+    }
+}
+
 // MARK: - Private
 
 private extension UserStorageMigrator {
@@ -111,19 +132,5 @@ private extension UserStorageMigrator {
             at: storeURL,
             options: options
         )
-    }
-
-    /// True only when the store cannot be migrated because the model that wrote it is no longer
-    /// shipped — as opposed to a transient failure (disk full, permissions, a locked file), where
-    /// destroying the store would throw away recoverable user data.
-    static func isUnmigratableStore(_ error: Error) -> Bool {
-        let error = error as NSError
-
-        guard error.domain == NSCocoaErrorDomain else {
-            return false
-        }
-
-        return error.code == NSPersistentStoreIncompatibleVersionHashError
-            || error.code == NSMigrationMissingSourceModelError
     }
 }
