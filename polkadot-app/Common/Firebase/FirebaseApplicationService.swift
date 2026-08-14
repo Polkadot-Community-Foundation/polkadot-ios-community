@@ -228,20 +228,7 @@ private extension FirebaseApplicationService {
 
 private extension String {
     static let latestAppVersion = "latest_ios_version"
-<<<<<<< HEAD
-    static func chains() -> String {
-        #if UNSTABLE
-            "chains_v2"
-        #elseif NIGHTLY || DEV
-            "chains_v2"
-        #else
-            "chains"
-        #endif
-    }
-
-=======
     static let chains = "chains_v2"
->>>>>>> upstream/main
     static let xcmTransfers = "cross_chain_transfers"
     static let generalXcmConfig = "xcm_general_config"
     static let gameResultsFallbackURL = "game_results_fallback_url"

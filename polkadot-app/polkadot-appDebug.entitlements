@@ -6,7 +6,10 @@
 	<string>development</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:dot.li?mode=developer</string>
 		<string>applinks:*.dot.li?mode=developer</string>
+		<string>applinks:paseo.li?mode=developer</string>
+		<string>applinks:*.paseo.li?mode=developer</string>
 	</array>
 	<key>com.apple.developer.devicecheck.appattest-environment</key>
 	<string>production</string>
