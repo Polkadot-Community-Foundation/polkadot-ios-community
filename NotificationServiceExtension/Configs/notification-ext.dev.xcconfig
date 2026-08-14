@@ -1,3 +1,4 @@
-OTHER_SWIFT_FLAGS = $(inherited)
-BUNDLE = io.pcf.polkadotapp.NotificationServiceExtension
-APP_MAIN_BUNDLE = io.pcf.polkadotapp
+#include "../../Configs/base.dev.xcconfig"
+
+OTHER_SWIFT_FLAGS = $(inherited) $(BASE_SWIFT_FLAGS)
+BUNDLE = $(APP_MAIN_BUNDLE).NotificationServiceExtension

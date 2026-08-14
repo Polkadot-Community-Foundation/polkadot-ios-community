@@ -3,6 +3,7 @@ import Operation_iOS
 import FirebaseCore
 import FirebaseRemoteConfig
 import Combine
+import ChainRegistry
 
 protocol RemoteConfigDelegate: AnyObject {
     func remoteConfig(didFinishLoading result: Result<Void, Error>)
@@ -47,30 +48,22 @@ final class FirebaseApplicationService: RemoteConfigManaging {
     // MARK: Public methods
 
     func fetchRemoteConfigValues() {
-        #if DEV
-            // The Dev build shares the production bundle id and Firebase app; Remote Config
-            // tells the builds apart by this custom signal, so it must be set before the
-            // first fetch or that fetch resolves the production config.
-            Task { [weak self] in
-                guard let self else {
-                    return
-                }
-
-                do {
-                    try await remoteConfig.setCustomSignals(["build_channel": .string("dev")])
-                } catch {
-                    logger.error("Failed to set RemoteConfig custom signals: \(error)")
-                }
-
-                performFetchAndActivate()
+        Task {
+            do {
+                // Signals must be set before the first fetch or that fetch resolves the
+                // config of whichever condition matches without them — for the Dev build
+                // that is the production config. See `CustomSignal.all`.
+                try await remoteConfig.setCustomSignals(CustomSignal.all)
+                let status = try await remoteConfig.fetchAndActivate()
+                handleRemoteConfigStatus(status)
+            } catch {
+                delegate?.remoteConfig(didFinishLoading: .failure(error))
             }
-        #else
-            performFetchAndActivate()
-        #endif
+        }
     }
 
     func asyncWaitChainsForRemoteConfigValues() -> CompoundOperationWrapper<[RemoteChainModel]> {
-        asyncWaitForRemoteConfigValues(for: .chains())
+        asyncWaitForRemoteConfigValues(for: .chains)
     }
 
     func asyncWaitXcmTransfers<T: Decodable>() -> CompoundOperationWrapper<T> {
@@ -93,16 +86,6 @@ final class FirebaseApplicationService: RemoteConfigManaging {
         asyncWaitForRemoteConfigValues(for: .collectiblesFallbackURL)
     }
 
-    func syncedWeb3SummitGateMode() -> String? {
-        let value = remoteConfig[.w3sGateMode].stringValue
-        return value.isEmpty ? nil : value
-    }
-
-    func syncedWeb3SummitStartGate() -> String? {
-        let value = remoteConfig[.w3sStartGate].stringValue
-        return value.isEmpty ? nil : value
-    }
-
     func syncedCollectiblesEnabled() -> Bool {
         remoteConfig[.collectiblesEnabled].boolValue
     }
@@ -112,9 +95,7 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             identityBackendUrl: url(for: .identityBackendUrl),
             ipfsGatewayUrl: url(for: .ipfsGatewayUrl),
             gameDashboardUrl: url(for: .gameDashboardUrl),
-            dotNsResolver: dotNsResolverAddress(),
-            web3SummitDotNsUrl: web3SummitDotNsUrl(),
-            web3SummitContractAddress: web3SummitContractAddress()
+            dotNsResolver: dotNsResolverAddress()
         )
     }
 
@@ -125,23 +106,6 @@ final class FirebaseApplicationService: RemoteConfigManaging {
 
 private extension FirebaseApplicationService {
     // MARK: Private methods
-
-    private func performFetchAndActivate() {
-        remoteConfig.fetchAndActivate { [weak self] status, error in
-            guard let self else {
-                return
-            }
-
-            defer {
-                handleRemoteConfigStatus(status)
-            }
-
-            if let error {
-                delegate?.remoteConfig(didFinishLoading: .failure(error))
-                return
-            }
-        }
-    }
 
     private func configurationRemoteConfigSettings() {
         let remoteConfigSettings = RemoteConfigSettings()
@@ -189,20 +153,6 @@ private extension FirebaseApplicationService {
         return json?["resolverContractAddress"]
     }
 
-    func web3SummitConfigJson() -> [String: String]? {
-        remoteConfig[.web3SummitConfig].jsonValue as? [String: String]
-    }
-
-    func web3SummitDotNsUrl() -> URL? {
-        guard let value = web3SummitConfigJson()?["dotNsUrl"], !value.isEmpty else { return nil }
-        return URL(string: value)
-    }
-
-    func web3SummitContractAddress() -> String? {
-        guard let value = web3SummitConfigJson()?["contractAddress"], !value.isEmpty else { return nil }
-        return value
-    }
-
     func asyncWaitForRemoteConfigValues<T: Decodable>(for key: String) -> CompoundOperationWrapper<T> {
         CompoundOperationWrapper(targetOperation: AsyncClosureOperation<T>(
             operationClosure: { [weak self] closure in
@@ -224,10 +174,61 @@ private extension FirebaseApplicationService {
     }
 }
 
+private extension FirebaseApplicationService {
+    enum CustomSignal {
+        case environment
+        case buildChannel
+
+        var key: String {
+            switch self {
+            case .environment:
+                "environment"
+            case .buildChannel:
+                "build_channel"
+            }
+        }
+
+        var value: FirebaseRemoteConfig.CustomSignalValue {
+            switch self {
+            case .environment:
+                #if UNSTABLE
+                    "unstable"
+                #elseif NIGHTLY
+                    "nightly"
+                #elseif DEV
+                    "dev"
+                #else
+                    "release"
+                #endif
+            case .buildChannel:
+                "dev"
+            }
+        }
+
+        /// The signals sent before the first fetch.
+        ///
+        /// The public Dev build ships under the **production** bundle id and Firebase app id
+        /// (Apple bins TestFlight-only records), so no `app.id` condition can single it out —
+        /// the `dev_build_ios` Remote Config condition matches on `build_channel == "dev"`
+        /// instead. That signal is therefore sent by the Dev build only; adding it to
+        /// production builds would change what the live App Store builds resolve.
+        static var all: [String: FirebaseRemoteConfig.CustomSignalValue] {
+            var signals = [CustomSignal.environment.key: CustomSignal.environment.value]
+
+            #if DEV
+                signals[CustomSignal.buildChannel.key] = CustomSignal.buildChannel.value
+            #endif
+
+            return signals
+        }
+    }
+}
+
 // MARK: - Constants
 
 private extension String {
     static let latestAppVersion = "latest_ios_version"
+<<<<<<< HEAD
     static func chains() -> String {
         #if UNSTABLE
             "chains_v2"
@@ -238,17 +239,17 @@ private extension String {
         #endif
     }
 
+=======
+    static let chains = "chains_v2"
+>>>>>>> upstream/main
     static let xcmTransfers = "cross_chain_transfers"
     static let generalXcmConfig = "xcm_general_config"
     static let gameResultsFallbackURL = "game_results_fallback_url"
     static let w3sMerchants = "w3s_merchants"
     static let collectiblesFallbackURL = "collectibles_fallback_url"
     static let collectiblesEnabled = "collectibles_enabled"
-    static let w3sGateMode = "w3s_gate_mode"
-    static let w3sStartGate = "w3s_start_gate"
     static let identityBackendUrl = "identity_backend_url"
     static let ipfsGatewayUrl = "ipfs_gateway_url"
     static let gameDashboardUrl = "game_dashboard_url"
     static let dotNsResolver = "dot_ns_config"
-    static let web3SummitConfig = "web3summit_config"
 }

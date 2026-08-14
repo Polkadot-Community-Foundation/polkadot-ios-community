@@ -1,0 +1,17 @@
+// Shared Dev settings for polkadot-app and NotificationServiceExtension.
+// Leaf configs under <target>/Configs/ include this file and add only BUNDLE.
+// Flags are vended as BASE_SWIFT_FLAGS so each leaf keeps its own OTHER_SWIFT_FLAGS line,
+// which a build pipeline can append to without editing this file.
+//
+// PCF public Dev build. It ships under the PCF *production* bundle id rather than a
+// `.dev` one — Apple bins TestFlight-only records — so Remote Config tells it apart by the
+// `build_channel=dev` custom signal, not by bundle id. See
+// FirebaseApplicationService.CustomSignal.
+//
+// ICON_SUFFIX is intentionally unset: ASSETCATALOG_COMPILER_APPICON_NAME resolves to "AppIcon".
+
+BASE_SWIFT_FLAGS = "-DDEV" "-DTESTNET_FEATURE" "-DW3S"
+
+APP_NAME = Polkadot Dev
+APP_MAIN_BUNDLE = io.pcf.polkadotapp
+DEEPLINK = polkadotapp
