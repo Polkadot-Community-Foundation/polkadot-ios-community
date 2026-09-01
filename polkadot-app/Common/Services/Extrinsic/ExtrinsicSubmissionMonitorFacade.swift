@@ -4,6 +4,7 @@ import SubstrateSdk
 import SubstrateStorageQuery
 import AssetExchange
 import Operation_iOS
+import ChainRegistry
 
 protocol ExtrinsicSubmissionMonitorFacadeProtocol {
     func createMonitorFactory(chain: ChainProtocol) throws -> ExtrinsicSubmitMonitorFactoryProtocol
@@ -12,11 +13,11 @@ protocol ExtrinsicSubmissionMonitorFacadeProtocol {
 final class ExtrinsicSubmissionMonitorFacade {
     let chainRegistry: ChainRegistryProtocol
     let operationQueue: OperationQueue
-    let extrinsicServiceFactory: ExtrinsicServiceFactoryProtocol
+    let extrinsicServiceFactory: ExtrinsicServiceCreating
     let logger: LoggerProtocol
 
     init(
-        extrinsicServiceFactory: ExtrinsicServiceFactoryProtocol,
+        extrinsicServiceFactory: ExtrinsicServiceCreating,
         chainRegistry: ChainRegistryProtocol,
         operationQueue: OperationQueue,
         logger: LoggerProtocol
@@ -31,7 +32,7 @@ final class ExtrinsicSubmissionMonitorFacade {
         chainRegistry: ChainRegistryProtocol,
         substrateStorageFacade: StorageFacadeProtocol,
         operationQueue: OperationQueue,
-        extrinsicVersion: Extrinsic.Version = .V5(extensionVersion: 0),
+        extrinsicVersion: ConcreteExtrinsicVersion = .V5,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.init(
@@ -39,7 +40,7 @@ final class ExtrinsicSubmissionMonitorFacade {
                 chainRegistry: chainRegistry,
                 substrateStorageFacade: substrateStorageFacade,
                 customFeeEstimator: ExtrinsicCustomFeeEstimatorFactory(providers: []),
-                transactionExtensionFactory: ExtrinsicTransactionExtensionFactory(),
+                transactionExtensionFactory: CompoundTxExtensionFactory(),
                 extrinsicVersion: extrinsicVersion,
                 operationQueue: operationQueue,
                 logger: logger
@@ -53,11 +54,21 @@ final class ExtrinsicSubmissionMonitorFacade {
 
 extension ExtrinsicSubmissionMonitorFacade: ExtrinsicSubmissionMonitorFacadeProtocol {
     func createMonitorFactory(chain: ChainProtocol) throws -> ExtrinsicSubmitMonitorFactoryProtocol {
+        try createMonitorFactory(chain: chain, submitter: nil)
+    }
+}
+
+extension ExtrinsicSubmissionMonitorFacade {
+    func createMonitorFactory(
+        chain: ChainProtocol,
+        submitter: ExtrinsicSubmitting?
+    ) throws -> ExtrinsicSubmitMonitorFactoryProtocol {
         let connection = try chainRegistry.getConnectionOrError(for: chain.chainId)
         let runtimeProvider = try chainRegistry.getRuntimeProviderOrError(for: chain.chainId)
 
         let extrinsicService = try extrinsicServiceFactory.createExtrinsicService(
-            chain: chain
+            chain: chain,
+            submitter: submitter
         )
 
         let statusService = ExtrinsicStatusService(

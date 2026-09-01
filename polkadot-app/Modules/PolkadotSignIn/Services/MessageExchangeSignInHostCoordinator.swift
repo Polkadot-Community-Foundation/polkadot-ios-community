@@ -5,9 +5,15 @@ import MessageExchangeKit
 import Products
 import StatementStore
 import Operation_iOS
+import ChainRegistry
+import UIKitExt
 
 protocol MessageExchangeSignInHostCoordinating: AsyncApplicationServicing, AnyObject {
     func disconnectHost(byAccountId accountId: Data) async throws
+
+    /// Anchors SSO confirmations (signing, personhood prompts) to the given
+    /// view; until attached, prompts deliver denial.
+    @MainActor func setPresentationView(_ view: ControllerBackedProtocol)
 }
 
 final class MessageExchangeSignInHostCoordinator {
@@ -17,8 +23,9 @@ final class MessageExchangeSignInHostCoordinator {
     private let chainRegistry: ChainRegistryProtocol
     private let hostsDataProviderFactory: PolkadotSignInHostDataProviderMaking
     private let hostRepository: AnyDataProviderRepository<PolkadotSignInHost>
-    private let messageHandler: PolkadotHostMessageHandling
-    private let messageSender: PolkadotHostMessageSending
+    private let messageHandler: any PolkadotHostMessageHandling<PolkadotHostRemoteMessage>
+    private let messageSender: any PolkadotHostMessageSending<PolkadotHostRemoteMessage>
+    private let routers: ProductRoutersFacadeProtocol
     private let logger: LoggerProtocol
 
     private let state = State()
@@ -28,12 +35,13 @@ final class MessageExchangeSignInHostCoordinator {
         serviceFactory: MessageExchageServiceMaking,
         accountManager: ProductsAccountManaging,
         sponsorFactory: TransactionSponsorMaking,
+        routers: ProductRoutersFacadeProtocol,
         chainId: ChainModel.Id = AppConfig.Chains.chatChain,
         chainRegistry: ChainRegistryProtocol = ChainRegistryFacade.sharedRegistry,
         hostsDataProviderFactory: PolkadotSignInHostDataProviderMaking = PolkadotSignInHostDataProviderFactory(),
         hostRepositoryFactory: PolkadotSignInHostRepositoryMaking = PolkadotSignInHostRepositoryFactory(),
-        messageSender: PolkadotHostMessageSending = PolkadotHostMessageSender(),
-        signingRouter: SigningRouting = SSOSigningRouter(),
+        messageSender: any PolkadotHostMessageSending<PolkadotHostRemoteMessage> =
+            PolkadotHostMessageSender<PolkadotHostRemoteMessage>(),
         logger: LoggerProtocol = Logger.shared
     ) {
         self.ownKeyId = ownKeyId
@@ -43,18 +51,26 @@ final class MessageExchangeSignInHostCoordinator {
         self.hostsDataProviderFactory = hostsDataProviderFactory
         hostRepository = hostRepositoryFactory.createRepository(forFilter: nil)
         self.messageSender = messageSender
+        self.routers = routers
         self.logger = logger
 
         let signingHandler = TransactionSigningHandler(
             pgasSponsor: sponsorFactory.makePGasSponsor(),
             chainRegistry: chainRegistry,
-            router: signingRouter,
+            router: routers.productsRouter,
+            logger: logger
+        )
+
+        let personhoodHandlerFactory = APPersonhoodHandlerFactory(
+            chainRegistry: chainRegistry,
+            routers: routers,
             logger: logger
         )
 
         let processingContext = SSORequestProcessingContext(
             handlers: Self.makeHandlers(
                 accountManager: accountManager,
+                personhoodHandlerFactory: personhoodHandlerFactory,
                 messageSender: messageSender,
                 signingHandler: signingHandler,
                 logger: logger
@@ -70,6 +86,11 @@ final class MessageExchangeSignInHostCoordinator {
 }
 
 extension MessageExchangeSignInHostCoordinator: MessageExchangeSignInHostCoordinating {
+    @MainActor
+    func setPresentationView(_ view: ControllerBackedProtocol) {
+        routers.setPresentationView(view)
+    }
+
     func setup() async {
         do {
             let connection = try chainRegistry.getConnectionOrError(for: chainId)
@@ -142,18 +163,34 @@ extension MessageExchangeSignInHostCoordinator {
 private extension MessageExchangeSignInHostCoordinator {
     static func makeHandlers(
         accountManager: ProductsAccountManaging,
-        messageSender: PolkadotHostMessageSending,
+        personhoodHandlerFactory: APPersonhoodHandlerMaking,
+        messageSender: any PolkadotHostMessageSending<PolkadotHostRemoteMessage>,
         signingHandler: TransactionSigningHandling,
         logger: LoggerProtocol
-    ) -> [SSORequestHandling] {
+    ) -> [any SSORequestHandling<PolkadotHostRemoteMessage>] {
         [
             SSODisconnectHandler(logger: logger),
             SSOAliasRequestHandler(
-                accountManager: accountManager,
+                handlerFactory: personhoodHandlerFactory,
+                messageSender: messageSender,
+                logger: logger
+            ),
+            SSOCreateProofHandler(
+                handlerFactory: personhoodHandlerFactory,
+                messageSender: messageSender,
+                logger: logger
+            ),
+            SSOSignVrfRequestHandler(
+                handlerFactory: personhoodHandlerFactory,
                 messageSender: messageSender,
                 logger: logger
             ),
             SSOResourceAllocationRequestHandler(
+                accountManager: accountManager,
+                messageSender: messageSender,
+                logger: logger
+            ),
+            SSOProductSubtreeRequestHandler(
                 accountManager: accountManager,
                 messageSender: messageSender,
                 logger: logger
@@ -164,6 +201,16 @@ private extension MessageExchangeSignInHostCoordinator {
                 logger: logger
             ),
             SSOCreateTransactionHandler(
+                messageSender: messageSender,
+                signingHandler: signingHandler,
+                logger: logger
+            ),
+            SSOSignRawLegacyHandler(
+                messageSender: messageSender,
+                signingHandler: signingHandler,
+                logger: logger
+            ),
+            SSOCreateTransactionLegacyHandler(
                 messageSender: messageSender,
                 signingHandler: signingHandler,
                 logger: logger

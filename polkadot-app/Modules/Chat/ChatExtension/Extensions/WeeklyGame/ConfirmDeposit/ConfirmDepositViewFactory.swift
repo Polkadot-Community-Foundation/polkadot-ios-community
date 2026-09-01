@@ -1,6 +1,8 @@
 import Foundation
 import SubstrateSdk
+import ChainRegistry
 
+@MainActor
 enum ConfirmDepositViewFactory {
     static func createView(
         asset: ChainAssetId,
@@ -8,14 +10,16 @@ enum ConfirmDepositViewFactory {
         model: ConfirmDepositModel
     ) -> ConfirmDepositViewProtocol? {
         let chainRegistry = ChainRegistryFacade.sharedRegistry
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
         guard
             let chain = chainRegistry.getChain(for: asset.chainId),
-            let asset = chain.chainAsset(for: asset.assetId)
+            let asset = chain.chainAsset(for: asset.assetId),
+            let candidateWallet = try? walletRepo.candidate()
         else {
             return nil
         }
         let interactor = ConfirmDepositInteractor(
-            candidateWallet: SelectedWallet.candidate,
+            candidateWallet: candidateWallet,
             chainAsset: asset,
             logger: Logger.shared
         )

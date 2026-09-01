@@ -11,6 +11,7 @@ import SDKLogger
 import SubstrateStorageQuery
 import Products
 import ChainStore
+import ChainRegistry
 
 final class BulletinSlotAllocatorTests: XCTestCase {
     private let mnemonic = "city digital broken voice chef envelope swarm disagree claw fox friend casual"
@@ -25,8 +26,8 @@ final class BulletinSlotAllocatorTests: XCTestCase {
             logger: Logger.shared
         )
 
-        let liteVrfManager = BandersnatchKeyManager.litePerson(entropyManager: setupResult.entropyManager)
-        let fullVrfManager = BandersnatchKeyManager.fullPerson(entropyManager: setupResult.entropyManager)
+        let liteVrfManager = BandersnatchKeyManager.litePerson(for: "dot", entropyManager: setupResult.entropyManager)
+        let fullVrfManager = BandersnatchKeyManager.fullPerson(for: "dot", entropyManager: setupResult.entropyManager)
 
         let keyResolver = BandersnatchKeyResolver(
             liteKeyManager: liteVrfManager,
@@ -49,23 +50,33 @@ final class BulletinSlotAllocatorTests: XCTestCase {
         let chain = try chainRegistry.getChainOrError(for: KnownChainId.previewNetPeople)
         let monitorFactory = try facade.createMonitorFactory(chain: chain)
 
-        let allocator = BulletinSlotAllocator(
+        let chainTimeProvider = ChainTimeProvider(
+            chainId: AppConfig.Chains.bulletInChain,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: StorageRequestFactory(
+                remoteFactory: StorageKeyFactory(),
+                operationManager: OperationManager(operationQueue: operationQueue)
+            )
+        )
+
+        let allocator: AllowanceSlotAllocating = BulletinSlotAllocator(
             submissionChainId: AppConfig.Chains.usernameChain,
             slotInfoProvider: BulletInSlotInfoProvider(
                 bulletInChainId: AppConfig.Chains.bulletInChain,
                 peopleChainId: AppConfig.Chains.usernameChain,
                 chainRegistry: chainRegistry,
                 keyResolver: keyResolver,
-                operationQueue: operationQueue
+                operationQueue: operationQueue,
+                chainTimeProvider: chainTimeProvider
             ),
             originFactory: originFactory,
             submitter: SlotAssignmentSubmitter(monitorFactory: monitorFactory)
         )
 
         let holder = ProductAccountHolder(entropyManager: setupResult.entropyManager)
-        let accountId = try holder.deriveAccount(ProductAccountId(productId: "browse.dot", derivationIndex: 0))
+        let accountId = try holder.deriveAccount(ProductAccountId(productId: "browse.dot", derivationIndex: .index(0)))
 
-        try await allocator.assignSlot(accountId: accountId)
+        try await allocator.assignSlot(accountId: accountId, priority: .normal)
     }
 }
 

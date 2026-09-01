@@ -6,13 +6,16 @@ import UIKitExt
 final class SettingsWireframe: SettingsWireframeProtocol {
     private let serviceCoordinator: ServiceCoordinatorProtocol
     private let emailComposePresenter: EmailComposePresenting
+    private let flowStateProvider: any SPAFlowStateProviding
 
     init(
         serviceCoordinator: ServiceCoordinatorProtocol,
-        emailComposePresenter: EmailComposePresenting
+        emailComposePresenter: EmailComposePresenting,
+        flowStateProvider: any SPAFlowStateProviding
     ) {
         self.serviceCoordinator = serviceCoordinator
         self.emailComposePresenter = emailComposePresenter
+        self.flowStateProvider = flowStateProvider
     }
 
     func showBackupFlow(from view: (any SettingsViewProtocol)?) {
@@ -45,6 +48,17 @@ final class SettingsWireframe: SettingsWireframeProtocol {
 
         view?.controller.navigationController?.pushViewController(
             recoverView.controller,
+            animated: true
+        )
+    }
+
+    func showPaymentHistory(from view: (any SettingsViewProtocol)?) {
+        guard let historyView = PaymentHistoryViewFactory.createView() else {
+            return
+        }
+
+        view?.controller.navigationController?.pushViewController(
+            historyView.controller,
             animated: true
         )
     }
@@ -93,7 +107,7 @@ final class SettingsWireframe: SettingsWireframeProtocol {
     }
 
     func showApps(from view: (any SettingsViewProtocol)?) {
-        guard let appsView = AppsListViewFactory.createView() else {
+        guard let appsView = AppsListViewFactory.createView(flowStateProvider: flowStateProvider) else {
             return
         }
 

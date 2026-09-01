@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 
+@MainActor
 final class ContactsListWireframe {
     let flowState: ChatFlowState
 
@@ -15,7 +16,6 @@ private extension ContactsListWireframe {
             return
         }
 
-        chat.controller.hidesBottomBarWhenPushed = true
         view?.controller.navigationController?.pushViewController(chat.controller, animated: true)
     }
 }
@@ -26,7 +26,10 @@ extension ContactsListWireframe: ContactsListWireframeProtocol {
             self?.performChatShow(from: view, for: openModel)
         }
 
-        guard let search = SearchContactViewFactory.createView(with: searchModel) else {
+        guard let search = SearchContactViewFactory.createView(
+            with: searchModel,
+            coinageService: flowState.coinageService
+        ) else {
             return
         }
         search.controller.modalPresentationStyle = .fullScreen

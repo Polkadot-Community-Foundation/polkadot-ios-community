@@ -4,11 +4,15 @@ import Keystore_iOS
 import KeyDerivation
 import MessageExchangeKit
 import StatementStore
+import Products
+@preconcurrency import WebRTC
 
+@MainActor
 enum GameVideoViewFactory {
     static func createView(
         serviceCoordinator: ServiceCoordinatorProtocol,
-        intendedGameId: Game.Identifier? = nil
+        intendedGameId: Game.Identifier? = nil,
+        flowState: SPAFlowState
     ) -> GameVideoViewProtocol? {
         let extensionId = DIM2ChatExtension.identifier
 
@@ -23,7 +27,8 @@ enum GameVideoViewFactory {
             flowState: dim2Extension.flowState,
             chatId: .chatExtension(extensionId),
             turnService: serviceCoordinator.turnService,
-            intendedGameId: intendedGameId
+            intendedGameId: intendedGameId,
+            spaFlowState: flowState
         )
     }
 
@@ -31,9 +36,15 @@ enum GameVideoViewFactory {
         flowState: DIM2SharedFlowStateProtocol,
         chatId: Chat.Id,
         turnService: TURNCredentialsProviding,
-        intendedGameId: Game.Identifier? = nil
+        intendedGameId: Game.Identifier? = nil,
+        spaFlowState: SPAFlowState
     ) -> GameVideoViewProtocol? {
-        let rtcClient = RTCClient(isAudioEnabled: false)
+        let peerConnectionFactory = WebRTCPeerConnectionFactoryProvider.make()
+        let rtcClient = RTCClient(
+            peerConnectionFactory: peerConnectionFactory,
+            isAudioEnabled: false,
+            videoProfile: .game
+        )
 
         guard let interactor = createInteractor(
             flowState: flowState,
@@ -46,13 +57,15 @@ enum GameVideoViewFactory {
 
         let wireframe = GameVideoWireframe(
             flowState: flowState,
-            chatId: chatId
+            chatId: chatId,
+            spaFlowState: spaFlowState
         )
 
         let presenter = GameVideoPresenter(
             interactor: interactor,
             wireframe: wireframe,
             rtcClient: rtcClient,
+            cameraPermissionService: CameraPermissionService(),
             viewModelFactory: GameVideoViewModelFactory(
                 accountId: interactor.accountId
             )
@@ -66,7 +79,6 @@ enum GameVideoViewFactory {
         return view
     }
 
-    // swiftlint:disable:next function_body_length
     private static func createInteractor(
         flowState: DIM2SharedFlowStateProtocol,
         rtcClient: RTCClient,
@@ -87,7 +99,9 @@ enum GameVideoViewFactory {
             return nil
         }
 
-        let gameSignKeyId = GameAccountFactory.makeWalletKeyId(for: flowState.source)
+        guard let gameSignKeyId = try? GameAccountFactory.makeWalletKeyId(for: flowState.source) else {
+            return nil
+        }
 
         let workQueue = DispatchQueue(label: "GameVideoModule.workQueue")
 
@@ -99,6 +113,7 @@ enum GameVideoViewFactory {
                 messageExchangeModeProvider: FixedMessageExchangeModeProvider(mode: .identity),
                 entropyManager: RootEntropyManager.shared,
                 deviceEncryptionKeyFactory: nil,
+                messageRouteSelector: { _ in .identity },
                 maxStatementSize: MessageExchangeCoordinatorFactory.Constants.maxChatStatementSize,
                 logger: logger
             )
@@ -115,18 +130,22 @@ enum GameVideoViewFactory {
             ownSignKeyId: gameSignKeyId,
             serviceFactoryProvider: serviceFactoryProvider,
             identifierService: identifierService,
-            chainRegistry: chainRegistry,
-            logger: logger
+            chainRegistry: chainRegistry
         )
 
         let attemptTracker = ConnectionAttemptTracker()
 
-        let connectionManager = VideoGameConnectionManager(
+        let peerEngineContextFactory = VideoGamePeerEngineContextFactory(
             localAccountId: account.accountId,
             sessionFactory: sessionFactory,
             attemptTracker: attemptTracker,
+            turnService: turnService
+        )
+
+        let connectionManager = VideoGameConnectionManager(
+            localAccountId: account.accountId,
+            contextFactory: peerEngineContextFactory,
             callbackQueue: workQueue,
-            turnService: turnService,
             logger: logger
         )
 

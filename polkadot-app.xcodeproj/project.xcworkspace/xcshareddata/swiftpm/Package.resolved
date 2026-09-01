@@ -1,5 +1,5 @@
 {
-  "originHash" : "c2754a18db9dd3e0c9af4de9e4f7708e363fe947cd467ee87762daf11a398fee",
+  "originHash" : "3c8647422749ef8c76102abaece9b838c619e6e5ff0a5fc10a09be059488bc2b",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/novasamatech/extrinsic-service-ios",
       "state" : {
-        "revision" : "f3f64fb0d32117f881c0d8fd042a29bf2aede1b0",
-        "version" : "1.9.0"
+        "revision" : "8a3e236b22e47c1dbcc90627f409721575e40270",
+        "version" : "1.13.0"
       }
     },
     {
@@ -161,6 +161,15 @@
       "state" : {
         "revision" : "0be208810d2e8b90fcd2464d1816723b47819fe7",
         "version" : "5.2.0"
+      }
+    },
+    {
+      "identity" : "host-rust-core",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/paritytech/host-rust-core",
+      "state" : {
+        "revision" : "3f9ba7368f52fc3c9e8930803cb71ca46a9b1ae7",
+        "version" : "0.7.1"
       }
     },
     {
@@ -238,7 +247,7 @@
     {
       "identity" : "metadata-shortener-ios",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/novasamatech/metadata-shortener-ios.git",
+      "location" : "https://github.com/novasamatech/metadata-shortener-ios",
       "state" : {
         "revision" : "1531b0e4091e74041331dcc8230e490e9f59183c",
         "version" : "0.2.1"
@@ -269,15 +278,6 @@
       "state" : {
         "revision" : "6e5b2da49d753a1b5f137a4c836608f94967eeb0",
         "version" : "0.0.21"
-      }
-    },
-    {
-      "identity" : "posthog-ios",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/PostHog/posthog-ios.git",
-      "state" : {
-        "revision" : "e8bbc824e1fb32cbe0563d73fab2373668fb94ec",
-        "version" : "3.59.1"
       }
     },
     {
@@ -357,8 +357,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/novasamatech/substrate-sdk-ios",
       "state" : {
-        "revision" : "9bcba45b567dac1e8f3cbfe19e8aac4271e0a85a",
-        "version" : "5.8.0"
+        "revision" : "6d01f4e470e7bd811e79a18c2cb1b3f084c79b55",
+        "version" : "5.11.0"
       }
     },
     {
@@ -582,8 +582,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/novasamatech/verifiable-swift",
       "state" : {
-        "revision" : "786a68d6dec3dcd0f0a2a880dc5da7001005933c",
-        "version" : "0.7.0"
+        "revision" : "14fbbb8196e4ac4da72338f7e11738bc02ac368b",
+        "version" : "0.8.0"
       }
     },
     {
@@ -600,8 +600,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stasel/WebRTC",
       "state" : {
-        "revision" : "b4f5a90c887bde68512b8f1a6d684b27b5597b76",
-        "version" : "125.0.0"
+        "revision" : "ff4647dc67f00d037c199c69e1a1ee8ceda88236",
+        "version" : "149.0.0"
       }
     },
     {

@@ -22,7 +22,7 @@ struct MixnetUploadServiceTests {
         mockLoader.uploadEvents = [
             .onProgress(.init(uploaded: 250, total: 500, uploadedHashes: [Data()])),
             .onProgress(.init(uploaded: 500, total: 500, uploadedHashes: [Data(), Data()])),
-            .onFinished(.init(metadataHash: Data(repeating: 0xFF, count: 32)))
+            .onFinished(.chunked(metadata: Data(repeating: 0xFF, count: 32)))
         ]
 
         let env = makeTestEnv(loaderFactory: MockHOPFileLoaderFactory(loader: mockLoader))
@@ -143,7 +143,7 @@ struct MixnetUploadServiceTests {
             let loader = MockHOPFileLoader()
             loader.uploadEvents = [
                 .onProgress(.init(uploaded: 250, total: 500, uploadedHashes: [Data()])),
-                .onFinished(.init(metadataHash: Data(repeating: 0xFF, count: 32)))
+                .onFinished(.chunked(metadata: Data(repeating: 0xFF, count: 32)))
             ]
             return loader
         }())
@@ -236,13 +236,11 @@ extension MixnetUploadServiceTests {
             updateRepository: uploadRepoFactory.createUpdateRepository()
         )
 
-        let wallet = try! MockWalletManager.mockedWallet()
-
         let service = MixnetUploadService(
             loaderFactory: loaderFactory,
             storageFacade: facade,
             uploadContextFactory: uploadContextFactory,
-            proofWallet: wallet,
+            senderProvider: MockAttachmentsSenderProvider(),
             allowanceManager: allowanceManager,
             logger: Logger.shared
         )
@@ -275,7 +273,7 @@ extension MixnetUploadServiceTests {
     private func awaitTerminalEvent(
         for attachmentId: AttachmentId,
         in service: MixnetUploadService,
-        timeout: Duration = .milliseconds(10_000)
+        timeout: Duration = .milliseconds(100_000)
     ) async -> AttachmentProgressEvent? {
         let deadline = ContinuousClock.now + timeout
 

@@ -1,11 +1,11 @@
 import Foundation_iOS
-import Combine
 import UIKitExt
+import PolkadotUI
 
 protocol ClaimUsernameViewProtocol: ControllerValidationResultPresentable {
-    func didReceive(viewModel: ClaimUsernameViewLayout.ViewModel)
+    func didReceive(viewModel: ClaimUsernameContentViewModel)
     func didReceive(usernameInputViewModel: InputViewModelProtocol)
-    func didReceive(digitsInputViewModel: InputViewModelProtocol)
+    func didReceive(digitsOptions: [String])
     func didReceive(digitsState: DigitsFieldState)
     func didStartLoading()
     func didStopLoading()
@@ -13,6 +13,7 @@ protocol ClaimUsernameViewProtocol: ControllerValidationResultPresentable {
     func setAccountCreationInProgress(_ inProgress: Bool)
 }
 
+@MainActor
 protocol ClaimUsernamePresenterProtocol: AnyObject {
     func setup()
     func update(from viewModel: InputViewModelProtocol)
@@ -25,17 +26,23 @@ protocol ClaimUsernamePresenterProtocol: AnyObject {
 protocol ClaimUsernameInteractorInputProtocol: AnyObject {
     var metadata: UsernameMetadata { get }
 
-    func check(username: Username) -> AnyPublisher<UsernameAvailableType, any Error>
-    func claim(username: Username) -> AnyPublisher<Username, Error>
-    func save(username: Username)
+    func check(username: Username) async throws -> UsernameAvailableType
+    func claim(username: Username) async throws -> Username
+    func save(username: Username) async
 }
 
+@MainActor
 protocol ClaimUsernameInteractorOutputProtocol: AnyObject {
     func didSaveUsername()
+}
+
+@MainActor
+protocol ClaimLiteUsernameInteractorOutputProtocol: ClaimUsernameInteractorOutputProtocol {
     func authorizeUser(completion: @escaping AuthorizationCompletionBlock)
     func didChangeAccountCreation(inProgress: Bool)
 }
 
+@MainActor
 protocol ClaimUsernameWireframeProtocol:
     AlertPresentable,
     UsernameValidationErrorPresentable,

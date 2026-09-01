@@ -3,46 +3,44 @@ import Products
 import UIKitExt
 
 @MainActor
-protocol ProductsNavigationRouting: AnyObject {
-    func navigateTo(destination: ProductHost) async throws
-    func openExternalURL(_ url: URL) async throws
-}
-
-@MainActor
-final class ProductsNavigationRouter: ProductsNavigationRouting {
-    private weak var presentationView: ControllerBackedProtocol?
-    private var flowState: SPAFlowState?
+final class ProductsNavigationRouter: ProductsNavigationRouting, WebPresentable {
+    private let anchor = ProductsRouter()
 
     nonisolated init() {}
 
     func setPresentationView(_ view: ControllerBackedProtocol) {
-        presentationView = view
+        anchor.setPresentationView(view)
     }
 
-    func setFlowState(_ flowState: SPAFlowState) {
-        self.flowState = flowState
+    var isReady: Bool {
+        anchor.isReady
     }
 
-    func navigateTo(destination: ProductHost) async throws {
-        guard
-            let view = presentationView,
-            let flowState
-        else { return }
+    @discardableResult
+    func present(view: ControllerBackedProtocol) -> Bool {
+        anchor.present(view: view)
+    }
 
-        guard let spaView = SPAViewFactory.createView(
-            productHost: destination,
-            flowState: flowState
-        ) else {
-            return
+    func navigateTo(destination: ProductPage) async throws {
+        guard isReady else {
+            throw ProductNativeApiError.navigationForbidden
         }
 
-        let navigationController = SPAViewFactory.makeCardNavigationController(for: spaView)
-        navigationController.modalPresentationStyle = .fullScreen
-        view.controller.present(navigationController, animated: true)
+        UIApplication.shared.mainTabBarController?.openProduct(page: destination)
     }
 
     func openExternalURL(_ url: URL) async throws {
-        _ = await UIApplication.shared.open(url)
+        guard isReady else {
+            throw ProductNativeApiError.navigationForbidden
+        }
+
+        guard let scheme = url.scheme?.lowercased() else { return }
+
+        if supportedSafariScheme.contains(scheme), let view = anchor.presentationView {
+            showWeb(url: url, from: view, style: WebPresentableStyle(mode: .modal(.fullScreen)))
+        } else {
+            _ = await UIApplication.shared.open(url)
+        }
     }
 }
 
@@ -50,7 +48,16 @@ final class ProductsNavigationRouter: ProductsNavigationRouting {
 final class ForbiddenNavigationRouter: ProductsNavigationRouting {
     nonisolated init() {}
 
-    func navigateTo(destination _: ProductHost) async throws {
+    func setPresentationView(_: ControllerBackedProtocol) {
+        // Navigation is forbidden in this context; there is nothing to anchor.
+    }
+
+    var isReady: Bool { false }
+
+    @discardableResult
+    func present(view _: ControllerBackedProtocol) -> Bool { false }
+
+    func navigateTo(destination _: ProductPage) async throws {
         throw ProductNativeApiError.navigationForbidden
     }
 

@@ -1,6 +1,7 @@
 #if TESTNET_FEATURE
     import Foundation
     import Operation_iOS
+    import ChainRegistry
 
     protocol AppFactoryResetCheckerFactoryProtocol {
         func makeChecker(chainRegistry: ChainRegistryProtocol) -> AppFactoryResetChecker
@@ -20,7 +21,7 @@
 
             return AppFactoryResetChecker(
                 storage: UsernameStorage(),
-                wallet: SelectedWallet.main,
+                walletRepo: .shared,
                 identityService: identityService
             )
         }

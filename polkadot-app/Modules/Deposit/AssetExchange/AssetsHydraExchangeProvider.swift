@@ -7,13 +7,14 @@ import HydrationSdk
 import ExtrinsicService
 import ChainStore
 import KeyDerivation
+import ChainRegistry
 
 final class AssetsHydraExchangeProvider: AssetsExchangeBaseProvider {
     private var supportedChains: [ChainModel.Id: ChainModel]?
     let selectedWallet: WalletManaging
     let substrateStorageFacade: StorageFacadeProtocol
     let exchangeStateRegistrar: AssetsExchangeStateRegistring
-    let extrinsicServiceFactory: ExtrinsicServiceFactoryProtocol
+    let extrinsicServiceFactory: ExtrinsicServiceCreating
     let extrinsicSubmissionFacade: ExtrinsicSubmissionMonitorFacadeProtocol
     let extrinsicOriginDefiningFactory: ExtrinsicOriginDefiningFactoryProtocol
     let timeEstimator: AssetExchangeTimeEstimating
@@ -56,7 +57,7 @@ final class AssetsHydraExchangeProvider: AssetsExchangeBaseProvider {
             chainRegistry: chainRegistry,
             substrateStorageFacade: substrateStorageFacade,
             customFeeEstimator: customFeeEstimatingFactory,
-            transactionExtensionFactory: ExtrinsicTransactionExtensionFactory(),
+            transactionExtensionFactory: CompoundTxExtensionFactory(),
             extrinsicVersion: .V4,
             operationQueue: operationQueue
         )

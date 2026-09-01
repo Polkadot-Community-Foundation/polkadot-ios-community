@@ -2,6 +2,7 @@ import Foundation
 import Operation_iOS
 import CommonService
 import KeyDerivation
+import ChainRegistry
 
 final class TattooUploadingServiceCoordinator {
     let candidateWallet: WalletManaging
@@ -12,6 +13,7 @@ final class TattooUploadingServiceCoordinator {
     let chainRegistry: ChainRegistryProtocol
     let processingQueue: DispatchQueue
     let operationQueue: OperationQueue
+    let vrfRepo: BandersnatchManagerRepositoryProtocol
     let logger: LoggerProtocol
 
     let evidenceSubmissionStore: EvidenceSubmissionStateStore
@@ -30,6 +32,7 @@ final class TattooUploadingServiceCoordinator {
         chainRegistry: ChainRegistryProtocol,
         operationQueue: OperationQueue,
         processingQueue: DispatchQueue,
+        vrfRepo: BandersnatchManagerRepositoryProtocol = .shared,
         logger: LoggerProtocol
     ) {
         self.candidateWallet = candidateWallet
@@ -40,6 +43,7 @@ final class TattooUploadingServiceCoordinator {
         self.chainRegistry = chainRegistry
         self.operationQueue = operationQueue
         self.processingQueue = processingQueue
+        self.vrfRepo = vrfRepo
 
         evidenceSubmissionStore = EvidenceSubmissionStateStore(logger: logger)
 
@@ -64,7 +68,7 @@ final class TattooUploadingServiceCoordinator {
             let mobRuleAccountId = try? mobRuleWallet.fetchAccount(for: chain).accountId,
             let scoreAccountId = try? scoreWallet.fetchAccount(for: chain).accountId,
             let resourcesAccountId = try? resourcesWallet.fetchAccount(for: chain).accountId,
-            let memberKey = try? BandersnatchKeyManager.fullPerson().getMemberKey()
+            let memberKey = try? vrfRepo.fullPerson().getMemberKey()
         else {
             logger.warning("No account for \(chain.name)")
             return

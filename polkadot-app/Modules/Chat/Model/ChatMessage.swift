@@ -17,7 +17,12 @@ extension Chat {
         let status: Status
         let timestamp: Timestamp
         let content: Content
+
+        // fields below are ignored when saved
+        // we probably need to represent fetching and
+        // saving messages with different models
         let reactions: [Chat.MessageReaction]
+        let compactionId: MessageId?
         let relatedMessages: [Chat.RelatedLocalMessage]
 
         init?(
@@ -26,18 +31,35 @@ extension Chat {
             status: Status,
             contactId: AccountId
         ) {
+            self.init(
+                remote: remote,
+                creationSource: creationSource,
+                status: status,
+                chatId: .person(contactId),
+                origin: .contact(contactId)
+            )
+        }
+
+        init?(
+            remote: Chat.RemoteMessage,
+            creationSource: CreationSource,
+            status: Status,
+            chatId: Chat.Id,
+            origin: Chat.LocalMessage.Origin
+        ) {
             guard let content = Content(remote: remote.versioned) else {
                 return nil
             }
 
             messageId = remote.messageId
-            chatId = Chat.Id.person(contactId)
-            origin = .contact(contactId)
+            self.chatId = chatId
+            self.origin = origin
             self.creationSource = creationSource
             self.status = status
             timestamp = remote.timestamp
             self.content = content
             reactions = []
+            compactionId = nil
             relatedMessages = []
         }
 
@@ -55,6 +77,7 @@ extension Chat {
             timestamp = chatRequest.timestamp
             content = .versionedChatRequest(chatRequest.content)
             reactions = []
+            compactionId = nil
             relatedMessages = []
         }
 
@@ -67,7 +90,8 @@ extension Chat {
             timestamp: Timestamp,
             content: Content,
             reactions: [Chat.MessageReaction],
-            relatedMessages: [Chat.RelatedLocalMessage] = []
+            compactionId: MessageId?,
+            relatedMessages: [Chat.RelatedLocalMessage]
         ) {
             self.messageId = messageId
             self.chatId = chatId
@@ -77,6 +101,7 @@ extension Chat {
             self.timestamp = timestamp
             self.content = content
             self.reactions = reactions
+            self.compactionId = compactionId
             self.relatedMessages = relatedMessages
         }
     }
@@ -130,7 +155,7 @@ extension Chat.LocalMessage {
         case reply(Chat.RemoteMessageContentV1.MessageContent.ReplyContent)
         case chatAccepted(Chat.RemoteMessageContentV1.MessageContent.ChatAccepted)
         case unsupported(Data?)
-        case staticTextImageContent(StaticTextImageContent) // TODO: too narow case, worth to migrate to custom redendered
+        case staticTextImageContent(StaticTextImageContent) // TODO: migrate to custom renderer
         case extensionActionResponse(
             String,
             String
@@ -142,6 +167,7 @@ extension Chat.LocalMessage {
         case file(File)
         case richText(RichText)
         case coinageSend(Transfer)
+        case compactedMessages(ChatRemoteMessageContent.CompactedMessagesContent)
         case deviceAdded(Chat.RemoteMessageContentV1.MessageContent.DeviceAddedContent)
         case deviceRemoved(Chat.RemoteMessageContentV1.MessageContent.DeviceRemovedContent)
         case multiChatAccepted(Chat.RemoteMessageContentV1.MessageContent.DeviceChatAccepted)
@@ -150,6 +176,7 @@ extension Chat.LocalMessage {
         enum CallSignalingPayload: Equatable {
             case offer(Chat.RemoteMessageContentV1.MessageContent.DataChannelOfferContent)
             case answer(Chat.RemoteMessageContentV1.MessageContent.DataChannelAnswerContent)
+            // TODO: We don't save candidates localy anymore. Remove on wipe
             case candidates(Chat.RemoteMessageContentV1.MessageContent.DataChannelCandidatesContent)
             case closed(Chat.RemoteMessageContentV1.MessageContent.DataChannelClosedContent)
         }
@@ -175,12 +202,14 @@ extension Chat.LocalMessage {
                 self = .edited(content)
             case let .chatAccepted(content):
                 self = .chatAccepted(content)
+            case let .compactedMessages(content):
+                self = .compactedMessages(content)
             case let .dataChannelOffer(content):
                 self = .call(.offer(content))
             case let .dataChannelAnswer(content):
                 self = .call(.answer(content))
-            case let .dataChannelCandidates(content):
-                self = .call(.candidates(content))
+            case .dataChannelCandidates:
+                return nil
             case let .dataChannelClosed(content):
                 self = .call(.closed(content))
             case let .reply(content):
@@ -239,6 +268,7 @@ extension Chat.LocalMessage.Content {
         case coinageSend = 16
         case deviceAdded = 17
         case deviceRemoved = 18
+        case compactedMessages = 19
         case multiChatAccepted = 20
         case versionedChatRequest = 248
         case call = 249
@@ -296,6 +326,7 @@ extension Chat.LocalMessage.Content {
                  .call:
                 false
             case .token,
+                 .compactedMessages,
                  .deviceAdded,
                  .deviceRemoved:
                 true
@@ -325,6 +356,7 @@ extension Chat.LocalMessage.Content {
                  .customRendered,
                  .file,
                  .richText,
+                 .compactedMessages,
                  .deviceAdded,
                  .deviceRemoved,
                  .call:
@@ -355,6 +387,7 @@ extension Chat.LocalMessage.Content {
                  .customRendered,
                  .file,
                  .richText,
+                 .compactedMessages,
                  .deviceAdded,
                  .deviceRemoved,
                  .call:
@@ -403,6 +436,8 @@ extension Chat.LocalMessage.Content {
             .richText
         case .coinageSend:
             .coinageSend
+        case .compactedMessages:
+            .compactedMessages
         case .deviceAdded:
             .deviceAdded
         case .deviceRemoved:
@@ -444,6 +479,7 @@ extension Chat.LocalMessage.Content {
              .versionedChatRequest,
              .file,
              .richText,
+             .compactedMessages,
              .deviceAdded,
              .deviceRemoved,
              .call:
@@ -488,7 +524,7 @@ extension Chat.LocalMessage {
     }
 
     // If groupingId is specified, it will be used to group messages in ChatMessageEntityMapper
-    var groupingId: String? {
+    var groupingId: String {
         switch content {
         case let .call(payload):
             switch payload {
@@ -518,6 +554,7 @@ extension Chat.LocalMessage {
             timestamp: timestamp,
             content: content,
             reactions: reactions,
+            compactionId: compactionId,
             relatedMessages: relatedMessages
         )
     }
@@ -532,6 +569,7 @@ extension Chat.LocalMessage {
             timestamp: timestamp,
             content: newContent,
             reactions: reactions,
+            compactionId: compactionId,
             relatedMessages: relatedMessages
         )
     }

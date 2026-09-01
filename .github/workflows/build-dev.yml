@@ -10,8 +10,8 @@ name: Build (Dev, unsigned)
 #
 # Required repository secrets (already used by release-dev.yml):
 #   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the .dev Firebase app's GoogleService-Info.plist
-#   W3S_AUTH_KEY                         auth keypair seed (hex); optional for compiling —
-#                                        inject-keys.sh falls back to an empty value.
+#
+# W3S_AUTH_KEY is no longer used — see release-dev.yml.
 
 on:
   workflow_dispatch:
@@ -41,20 +41,15 @@ jobs:
           GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
-      - name: Generate build-time config (CIKeys)
-        env:
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
-        run: ./Scripts/inject-keys.sh
+      # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
+      # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
+      - name: Generate build-time secrets
+        run: ./Runscripts/generate_secrets.sh
 
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
       - name: Build (Dev, no code signing)
-        env:
-          # The scheme pre-action re-runs Scripts/inject-keys.sh on every build, so
-          # W3S_AUTH_KEY must be in scope here too or CIKeys.generated.swift is rewritten
-          # with an empty seed (keeps this lane consistent with release-dev.yml).
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
         run: |
           set -o pipefail
           xcodebuild \

@@ -1,4 +1,5 @@
 // swiftlint:disable file_length
+import ExternalAccessibility
 import Foundation
 import PolkadotUI
 import Foundation_iOS
@@ -38,7 +39,7 @@ final class ChatViewModelFactory {
     let attachmentViewModelFactory: ChatAttachmentViewModelMaking
     let productRepository: AnyDataProviderRepository<Product>
     let productNameCache: ProductNameCaching
-    let dotNsResolver: DotNsResolverProtocol?
+    let flowState: SPAFlowState
     let logger: LoggerProtocol
 
     init(
@@ -50,7 +51,7 @@ final class ChatViewModelFactory {
         attachmentViewModelFactory: ChatAttachmentViewModelMaking,
         productRepository: AnyDataProviderRepository<Product>,
         productNameCache: ProductNameCaching,
-        dotNsResolver: DotNsResolverProtocol?,
+        flowState: SPAFlowState,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.timeFormatter = timeFormatter
@@ -60,7 +61,7 @@ final class ChatViewModelFactory {
         self.attachmentViewModelFactory = attachmentViewModelFactory
         self.productRepository = productRepository
         self.productNameCache = productNameCache
-        self.dotNsResolver = dotNsResolver
+        self.flowState = flowState
         self.logger = logger
         customDecodersById = customDecoders.reduce(into: [:]) {
             $0[$1.identifier.rawValue] = $1
@@ -128,17 +129,11 @@ extension ChatViewModelFactory: ChatViewModelMaking {
              .edited:
             return false
 
-        case let .call(payload):
-            // Only the offer row renders in the feed; answer/candidates/closed
-            // are internal signaling that annotates the offer via MessageListModel.callAggregatesByOfferId.
-            switch payload {
-            case .offer:
-                return true
-            case .answer,
-                 .candidates,
-                 .closed:
-                return false
-            }
+        case .call(.offer):
+            return true
+
+        case .call:
+            return false
 
         case let .chatRequest(content):
             if content.welcomeMessage?.text != nil {
@@ -264,7 +259,7 @@ private extension ChatViewModelFactory {
 
     // MARK: message.content mapping
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     func convert(
         _ message: Chat.LocalMessage,
         listModel: MessageListModel,
@@ -511,9 +506,13 @@ private extension ChatViewModelFactory {
                     actions: actions
                 )
             ]
+
+        case .compactedMessages:
+            return []
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func makeReplyInfo(
         replyContent: Chat.RemoteMessageContentV1.MessageContent.ReplyContent,
         listModel: MessageListModel,
@@ -630,9 +629,8 @@ private extension ChatViewModelFactory {
                 quickEmojis: Chat.quickReactions,
                 allSections: Chat.allReactions.map { EmojiPickerInline.Section(title: $0.category, emojis: $0.emojis) },
                 onReactionTap: actions
-                    .map { action in {
-                        [messageId] emoji in action.toggleReaction(messageId, emoji)
-                    }
+                    .map { action in
+                        { [messageId] emoji in action.toggleReaction(messageId, emoji) }
                     }
             )
             : nil
@@ -708,6 +706,7 @@ private extension ChatViewModelFactory {
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     func transferMessageConfiguration(
         messageId: String,
         peerMetadata: Chat.PeerMetadata,
@@ -900,6 +899,7 @@ private extension ChatViewModelFactory {
         actions: ChatViewModelActions,
         inboxBubbleStyle: InboxBubbleStyle? = nil
     ) -> IdentifiableAnyContentConfiguration<ChatViewLayout.ItemIdentifierType> {
+        let accessibilityId = AccessibilityID.Game.welcomeCard(text: text)
         var cellConfig: ChatMessageContainerConfiguration =
             if let style = inboxBubbleStyle {
                 .botTextImage(
@@ -909,13 +909,15 @@ private extension ChatViewModelFactory {
                     bubbleStrokeColor: style.strokeColor,
                     bubbleStrokeWidth: style.strokeWidth,
                     lockFullWidth: true,
-                    layoutType: layoutContext.layoutType
+                    layoutType: layoutContext.layoutType,
+                    accessibilityId: accessibilityId
                 )
             } else {
                 .botTextImage(
                     text: text,
                     image: image,
-                    layoutType: layoutContext.layoutType
+                    layoutType: layoutContext.layoutType,
+                    accessibilityId: accessibilityId
                 )
             }
 

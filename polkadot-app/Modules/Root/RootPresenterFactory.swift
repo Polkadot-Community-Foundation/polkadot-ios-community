@@ -4,9 +4,13 @@ import Operation_iOS
 import JailbreakDetection
 import KeyDerivation
 import SubstrateSdk
+import ChainRegistry
 
 enum RootPresenterFactory: RootPresenterFactoryProtocol {
-    static func createPresenter(with window: UIWindow) -> RootPresenterProtocol {
+    static func createPresenter(
+        with window: UIWindow
+    ) -> RootPresenterProtocol {
+        let flowStateProvider = SPAFlowStateProvider()
         let foregroundPresentationController = PushForegroundPresentationController()
 
         let chatRouteHandler = PeerChatPushRouteHandler(
@@ -14,8 +18,14 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
             visibilityReporter: foregroundPresentationController
         )
 
+        #if FEATURE_DIMS
+            let chatExtensionRouters: [ChatExtensionPushRouting] = [DIM2ExtensionPushRouter()]
+        #else
+            let chatExtensionRouters: [ChatExtensionPushRouting] = []
+        #endif
+
         let chatExtensionRouteHandler = ChatExtensionPushRouteHandler(
-            routers: [DIM2ExtensionPushRouter()],
+            routers: chatExtensionRouters,
             moduleNavigator: ModuleNavigator(),
             visibilityReporter: foregroundPresentationController
         )
@@ -32,12 +42,12 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
             pushTapHandler: pushHandler,
             foregroundPresentationDecider: foregroundPresentationController
         )
-
         let wireframe = RootWireframe(
             window: window,
             userNotificationService: userNotificationService,
             foregroundVisibilityReporter: foregroundPresentationController,
-            deepLinkHandling: DeferredLinkHandler.shared
+            deepLinkHandling: DeferredLinkHandler.shared,
+            flowStateProvider: flowStateProvider
         )
 
         let migrator = createDatabaseMigrator()
@@ -52,32 +62,22 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
         let resolver = SequentialDecisionResolver<RootDestination>(
             preChecks: [RootGate.Jailbreak(detector: jailbreakDetector, logger: Logger.shared)],
             gates: [
-                RootGate.Web3SummitStart(),
-                RootGate.Web3SummitEnded(),
                 RootGate.Theme(),
                 RootGate.Wallet(
                     entropyManager: RootEntropyManager.shared,
                     backupHelper: MnemonicBackupHelper()
                 ),
-                RootGate.Username(usernameStorage: UsernameStorage()),
-                RootGate.Web3Summit()
+                RootGate.Username(usernameStorage: UsernameStorage())
             ],
             fallback: .dashboard
         )
 
-        let makeResolver = { SPAFlowState.create()?.dotNsResolver }
         let chainRegistryClosure = { ChainRegistryFacade.sharedRegistry }
 
         let browsePrewarmer = ProductContentPrewarmer(
-            makeDomain: { AppConfig.DotNs.dotNsBrowse },
+            makeLabel: { AppConfig.DotNs.dotNsBrowse },
             chainRegistryClosure: chainRegistryClosure,
-            makeResolver: makeResolver
-        )
-
-        let web3SummitPrewarmer = ProductContentPrewarmer(
-            makeDomain: { (try? AppConfig.getWeb3Summit())?.dotNsUrl.host() ?? "" },
-            chainRegistryClosure: chainRegistryClosure,
-            makeResolver: makeResolver
+            flowStateProvider: flowStateProvider
         )
 
         let interactor = RootInteractor(
@@ -86,8 +86,7 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
             logger: Logger.shared,
             resolver: resolver,
             tokenManager: JWTTokenManager.shared,
-            browsePrewarmer: browsePrewarmer,
-            web3SummitPrewarmer: web3SummitPrewarmer
+            browsePrewarmer: browsePrewarmer
         )
 
         let presenter = RootPresenter(

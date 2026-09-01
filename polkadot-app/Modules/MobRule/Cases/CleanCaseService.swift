@@ -5,6 +5,7 @@ import Operation_iOS
 import ExtrinsicService
 import Individuality
 import KeyDerivation
+import ChainRegistry
 
 enum CleanCaseError: Error {
     case failedToCleanCases([Error])
@@ -33,7 +34,7 @@ final class CleanCaseService: CleanCaseServicing {
         chain: ChainModel,
         extrinsicServiceFactory: ExtrinsicServiceFactoryProtocol,
         extrinsicOriginFactory: PersonhoodOriginFactoryProtocol,
-        selectedWallet: WalletManaging = SelectedWallet.mobRuleAlias,
+        selectedWallet: WalletManaging = WalletManagerRepository.shared.mobRuleAlias(),
         logger: LoggerProtocol = Logger.shared,
         dispatchQueue: DispatchQueue = DispatchQueue(label: "io.polkadot.service.cleancase.\(UUID().uuidString)")
     ) {

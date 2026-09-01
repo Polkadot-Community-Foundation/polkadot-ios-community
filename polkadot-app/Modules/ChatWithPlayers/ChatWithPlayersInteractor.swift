@@ -100,10 +100,10 @@ extension ChatWithPlayersInteractor: ChatWithPlayersInteractorInputProtocol {
 
                 try Task.checkCancellation()
 
-                let remoteContact = try Chat.RemoteContact(
+                let remoteContact = Chat.RemoteContact(
                     accountId: account,
                     username: username,
-                    chatPublicKey: Chat.PublicKey(rawData: identifier),
+                    chatPublicKey: identifier.localPublicKey,
                     imageData: imageData,
                     source: .game(gameIndex, gameDate)
                 )
@@ -118,7 +118,7 @@ extension ChatWithPlayersInteractor: ChatWithPlayersInteractorInputProtocol {
                 try Task.checkCancellation()
 
                 await presenter?.didReceive(remoteContact: remoteContact)
-            } catch let error as CancellationError {
+            } catch is CancellationError {
                 // Do nothing
             } catch {
                 await presenter?.didReceive(error: error)
@@ -139,10 +139,10 @@ extension ChatWithPlayersInteractor: ChatWithPlayersInteractorInputProtocol {
         switch accountOrPerson {
         case .account:
             logger.debug("Using candidate account")
-            return Chat.Contact.Own.gameCandidate()
+            return try Chat.Contact.Own.gameCandidate()
         case .person:
             logger.debug("Using score alias account")
-            return Chat.Contact.Own.gameExternal()
+            return try Chat.Contact.Own.gameExternal()
         }
     }
 

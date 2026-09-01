@@ -1,5 +1,31 @@
-OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DW3S"
+// PCF public Dev build — signed, distributed to external TestFlight testers on devnet.
+//
+// This leaf includes base.release.xcconfig ONLY to pick up brand.xcconfig and the
+// no-suffix identity defaults. It deliberately does NOT use $(BASE_SWIFT_FLAGS):
+//   * base.debug / base.devci carry -DF_DEV, which disables the local-auth
+//     (biometric/PIN) gate at LocalAuthPresentable.swift:111,145 — unacceptable in a
+//     build handed to real testers;
+//   * base.release carries no feature flags at all, which would strip the browse tab,
+//     the DIM surfaces and sign-in that this build exists to exercise.
+//
+// The flag list below reproduces the surface the Dev build had BEFORE upstream split the
+// feature axis (upstream 2978516) — i.e. everything — except FEATURE_PRIZES, which
+// polkadot-app/Configs/BuildFeatures.swift makes mutually exclusive with FEATURE_DIMS_FULL.
+// UNSTABLE and NIGHTLY are intentionally unset: the fork's -DDEV takes the
+// `#elseif NIGHTLY || DEV` arm in KnownChains.swift, SupportedAssets.swift and AppConfig.swift.
+// -DW3S was dropped: upstream 2978516 removed the flag and every `#if W3S` site with it.
+//
+// -DDEV is fork-only and load-bearing: it selects the nightly-* chain ids, the devnet asset
+// set, the Remote Config `build_channel = dev` custom signal, and compiles out the jailbreak gate.
 
-APP_NAME = Polkadot Dev
-BUNDLE = io.pcf.polkadotapp
-DEEPLINK = polkadotapp
+#include "../../Configs/base.release.xcconfig"
+
+OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN"
+
+// PCF identity. APP_GROUP is deliberately NOT group.$(APP_MAIN_BUNDLE): the registered PCF
+// App Group predates the bundle id and must not change, or every installed tester loses the
+// shared container — keychain ids, UserDefaults suite and the Core Data store all live in it.
+APP_NAME        = Polkadot Dev
+APP_MAIN_BUNDLE = io.pcf.polkadotapp
+APP_GROUP       = group.pcf.polkadotapp
+BUNDLE          = $(APP_MAIN_BUNDLE)

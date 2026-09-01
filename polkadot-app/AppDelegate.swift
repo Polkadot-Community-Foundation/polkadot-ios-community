@@ -3,8 +3,9 @@ import UIKit
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     let logger: LoggerProtocol = Logger.shared
-    let analyticsService: AnalyticsServicing = AnalyticsService()
-    let issueMonitoringService: IssueMonitoringServicing = IssueMonitoringService()
+    #if TESTNET_FEATURE
+        let issueMonitoringService: IssueMonitoringServicing = IssueMonitoringService()
+    #endif
 
     var apnsTokenProvider: APNSTokenProviding {
         APNSTokenProviderFacade.sharedManager
@@ -21,19 +22,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             return true
         }
 
-        issueMonitoringService.setup()
+        #if TESTNET_FEATURE
+            issueMonitoringService.setup()
+        #endif
 
-        DIM1BackgroundTaskRegistrator.shared.registerBackgroundTask()
-        PersonRegistrationBackgroundTaskRegistrator.shared.registerBackgroundTask()
-        PersonSelfIncludeBackgroundTaskRegistrator.shared.registerBackgroundTask()
+        #if FEATURE_DIMS
+            DIM1BackgroundTaskRegistrator.shared.registerBackgroundTask()
+            PersonRegistrationBackgroundTaskRegistrator.shared.registerBackgroundTask()
+            PersonSelfIncludeBackgroundTaskRegistrator.shared.registerBackgroundTask()
+        #endif
+
         CoinageRecyclingTaskRegistrator.shared.registerBackgroundTask()
 
         UserNotificationService.shared.startGatheringNotifications()
 
         PushKitService.shared.register(for: [.voIP])
         application.registerForRemoteNotifications()
-
-        analyticsService.setup()
 
         return true
     }

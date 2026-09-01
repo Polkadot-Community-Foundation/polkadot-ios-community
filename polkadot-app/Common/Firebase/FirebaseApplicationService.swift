@@ -3,6 +3,7 @@ import Operation_iOS
 import FirebaseCore
 import FirebaseRemoteConfig
 import Combine
+import ChainRegistry
 
 protocol RemoteConfigDelegate: AnyObject {
     func remoteConfig(didFinishLoading result: Result<Void, Error>)
@@ -47,30 +48,19 @@ final class FirebaseApplicationService: RemoteConfigManaging {
     // MARK: Public methods
 
     func fetchRemoteConfigValues() {
-        #if DEV
-            // The Dev build shares the production bundle id and Firebase app; Remote Config
-            // tells the builds apart by this custom signal, so it must be set before the
-            // first fetch or that fetch resolves the production config.
-            Task { [weak self] in
-                guard let self else {
-                    return
-                }
-
-                do {
-                    try await remoteConfig.setCustomSignals(["build_channel": .string("dev")])
-                } catch {
-                    logger.error("Failed to set RemoteConfig custom signals: \(error)")
-                }
-
-                performFetchAndActivate()
+        Task {
+            do {
+                try await remoteConfig.setCustomSignals(Self.customSignals)
+                let status = try await remoteConfig.fetchAndActivate()
+                handleRemoteConfigStatus(status)
+            } catch {
+                delegate?.remoteConfig(didFinishLoading: .failure(error))
             }
-        #else
-            performFetchAndActivate()
-        #endif
+        }
     }
 
     func asyncWaitChainsForRemoteConfigValues() -> CompoundOperationWrapper<[RemoteChainModel]> {
-        asyncWaitForRemoteConfigValues(for: .chains())
+        asyncWaitForRemoteConfigValues(for: .chains)
     }
 
     func asyncWaitXcmTransfers<T: Decodable>() -> CompoundOperationWrapper<T> {
@@ -93,18 +83,19 @@ final class FirebaseApplicationService: RemoteConfigManaging {
         asyncWaitForRemoteConfigValues(for: .collectiblesFallbackURL)
     }
 
-    func syncedWeb3SummitGateMode() -> String? {
-        let value = remoteConfig[.w3sGateMode].stringValue
-        return value.isEmpty ? nil : value
-    }
-
-    func syncedWeb3SummitStartGate() -> String? {
-        let value = remoteConfig[.w3sStartGate].stringValue
-        return value.isEmpty ? nil : value
-    }
-
     func syncedCollectiblesEnabled() -> Bool {
         remoteConfig[.collectiblesEnabled].boolValue
+    }
+
+    func syncedTxExtensionVersions() -> [ChainModel.Id: UInt8] {
+        guard let json = remoteConfig[.txExtensionVersions].jsonValue as? [String: Any] else {
+            return [:]
+        }
+
+        return json.reduce(into: [:]) { result, entry in
+            guard let number = entry.value as? NSNumber else { return }
+            result[entry.key] = number.uint8Value
+        }
     }
 
     func syncedAppConfig() -> RemoteAppConfig {
@@ -113,8 +104,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             ipfsGatewayUrl: url(for: .ipfsGatewayUrl),
             gameDashboardUrl: url(for: .gameDashboardUrl),
             dotNsResolver: dotNsResolverAddress(),
-            web3SummitDotNsUrl: web3SummitDotNsUrl(),
-            web3SummitContractAddress: web3SummitContractAddress()
+            dotNsProtocolRegistry: dotNsProtocolRegistryAddress(),
+            dotNsNameRegistry: dotNsNameRegistryAddress()
         )
     }
 
@@ -125,23 +116,6 @@ final class FirebaseApplicationService: RemoteConfigManaging {
 
 private extension FirebaseApplicationService {
     // MARK: Private methods
-
-    private func performFetchAndActivate() {
-        remoteConfig.fetchAndActivate { [weak self] status, error in
-            guard let self else {
-                return
-            }
-
-            defer {
-                handleRemoteConfigStatus(status)
-            }
-
-            if let error {
-                delegate?.remoteConfig(didFinishLoading: .failure(error))
-                return
-            }
-        }
-    }
 
     private func configurationRemoteConfigSettings() {
         let remoteConfigSettings = RemoteConfigSettings()
@@ -184,28 +158,30 @@ private extension FirebaseApplicationService {
         return URL(string: value)
     }
 
-    func dotNsResolverAddress() -> String? {
+    func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {
         let json = remoteConfig[.dotNsResolver].jsonValue as? [String: String]
-        return json?["resolverContractAddress"]
+        guard let value = json?[field] else { return nil }
+
+        return treatingEmptyAsMissing && value.isEmpty ? nil : value
     }
 
-    func web3SummitConfigJson() -> [String: String]? {
-        remoteConfig[.web3SummitConfig].jsonValue as? [String: String]
+    func dotNsResolverAddress() -> String? {
+        dotNsConfigEntry("resolverContractAddress")
     }
 
-    func web3SummitDotNsUrl() -> URL? {
-        guard let value = web3SummitConfigJson()?["dotNsUrl"], !value.isEmpty else { return nil }
-        return URL(string: value)
+    func dotNsProtocolRegistryAddress() -> String? {
+        dotNsConfigEntry("protocolRegistryAddress")
     }
 
-    func web3SummitContractAddress() -> String? {
-        guard let value = web3SummitConfigJson()?["contractAddress"], !value.isEmpty else { return nil }
-        return value
+    func dotNsNameRegistryAddress() -> String? {
+        // Empty counts as absent: payloads published before manifest support carry no name
+        // registry, and an empty address would read as a configured one.
+        dotNsConfigEntry("registryContractAddress", treatingEmptyAsMissing: true)
     }
 
     func asyncWaitForRemoteConfigValues<T: Decodable>(for key: String) -> CompoundOperationWrapper<T> {
         CompoundOperationWrapper(targetOperation: AsyncClosureOperation<T>(
-            operationClosure: { [weak self] closure in
+            operationClosure: { [logger, weak self] closure in
                 guard let self else {
                     return
                 }
@@ -216,6 +192,7 @@ private extension FirebaseApplicationService {
 
                     closure(.success(models))
                 } catch {
+                    logger.error("Failed to decode remote config: \(error) \(key)")
                     closure(.failure(error))
                 }
             },
@@ -224,31 +201,70 @@ private extension FirebaseApplicationService {
     }
 }
 
+private extension FirebaseApplicationService {
+    /// Signals sent before the first fetch, so that fetch already resolves against the right
+    /// Remote Config conditions.
+    ///
+    /// The PCF Dev build shares the production bundle id and Firebase app, so it cannot be told
+    /// apart by app id. It is discriminated by `build_channel = dev` alone — deliberately WITHOUT
+    /// upstream's `environment` signal, because the Dev configuration defines neither `UNSTABLE`
+    /// nor `NIGHTLY` and would therefore announce itself as `environment = release` and match the
+    /// production conditions. Every other configuration sends upstream's `environment` signal
+    /// unchanged.
+    static var customSignals: [String: FirebaseRemoteConfig.CustomSignalValue] {
+        #if DEV
+            let signal: CustomSignal = .buildChannel
+        #else
+            let signal: CustomSignal = .environment
+        #endif
+
+        return [signal.key: signal.value]
+    }
+
+    enum CustomSignal {
+        case environment
+        case buildChannel
+
+        var key: String {
+            switch self {
+            case .environment:
+                "environment"
+            case .buildChannel:
+                "build_channel"
+            }
+        }
+
+        var value: FirebaseRemoteConfig.CustomSignalValue {
+            switch self {
+            case .environment:
+                #if UNSTABLE
+                    "unstable"
+                #elseif NIGHTLY
+                    "nightly"
+                #else
+                    "release"
+                #endif
+            case .buildChannel:
+                "dev"
+            }
+        }
+    }
+}
+
 // MARK: - Constants
 
 private extension String {
     static let latestAppVersion = "latest_ios_version"
-    static func chains() -> String {
-        #if UNSTABLE
-            "chains_v2"
-        #elseif NIGHTLY || DEV
-            "chains_v2"
-        #else
-            "chains"
-        #endif
-    }
-
+    static let chains = "chains_v2"
     static let xcmTransfers = "cross_chain_transfers"
     static let generalXcmConfig = "xcm_general_config"
     static let gameResultsFallbackURL = "game_results_fallback_url"
     static let w3sMerchants = "w3s_merchants"
     static let collectiblesFallbackURL = "collectibles_fallback_url"
     static let collectiblesEnabled = "collectibles_enabled"
-    static let w3sGateMode = "w3s_gate_mode"
-    static let w3sStartGate = "w3s_start_gate"
+    static let txExtensionVersions = "transaction_extension_versions"
     static let identityBackendUrl = "identity_backend_url"
     static let ipfsGatewayUrl = "ipfs_gateway_url"
     static let gameDashboardUrl = "game_dashboard_url"
     static let dotNsResolver = "dot_ns_config"
-    static let web3SummitConfig = "web3summit_config"
 }

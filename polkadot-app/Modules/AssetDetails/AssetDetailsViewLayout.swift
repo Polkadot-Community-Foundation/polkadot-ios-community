@@ -1,4 +1,5 @@
 import SwiftUI
+import ExternalAccessibility
 import PolkadotUI
 import DesignSystem
 
@@ -75,7 +76,8 @@ struct AssetDetailsView: View {
     ) -> some View {
         AssetDetailsBalanceCard(
             viewModel: balanceCardModel,
-            isUpdating: viewModel.isUpdating
+            isUpdating: viewModel.isUpdating,
+            isExpanded: isExpanded
         )
     }
 
@@ -89,36 +91,69 @@ struct AssetDetailsView: View {
     }
 
     private func actions() -> some View {
-        HStack(spacing: 12) {
-            DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
-                viewModel.onSendMoney?()
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
+                    viewModel.onSendMoney?()
+                }
+                .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
+
+                topUpButton()
             }
 
             #if TESTNET_FEATURE
-                Button {
-                    viewModel.onTopUp?()
-                } label: {
-                    Group {
-                        if viewModel.isFaucetInProgress {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(.fgPrimaryInverted)
-                        } else {
-                            Image(.add24)
-                                .renderingMode(.template)
-                        }
-                    }
-                    .frame(width: 56, height: 56)
-                    .foregroundStyle(Color.fgPrimaryInverted)
-                    .background(.bgActionPrimary, in: Circle())
-                }
-                .disabled(viewModel.isFaucetInProgress)
+                testnetTopUpButton()
             #endif
         }
     }
+
+    private func topUpButton() -> some View {
+        Button {
+            viewModel.onTopUp?()
+        } label: {
+            Group {
+                if viewModel.isTopUpInProgress {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.fgPrimaryInverted)
+                } else {
+                    Image(.add24)
+                        .renderingMode(.template)
+                }
+            }
+            .frame(width: 56, height: 56)
+            .foregroundStyle(Color.fgPrimaryInverted)
+            .background(.bgActionPrimary, in: Circle())
+        }
+        .disabled(viewModel.isTopUpInProgress)
+        .accessibilityId(AccessibilityID.Wallet.addFundsButton)
+    }
+
+    #if TESTNET_FEATURE
+        private func testnetTopUpButton() -> some View {
+            Button {
+                viewModel.onTestnetTopUp?()
+            } label: {
+                Group {
+                    if viewModel.isTestnetTopUpInProgress {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.fgPrimaryInverted)
+                    } else {
+                        Text(verbatim: "Faucet Top Up")
+                            .textStyle(.body14SemiBold())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .foregroundStyle(Color.fgPrimaryInverted)
+                .background(.bgActionPrimary, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .disabled(viewModel.isTestnetTopUpInProgress)
+        }
+    #endif
 }
 
-// TODO: Debug purposes only
 #if TESTNET_FEATURE
     private struct CoinageBalanceBreakdownView: View {
         let breakdown: CoinageBalanceBreakdownViewModel
@@ -132,10 +167,26 @@ struct AssetDetailsView: View {
                 Text(verbatim: "Coinage Balance")
                     .textStyle(.title16SemiBold())
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityId(AccessibilityID.Wallet.coinageHeader)
 
-                BreakdownRow(title: "Total Balance", value: breakdown.totalBalance)
-                BreakdownRow(title: "Spendable Balance", value: breakdown.spendableBalance)
-                BreakdownRow(title: "Pending Balance", value: breakdown.pendingBalance)
+                BreakdownRow(
+                    title: "Total Balance",
+                    value: breakdown.totalBalance,
+                    labelAccessibilityId: AccessibilityID.Wallet.coinageTotalBalanceLabel,
+                    valueAccessibilityId: AccessibilityID.Wallet.coinageTotalBalanceValue
+                )
+                BreakdownRow(
+                    title: "Spendable Balance",
+                    value: breakdown.spendableBalance,
+                    labelAccessibilityId: AccessibilityID.Wallet.coinageSpendableBalanceLabel,
+                    valueAccessibilityId: AccessibilityID.Wallet.coinageSpendableBalanceValue
+                )
+                BreakdownRow(
+                    title: "Pending Balance",
+                    value: breakdown.pendingBalance,
+                    labelAccessibilityId: AccessibilityID.Wallet.coinagePendingBalanceLabel,
+                    valueAccessibilityId: AccessibilityID.Wallet.coinagePendingBalanceValue
+                )
 
                 Divider()
 
@@ -153,6 +204,7 @@ struct AssetDetailsView: View {
                             .foregroundStyle(.fgPrimaryInverted)
                     }
                     .background(.bgActionPrimary, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityId(AccessibilityID.Wallet.makeVouchersReadyButton)
                 }
 
                 Button {
@@ -261,15 +313,19 @@ struct AssetDetailsView: View {
     private struct BreakdownRow: View {
         let title: String
         let value: String
+        var labelAccessibilityId: (any AccessibilityIdentifying)?
+        var valueAccessibilityId: (any AccessibilityIdentifying)?
 
         var body: some View {
             HStack {
                 Text(title)
                     .textStyle(.body14Regular())
                     .foregroundStyle(.fgSecondary)
+                    .accessibilityId(labelAccessibilityId)
                 Spacer()
                 Text(value)
                     .textStyle(.body14SemiBold())
+                    .accessibilityId(valueAccessibilityId)
             }
         }
     }
