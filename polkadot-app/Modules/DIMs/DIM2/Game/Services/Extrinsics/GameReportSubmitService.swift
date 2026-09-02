@@ -5,6 +5,7 @@ import SubstrateSdk
 import ExtrinsicService
 import Individuality
 import KeyDerivation
+import Products
 
 protocol GameSubmitReportServicing {
     func submitReport(
@@ -20,6 +21,7 @@ final class GameSubmitReportService {
     private let extrinsicSubmitMonitor: ExtrinsicSubmitMonitorFactoryProtocol
     private let candidateOriginFactory: CandidateOriginFactoryProtocol
     private let personhoodOriginFactory: PersonhoodOriginFactoryProtocol
+    private let tldProvider: DotNsTldProviding
 
     init(
         candidateWallet: WalletManaging,
@@ -27,7 +29,8 @@ final class GameSubmitReportService {
         chain: ChainProtocol,
         extrinsicSubmitMonitor: ExtrinsicSubmitMonitorFactoryProtocol,
         candidateOriginFactory: CandidateOriginFactoryProtocol,
-        personhoodOriginFactory: PersonhoodOriginFactoryProtocol
+        personhoodOriginFactory: PersonhoodOriginFactoryProtocol,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
     ) {
         self.candidateWallet = candidateWallet
         self.scoreWallet = scoreWallet
@@ -35,6 +38,7 @@ final class GameSubmitReportService {
         self.extrinsicSubmitMonitor = extrinsicSubmitMonitor
         self.candidateOriginFactory = candidateOriginFactory
         self.personhoodOriginFactory = personhoodOriginFactory
+        self.tldProvider = tldProvider
     }
 }
 
@@ -60,20 +64,22 @@ extension GameSubmitReportService: GameSubmitReportServicing {
 
 private extension GameSubmitReportService {
     func makeOrigin(usesScoreAlias: Bool) throws -> ExtrinsicOriginDefining {
-        if usesScoreAlias {
-            try personhoodOriginFactory.createAsPersonalAliasWithAccount(
-                input: .init(
-                    wallet: scoreWallet,
-                    chain: chain,
-                    context: Data(PalletContext.score.utf8),
-                    blockHash: nil
-                )
-            )
-        } else {
-            try candidateOriginFactory.createSignedScoreAsParticipant(
+        guard usesScoreAlias else {
+            return try candidateOriginFactory.createSignedScoreAsParticipant(
                 for: candidateWallet,
                 chain: chain
             )
         }
+
+        let context = try tldProvider.personhoodContext(for: .score)
+
+        return try personhoodOriginFactory.createAsPersonalAliasWithAccount(
+            input: .init(
+                wallet: scoreWallet,
+                chain: chain,
+                context: context,
+                blockHash: nil
+            )
+        )
     }
 }
