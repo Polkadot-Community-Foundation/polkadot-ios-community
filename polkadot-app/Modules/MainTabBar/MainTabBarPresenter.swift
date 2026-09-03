@@ -1,20 +1,31 @@
 import Foundation
 import PolkadotUI
 
+@MainActor
 final class MainTabBarPresenter {
     weak var view: MainTabBarViewProtocol?
     let wireframe: MainTabBarWireframeProtocol
     let interactor: MainTabBarInteractorInputProtocol
 
-    var tabItems: [TabBarItem] = [.chat, .wallet, .browse, .settings]
+    // `.scan` must stay the centre slot: DSTabBarRow derives it as `itemCount / 2`, which holds
+    // for both arms here (index 2 of 5, index 2 of 4).
+    #if FEATURE_PRODUCTS
+        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .browse, .settings]
+    #else
+        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .settings]
+    #endif
+
+    private let chipViewModelFactory: SPATabChipViewModelFactory
     private var settingsBadge: TabBarBadge?
 
     init(
         interactor: MainTabBarInteractorInputProtocol,
-        wireframe: MainTabBarWireframeProtocol
+        wireframe: MainTabBarWireframeProtocol,
+        chipViewModelFactory: SPATabChipViewModelFactory
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
+        self.chipViewModelFactory = chipViewModelFactory
     }
 }
 
@@ -24,8 +35,7 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
     }
 
     func configureViews() {
-        view?.show(tabs: tabItems)
-        view?.select(tab: .wallet)
+        view?.show(tabs: tabItems, selecting: .wallet)
         view?.setBadge(settingsBadge, for: .settings)
     }
 }
@@ -56,5 +66,9 @@ extension MainTabBarPresenter: MainTabBarInteractorOutputProtocol {
 
     func didReceivePolkadotSignInRequest(with url: URL) {
         wireframe.showPolkadotSignIn(with: url, view: view)
+    }
+
+    func didReceiveSPATabs(_ tabs: [SPATab]) {
+        view?.showSPATabs(chipViewModelFactory.createViewModels(for: tabs))
     }
 }

@@ -7,13 +7,14 @@ import AssetHubSdk
 import ExtrinsicService
 import ChainStore
 import KeyDerivation
+import ChainRegistry
 
 final class AssetsHubExchangeProvider: AssetsExchangeBaseProvider {
     private var supportedChains: [ChainModel.Id: ChainModel]?
     private let selectedWallet: WalletManaging
     private let substrateStorageFacade: StorageFacadeProtocol
     private let exchangeStateRegistrar: AssetsExchangeStateRegistring
-    private let extrinsicServiceFactory: ExtrinsicServiceFactoryProtocol
+    private let extrinsicServiceFactory: ExtrinsicServiceCreating
     private let extrinsicSubmissionFacade: ExtrinsicSubmissionMonitorFacadeProtocol
     private let extrinsicOriginDefiningFactory: ExtrinsicOriginDefiningFactoryProtocol
     private let timeEstimator: AssetExchangeTimeEstimating
@@ -56,7 +57,7 @@ final class AssetsHubExchangeProvider: AssetsExchangeBaseProvider {
             chainRegistry: chainRegistry,
             substrateStorageFacade: substrateStorageFacade,
             customFeeEstimator: customFeeEstimatingFactory,
-            transactionExtensionFactory: ExtrinsicTransactionExtensionFactory(),
+            transactionExtensionFactory: CompoundTxExtensionFactory(),
             extrinsicVersion: .V4,
             operationQueue: operationQueue
         )

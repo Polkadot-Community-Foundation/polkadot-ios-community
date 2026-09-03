@@ -54,6 +54,25 @@ struct TransferRecoveryServiceTests {
         )
     }
 
+    /// WAL entry builder for a `.recycleIntoVoucher` operation (input coin → recycler voucher).
+    private func makeRecycleWALEntry(
+        inputCoinIds: [String],
+        expectedVoucherIndices: [UInt32],
+        checkpointBlock: CheckpointBlock = .known(number: 5, hash: Data(repeating: 0x00, count: 32)),
+        mortality: UInt32 = 64
+    ) -> TransferWALEntry {
+        TransferWALEntry(
+            operationType: .recycleIntoVoucher,
+            inputCoinIds: inputCoinIds,
+            inputVoucherIds: [],
+            expectedCoinIndices: [],
+            expectedVoucherIndices: expectedVoucherIndices,
+            checkpointBlock: checkpointBlock,
+            mortality: mortality,
+            createdAt: now
+        )
+    }
+
     private func makeVoucher(
         exponent: Int16 = 3,
         derivationIndex: UInt32,
@@ -78,8 +97,8 @@ struct TransferRecoveryServiceTests {
 
         walStore.fetchAllResult = [walEntry]
         coinQuery.fetchCoinsResults = [
-            CoinSyncResult.OnChainCoin(value: 3, age: 0),
-            CoinSyncResult.OnChainCoin(value: 3, age: 0)
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 3, age: 0),
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 3, age: 0)
         ]
 
         await makeService().recover()
@@ -107,8 +126,8 @@ struct TransferRecoveryServiceTests {
 
         walStore.fetchAllResult = [walEntry]
         coinQuery.fetchCoinsResults = [
-            CoinSyncResult.OnChainCoin(value: 4, age: 5),
-            CoinSyncResult.OnChainCoin(value: 4, age: 5)
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 4, age: 5),
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 4, age: 5)
         ]
 
         await makeService().recover()
@@ -134,7 +153,7 @@ struct TransferRecoveryServiceTests {
         // Call 1: output probe for index 100 → not found
         coinQuery.enqueue([nil])
         // Call 2: input check for coin "99" → still on-chain, so revert
-        coinQuery.enqueue([CoinSyncResult.OnChainCoin(value: 0, age: 0)])
+        coinQuery.enqueue([CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)])
 
         await makeService().recover()
 
@@ -159,7 +178,7 @@ struct TransferRecoveryServiceTests {
         )
 
         walStore.fetchAllResult = [groupBEntry]
-        coinQuery.fetchCoinsResults = [CoinSyncResult.OnChainCoin(value: 5, age: 10)]
+        coinQuery.fetchCoinsResults = [CoinSyncResult.OnChainCoin(instanceId: 0, value: 5, age: 10)]
 
         await makeService().recover()
 
@@ -207,35 +226,6 @@ struct TransferRecoveryServiceTests {
         #expect(coinService.markedSpentIds.isEmpty)
     }
 
-    // MARK: - Status stream emits idle, recovering, completed
-
-    @Test("Status stream emits .idle, .recovering, then .completed")
-    func statusStream() async throws {
-        walStore.fetchAllResult = [makeWALEntry(inputCoinIds: ["99"])]
-        coinQuery.fetchCoinsResults = [CoinSyncResult.OnChainCoin(value: 3, age: 0)]
-
-        let service = makeService()
-
-        // Collect until terminal state — deterministic, no arbitrary sleeps needed
-        let collectorTask = Task<[RecoveryStatus], Error> {
-            var collected: [RecoveryStatus] = []
-            for try await status in service.statusStream {
-                collected.append(status)
-                if status == .completed { break }
-                if case .failed = status { break }
-            }
-            return collected
-        }
-
-        // Yield to let collector subscribe and receive .idle before recover() changes state
-        await Task.yield()
-
-        await service.recover()
-
-        let statusSequence = try await collectorTask.value
-        #expect(statusSequence == [.idle, .recovering, .completed])
-    }
-
     // MARK: - Extrinsic confirmed but no coins found on-chain
 
     @Test("Confirmed extrinsic but no coins found returns early without saving")
@@ -277,8 +267,8 @@ struct TransferRecoveryServiceTests {
         coinQuery.enqueue([nil])
         // Call 2: input check for coins ["99", "98"] → still on-chain, so revert
         coinQuery.enqueue([
-            CoinSyncResult.OnChainCoin(value: 0, age: 0),
-            CoinSyncResult.OnChainCoin(value: 0, age: 0)
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0),
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)
         ])
 
         await makeService().recover()
@@ -301,9 +291,9 @@ struct TransferRecoveryServiceTests {
 
         walStore.fetchAllResult = [walEntry]
         coinQuery.fetchCoinsResults = [
-            CoinSyncResult.OnChainCoin(value: 3, age: 0),
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 3, age: 0),
             nil,
-            CoinSyncResult.OnChainCoin(value: 3, age: 0)
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 3, age: 0)
         ]
 
         await makeService().recover()
@@ -331,8 +321,8 @@ struct TransferRecoveryServiceTests {
 
         walStore.fetchAllResult = [walEntry1, walEntry2]
         coinQuery.fetchCoinsResults = [
-            CoinSyncResult.OnChainCoin(value: 3, age: 0),
-            CoinSyncResult.OnChainCoin(value: 4, age: 5)
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 3, age: 0),
+            CoinSyncResult.OnChainCoin(instanceId: 0, value: 4, age: 5)
         ]
 
         await makeService().recover()
@@ -394,8 +384,8 @@ struct TransferRecoveryServiceTests {
         coinQuery.enqueue([nil, nil])
         // Input voucher check: still on-chain → revert
         voucherQuery.enqueue([
-            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, isUnloaded: false),
-            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, isUnloaded: false)
+            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, aliasState: nil),
+            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, aliasState: nil)
         ])
 
         await makeService().recover()
@@ -408,6 +398,32 @@ struct TransferRecoveryServiceTests {
         #expect(coinService.markedSpentIds.isEmpty)
         #expect(voucherService.savedVouchers.count == 2)
         #expect(voucherService.savedVouchers.allSatisfy { $0.localState == .available })
+    }
+
+    // MARK: - Voucher marked unloaded on-chain (regression test)
+
+    @Test("Unload with input voucher marked unloaded on-chain — inputs consumed, mark spent")
+    func unloadWithVoucherUnloadedOnChain() async throws {
+        let walEntry = makeWALEntry(
+            inputVoucherIds: ["10", "11"],
+            expectedCoinIndices: [200, 201]
+        )
+
+        walStore.fetchAllResult = [walEntry]
+        coinQuery.enqueue([nil, nil])
+        voucherQuery.enqueue([
+            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, aliasState: .unloaded),
+            VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, aliasState: .unloaded)
+        ])
+
+        await makeService().recover()
+
+        let deletedIds = await walStore.deletedIds
+        #expect(deletedIds == [walEntry.id])
+        #expect(coinService.savedCoins.isEmpty)
+        #expect(coinService.markedSpentIds.isEmpty)
+        #expect(Set(voucherService.deletedIdentifiers) == Set(["10", "11"]))
+        #expect(coinService.markedAvailableIds.isEmpty)
     }
 
     // MARK: - Within mortality window — entry left pending, no revert
@@ -428,7 +444,7 @@ struct TransferRecoveryServiceTests {
         // Output probe: nil (not confirmed)
         coinQuery.enqueue([nil])
         // Input check for coin "99": still on-chain → not consumed, so fall through to expiry check
-        coinQuery.enqueue([CoinSyncResult.OnChainCoin(value: 0, age: 0)])
+        coinQuery.enqueue([CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)])
 
         await makeService().recover()
 
@@ -456,7 +472,7 @@ struct TransferRecoveryServiceTests {
         // Outputs: nil
         coinQuery.enqueue([nil])
         // Input check for coin "99": still on-chain
-        coinQuery.enqueue([CoinSyncResult.OnChainCoin(value: 0, age: 0)])
+        coinQuery.enqueue([CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)])
 
         // Mock emits block 1000 (< 900 + 200 = 1100 → not expired). Entry stays pending.
         // Stream terminates after the single emission; recover() returns with the entry unresolved.
@@ -470,19 +486,83 @@ struct TransferRecoveryServiceTests {
         #expect(coinService.markedSpentIds.isEmpty)
         #expect(coinService.savedCoins.isEmpty)
     }
-}
 
-extension RecoveryStatus: Equatable {
-    public static func == (lhs: RecoveryStatus, rhs: RecoveryStatus) -> Bool {
-        switch (lhs, rhs) {
-        case (.idle, .idle),
-             (.recovering, .recovering),
-             (.completed, .completed):
-            true
-        case (.failed, .failed):
-            true
-        default:
-            false
-        }
+    // MARK: - Recycle into voucher
+
+    @Test("Recycle confirmed — coin consumed, voucher confirmed available, WAL deleted")
+    func recycleConfirmed() async throws {
+        let walEntry = makeRecycleWALEntry(inputCoinIds: ["99"], expectedVoucherIndices: [500])
+
+        walStore.fetchAllResult = [walEntry]
+        // Input coin "99" absent on-chain → consumed by the recycle extrinsic
+        coinQuery.enqueue([nil])
+        // Recycler voucher 500 present on-chain → confirm
+        voucherQuery.enqueue([VoucherOnChainInfo(exponent: 3, ringPosition: .suspended, aliasState: nil)])
+
+        await makeService().recover()
+
+        let deletedIds = await walStore.deletedIds
+        #expect(deletedIds == [walEntry.id])
+        #expect(coinService.markedSpentIds == ["99"])
+        #expect(coinService.markedAvailableIds.isEmpty)
+        #expect(voucherService.markedAvailableIds == ["500"])
+    }
+
+    @Test("Recycle not confirmed and expired — coin reverted, voucher deleted, WAL deleted")
+    func recycleExpiredReverts() async throws {
+        // checkpoint=800, mortality=64 → expires at 864; current block 1000 → expired
+        let walEntry = makeRecycleWALEntry(
+            inputCoinIds: ["99"],
+            expectedVoucherIndices: [500],
+            checkpointBlock: .known(number: 800, hash: Data(repeating: 0x00, count: 32)),
+            mortality: 64
+        )
+
+        walStore.fetchAllResult = [walEntry]
+        // Input coin "99" still on-chain → not consumed → fall through to expiry
+        coinQuery.enqueue([CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)])
+
+        await makeService().recover()
+
+        let deletedIds = await walStore.deletedIds
+        #expect(deletedIds == [walEntry.id])
+        #expect(coinService.markedAvailableIds == ["99"])
+        #expect(coinService.markedSpentIds.isEmpty)
+        #expect(voucherService.deletedIdentifiers == ["500"])
+    }
+
+    @Test("Recycle not confirmed, within mortality — entry left pending")
+    func recycleWithinMortality() async throws {
+        // checkpoint=900, mortality=200 → expires at 1100; current block 1000 → not expired
+        let walEntry = makeRecycleWALEntry(
+            inputCoinIds: ["99"],
+            expectedVoucherIndices: [500],
+            checkpointBlock: .known(number: 900, hash: Data(repeating: 0x00, count: 32)),
+            mortality: 200
+        )
+
+        walStore.fetchAllResult = [walEntry]
+        coinQuery.enqueue([CoinSyncResult.OnChainCoin(instanceId: 0, value: 0, age: 0)])
+
+        await makeService().recover()
+
+        let deletedIds = await walStore.deletedIds
+        #expect(deletedIds.isEmpty)
+        #expect(coinService.markedAvailableIds.isEmpty)
+        #expect(coinService.markedSpentIds.isEmpty)
+        #expect(voucherService.deletedIdentifiers.isEmpty)
+    }
+
+    @Test("Orphaned .recycling coin with no WAL is restored to available")
+    func orphanedRecyclingCoinRestored() async throws {
+        walStore.fetchAllResult = []
+        coinService.fetchAllResult = [
+            Coin(exponent: 3, derivationIndex: 99, age: 14, state: .recycling)
+        ]
+
+        await makeService().recover()
+
+        #expect(coinService.markedAvailableIds == ["99"])
+        #expect(coinService.markedSpentIds.isEmpty)
     }
 }

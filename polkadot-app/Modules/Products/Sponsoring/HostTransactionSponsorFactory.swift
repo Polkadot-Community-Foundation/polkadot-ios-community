@@ -6,31 +6,42 @@ import Products
 import Operation_iOS
 import SubstrateSdk
 import SubstrateStorageQuery
+import SubstrateOperation
+import ChainRegistry
 
 final class HostTransactionSponsorFactory: TransactionSponsorMaking {
     private let accountManager: ProductsAccountManaging
     private let resourceKeyManager: ProductResourceKeyManaging
     private let chainRegistry: ChainRegistryProtocol
+    private let keyResolver: BandersnatchKeyResolving
     private let logger: LoggerProtocol
 
     init(
         accountManager: ProductsAccountManaging,
         resourceKeyManager: ProductResourceKeyManaging,
         chainRegistry: ChainRegistryProtocol,
+        keyResolver: BandersnatchKeyResolving,
         logger: LoggerProtocol
     ) {
         self.accountManager = accountManager
         self.resourceKeyManager = resourceKeyManager
         self.chainRegistry = chainRegistry
+        self.keyResolver = keyResolver
         self.logger = logger
     }
 
     func makePreimageSponsor() -> PreimageSubmitSponsoring {
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
 
-        let keyResolver = BandersnatchKeyResolver(
-            liteKeyManager: BandersnatchKeyManager.litePerson(),
-            fullKeyManager: BandersnatchKeyManager.fullPerson()
+        let storageRequestFactory = StorageRequestFactory(
+            remoteFactory: StorageKeyFactory(),
+            operationManager: OperationManager(operationQueue: operationQueue)
+        )
+
+        let bulletInTimeProvider = ChainTimeProvider(
+            chainId: AppConfig.Chains.bulletInChain,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
         )
 
         let bulletInInfoProvider = BulletInSlotInfoProvider(
@@ -38,7 +49,9 @@ final class HostTransactionSponsorFactory: TransactionSponsorMaking {
             peopleChainId: AppConfig.Chains.usernameChain,
             chainRegistry: chainRegistry,
             keyResolver: keyResolver,
-            operationQueue: operationQueue
+            operationQueue: operationQueue,
+            chainTimeProvider: bulletInTimeProvider,
+            resourcesParameters: ResourcesParametersFacade.shared
         )
 
         return PreimageSubmitSponsor(
@@ -68,21 +81,35 @@ final class HostTransactionSponsorFactory: TransactionSponsorMaking {
     func makeStatementStoreSponsor() -> StatementStoreSponsoring {
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
 
-        let keyResolver = BandersnatchKeyResolver(
-            liteKeyManager: BandersnatchKeyManager.litePerson(),
-            fullKeyManager: BandersnatchKeyManager.fullPerson()
-        )
-
         let storageRequestFactory = StorageRequestFactory(
             remoteFactory: StorageKeyFactory(),
             operationManager: OperationManager(operationQueue: operationQueue)
+        )
+
+        let timeProvider = ChainTimeProvider(
+            chainId: AppConfig.Chains.chatChain,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
+        )
+
+        let allowanceRepository = AllowanceRepositoryFactory(storageFacade: UserDataStorageFacade.shared)
+            .createStatementStoreRepository()
+        let accounting = StatementStoreSlotAccountant(repository: allowanceRepository)
+
+        let originPersonProvider = ChainOriginPersonProvider(
+            chainId: AppConfig.Chains.chatChain,
+            chainRegistry: chainRegistry,
+            keyResolver: keyResolver
         )
 
         let slotInfoProvider = StatementStoreSlotInfoProvider(
             chainId: AppConfig.Chains.chatChain,
             chainRegistry: chainRegistry,
             storageRequestFactory: storageRequestFactory,
-            keyResolver: keyResolver,
+            resourcesParameters: ResourcesParametersFacade.shared,
+            chainTimeProvider: timeProvider,
+            originPersonProvider: originPersonProvider,
+            accounting: accounting,
             logger: logger
         )
 

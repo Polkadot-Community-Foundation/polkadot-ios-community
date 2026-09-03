@@ -6,6 +6,12 @@ import UIKit
 import UIKitExt
 
 final class DebugSettingsWireframe: DebugSettingsWireframeProtocol {
+    private let flowStateProvider: any SPAFlowStateProviding
+
+    init(flowStateProvider: any SPAFlowStateProviding) {
+        self.flowStateProvider = flowStateProvider
+    }
+
     func showProducts(from view: ControllerBackedProtocol?) {
         let factory = ProductRepositoryFactory()
 
@@ -31,6 +37,23 @@ final class DebugSettingsWireframe: DebugSettingsWireframeProtocol {
         view?.controller.navigationController?.pushViewController(hostingController, animated: true)
     }
 
+    func showTrUAPIPlayground(from view: ControllerBackedProtocol?) {
+        #if DEBUG
+            guard let playgroundView = TrUAPIPlaygroundViewFactory.createView(
+                flowStateProvider: flowStateProvider
+            ) else {
+                return
+            }
+
+            let navigationController = AppNavigationController(
+                rootViewController: playgroundView.controller
+            )
+            navigationController.modalPresentationStyle = .fullScreen
+
+            view?.controller.present(navigationController, animated: true)
+        #endif
+    }
+
     func showDotNsBrowser(from view: ControllerBackedProtocol?) {
         let alert = UIAlertController(
             title: "Open SPA",
@@ -43,19 +66,34 @@ final class DebugSettingsWireframe: DebugSettingsWireframeProtocol {
         }
 
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Open", style: .default) { [weak view] _ in
+        alert.addAction(UIAlertAction(title: "Open", style: .default) { [weak view, weak self] _ in
             guard
                 let input = alert.textFields?.first?.text,
-                let productHost = ProductHost(rawString: input),
-                let spaView = SPAViewFactory.createView(productHost: productHost)
+                let self
             else {
                 return
             }
 
-            view?.controller.navigationController?.pushViewController(
-                spaView.controller,
-                animated: true
-            )
+            let flowState = flowStateProvider.flowState()
+
+            Task {
+                guard
+                    let productHost = try? await flowState.hostProvider.resolveHost(rawString: input),
+                    let spaView = SPAViewFactory.createView(
+                        page: ProductPage(host: productHost),
+                        flowState: flowState
+                    )
+                else {
+                    return
+                }
+
+                await MainActor.run {
+                    view?.controller.navigationController?.pushViewController(
+                        spaView.controller,
+                        animated: true
+                    )
+                }
+            }
         })
 
         view?.controller.present(alert, animated: true)

@@ -1,16 +1,19 @@
 import Foundation
 import CryptoKit
 import StatementStore
+import ChainRegistry
 
 extension ServiceCoordinator {
     static func createDeviceSyncService(
         turnService: TURNCredentialsProviding,
         logger: LoggerProtocol
-    ) throws -> DeviceSyncService {
+    ) throws -> DeviceSyncServicing {
         do {
             let signerManager = ChatSignerManager()
             let signer = try signerManager.makeSigner(for: Chat.Contact.Own.main().signKeyId)
-            let messageExchangeModeProvider = ChatMessageExchangeModeProvider()
+            let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
+                tld: DotNsTldProviderFacade.shared.currentTldOrError()
+            )
 
             return DeviceSyncService(
                 ownStatementAccountId: signer.accountId,
@@ -41,7 +44,7 @@ extension ServiceCoordinator {
 
             let encryptionKey = try DeviceEncryptionKeyManager.shared.getOrCreatePrivateKey()
 
-            let ownKeyId = Chat.Contact.Own.main()
+            let ownKeyId = try Chat.Contact.Own.main()
 
             await deviceSyncService.setup(configuration: DeviceSyncServiceConfiguration(
                 connection: statementsConnection,

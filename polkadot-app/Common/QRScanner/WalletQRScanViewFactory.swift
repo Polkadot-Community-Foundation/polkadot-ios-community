@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 enum WalletQRScanViewFactory {
     static func createView(
         for delegate: WalletQRScanDelegate
@@ -16,7 +17,8 @@ enum WalletQRScanViewFactory {
             errorDisplayFactory: QRScannerErrorDisplayFactory(),
             delegate: delegate,
             dsfinvkParser: W3sDsfinvkReceiptParser(),
-            acceptedURLSchemes: acceptedDeeplinkSchemes(),
+            // Allowlist confines the scanner to our own deeplinks; rejects tel:/sms:/etc.
+            isAcceptedScheme: AppConfig.DeepLink.isKnownScheme,
             qrScanService: qrService,
             qrExtractionService: qrExtractor
         )
@@ -26,11 +28,5 @@ enum WalletQRScanViewFactory {
         presenter.view = view
 
         return view
-    }
-
-    // Allowlist confines the scanner to our own deeplinks; rejects tel:/sms:/etc.
-    // Both build flavors listed because the active scheme depends on the configuration.
-    private static func acceptedDeeplinkSchemes() -> Set<String> {
-        ["polkadotapp", "polkadotappdev"]
     }
 }

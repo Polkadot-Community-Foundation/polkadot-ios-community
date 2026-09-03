@@ -3,7 +3,8 @@ name: Release (Dev)
 # Archives the polkadot-app iOS client in the DEV configuration and distributes it to the
 # external TestFlight group "Products Devnet". The Dev build is the PUBLIC developer build:
 # it MIRRORS Nightly's testnet contour via its own dedicated flag (it carries -DDEV /
-# -DTESTNET_FEATURE / -DW3S, and every network gate is `#elseif NIGHTLY || DEV`, so it reads
+# -DTESTNET_FEATURE plus the FEATURE_* set named in polkadot-app/Configs/polkadot-app.dev.xcconfig
+# — upstream retired -DW3S — and every network gate is `#elseif NIGHTLY || DEV`, so it reads
 # `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah / nightly-people /
 # nightly-bulletin in KnownChains.swift). It ships under the PRODUCTION bundle id
 # io.pcf.polkadotapp (one app record — TestFlight-only records get binned) and the production
@@ -25,9 +26,11 @@ name: Release (Dev)
 #   APPLE_TEAM_ID                        Developer team id (for signing + ExportOptions)
 #   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the PRODUCTION Firebase iOS app's
 #                                        GoogleService-Info.plist (shared with the Dev build)
-#   W3S_AUTH_KEY                         auth keypair seed (hex; required for W3S flows)
-# Optional: POSTHOG_API_KEY, SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN,
-#   MELD_BASIC_AUTH_TOKEN.
+# Optional: SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN, MELD_BASIC_AUTH_TOKEN.
+#
+# W3S_AUTH_KEY is NO LONGER USED. Upstream deleted W3SAuthorizedSigner and the
+# ValueTransferAuthPallet signing protocol it implemented; W3S statements are now signed with
+# the user's own wallet key. The repository secret can be revoked once this lands.
 # Optional repository variable:
 #   TESTFLIGHT_JOIN_URL  Public "Products Devnet" join link shown in the GitHub release body
 #                        (falls back to the hardcoded link if unset).
@@ -58,13 +61,16 @@ jobs:
           GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
-      - name: Generate build-time config (CIKeys)
+      # Upstream replaced Scripts/inject-keys.sh (CIKeys.generated.swift) with
+      # Runscripts/generate_secrets.sh (Secrets.generated.swift). The in-Xcode "Generate
+      # Secrets" build phase skips when RUN_IN_CI=true, so CI must run it here.
+      # W3S_AUTH_KEY is deliberately NOT passed: upstream deleted W3SAuthorizedSigner and
+      # now signs W3S statements with the user's own wallet key, so the seed has no consumer.
+      - name: Generate build-time secrets
         env:
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
-          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
-        run: ./Scripts/inject-keys.sh
+        run: ./Runscripts/generate_secrets.sh
 
       - name: Install App Store Connect API key
         id: asc
@@ -96,12 +102,12 @@ jobs:
 
       - name: Archive (Dev)
         env:
-          # The scheme has a pre-action that re-runs Scripts/inject-keys.sh on every
-          # build, so CIKeys.generated.swift is regenerated here and W3S_AUTH_KEY must
-          # be in scope — otherwise it is overwritten with an empty seed and the built
-          # app sends AuthorizeValueTransfer: None, so all coinage (CASH) calls are
-          # CallFiltered on the devnet People/Asset Hub value-transfer filter.
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
+          # The scheme pre-action and the "Generate Secrets" build phase both re-run
+          # Runscripts/generate_secrets.sh, but both no-op while RUN_IN_CI=true, so the
+          # file written by the step above survives. Values still passed for the case
+          # where that guard is ever lifted.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}

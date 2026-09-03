@@ -7,7 +7,7 @@ final class GameReportWireframe {
     let chatId: Chat.Id
     private let moduleNavigator: ModuleNavigating
     private let resultsDependencies: GameResultsDependencies
-    private let preloader = GameResultsPreloader()
+    private let preloader: GameResultsPreloader
     private var resultsModule: GameResultsViewFactory.Module?
 
     init(
@@ -18,6 +18,14 @@ final class GameReportWireframe {
         self.chatId = chatId
         self.resultsDependencies = resultsDependencies
         self.moduleNavigator = moduleNavigator
+
+        let urlProvider = GameResultsURLProvider(
+            spaFlowState: resultsDependencies.spaFlowState,
+            dotNsLabel: AppConfig.DotNs.dotNsGameWebview,
+            firebaseFallback: { FirebaseApplicationService.shared.asyncWaitGameResultsFallbackURL() },
+            bundledFallbackURL: GameResultsWebViewFactory.fallbackURL
+        )
+        preloader = GameResultsPreloader(urlProvider: urlProvider)
         preloader.start()
     }
 }
@@ -32,7 +40,7 @@ extension GameReportWireframe: GameReportWireframeProtocol {
     }
 
     func showReveal(view: (any GameReportViewProtocol)?, context: ReportSuccessContext) {
-        #if W3S
+        #if FEATURE_PRIZES
             Logger.shared
                 .debug(
                     "[GameDebug] showReveal called gameIndex=\(context.gameIndex) " +
@@ -68,7 +76,7 @@ extension GameReportWireframe: GameReportWireframeProtocol {
             Logger.shared.debug("[GameDebug] presenting GameResults module modally")
             view?.controller.present(nav, animated: true)
         #else
-            Logger.shared.debug("[GameDebug] showReveal: W3S disabled — dismissing report flow to chat")
+            Logger.shared.debug("[GameDebug] showReveal: prizes feature disabled — dismissing report flow to chat")
             dismissToChat(view: view)
         #endif
     }

@@ -1,6 +1,7 @@
 import Foundation
 import Operation_iOS
 import Testing
+import ChainRegistry
 
 @testable import polkadot_app
 
@@ -99,6 +100,10 @@ private final class StubRemoteConfig: RemoteConfigManaging, @unchecked Sendable 
         true
     }
 
+    func syncedTxExtensionVersions() -> [ChainModel.Id: UInt8] {
+        [:]
+    }
+
     func fetchRemoteConfigValues() {}
 
     func asyncWaitChainsForRemoteConfigValues() -> CompoundOperationWrapper<[RemoteChainModel]> {
@@ -119,14 +124,10 @@ private final class StubRemoteConfig: RemoteConfigManaging, @unchecked Sendable 
             ipfsGatewayUrl: nil,
             gameDashboardUrl: nil,
             dotNsResolver: nil,
-            web3SummitDotNsUrl: nil,
-            web3SummitContractAddress: nil
+            dotNsNameRegistry: nil,
+            coinageInstanceId: nil
         )
     }
-
-    func syncedWeb3SummitGateMode() -> String? { nil }
-
-    func syncedWeb3SummitStartGate() -> String? { nil }
 
     func asyncWaitW3sMerchants<T: Decodable>() -> CompoundOperationWrapper<T> {
         switch merchants {

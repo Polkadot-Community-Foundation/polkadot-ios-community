@@ -1,7 +1,9 @@
 import Foundation
 import KeyDerivation
 import Individuality
+import ChainRegistry
 
+@MainActor
 enum TattooCommitViewFactory {
     static func createView(
         for state: ProofOfInkFlowStateProtocol,
@@ -43,10 +45,10 @@ enum TattooCommitViewFactory {
         )
 
         let originFactory = ExtrinsicOriginFactory.personCandidate()
-
-        let selectedWallet = SelectedWallet.candidate
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
 
         guard
+            let selectedWallet = try? walletRepo.candidate(),
             let peopleChain = chainRegistry.getChain(for: AppConfig.Chains.usernameChain),
             let extrinsicSubmissionFactory = try? extrinsicSubmissionFacade.createMonitorFactory(chain: peopleChain),
             let peopleConnection = chainRegistry.getConnection(for: peopleChain.chainId),

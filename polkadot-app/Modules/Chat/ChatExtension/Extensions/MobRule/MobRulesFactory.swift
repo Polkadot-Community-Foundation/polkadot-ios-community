@@ -1,7 +1,10 @@
 import Foundation
 import KeyDerivation
+import ChainRegistry
+import UIKit.UIApplication
 
 enum MobRulesFactory {
+    @MainActor
     static func create(
         settings: ChatExtensionBotSettings,
         scoreInfoSyncService: ScoreInfoSyncServicing
@@ -13,7 +16,8 @@ enum MobRulesFactory {
 
         return MobRulesChatExtension(
             settings: settings,
-            interactor: interactor
+            interactor: interactor,
+            wireframe: MobRuleWireframe(application: UIApplication.shared)
         )
     }
 }
@@ -32,15 +36,16 @@ private extension MobRulesFactory {
             logger: logger
         )
 
+        let vrfRepo: BandersnatchManagerRepositoryProtocol = .shared
+
         guard
             let chain = chainRegistry.getChain(for: chainId),
             let connection = chainRegistry.getConnection(for: chainId),
-            let runtimeProvider = chainRegistry.getRuntimeProvider(for: chainId)
+            let runtimeProvider = chainRegistry.getRuntimeProvider(for: chainId),
+            let vrfManager = try? vrfRepo.fullPerson()
         else {
             return nil
         }
-
-        let vrfManager = BandersnatchKeyManager.fullPerson()
 
         let extrinsicOriginFactory = PersonhoodOriginFactory(
             vrfManager: vrfManager,

@@ -2,8 +2,11 @@ import Foundation
 import KeyDerivation
 import Keystore_iOS
 
+@MainActor
 enum DebugSettingsViewFactory {
-    static func createView() -> DebugSettingsViewProtocol? {
+    static func createView(
+        flowStateProvider: any SPAFlowStateProviding
+    ) -> DebugSettingsViewProtocol? {
         let interactor = DebugSettingsInteractor(
             mnemonicBackupHelper: MnemonicBackupHelper(),
             logsDraftFactory: LogsEmailDraftFactory(),
@@ -12,7 +15,7 @@ enum DebugSettingsViewFactory {
         )
         let shareActivityPresenter = ShareActivityAdapter()
         let emailComposePresenter = EmailComposeAdapter()
-        let wireframe = DebugSettingsWireframe()
+        let wireframe = DebugSettingsWireframe(flowStateProvider: flowStateProvider)
         let presenter = DebugSettingsPresenter(
             interactor: interactor,
             wireframe: wireframe,

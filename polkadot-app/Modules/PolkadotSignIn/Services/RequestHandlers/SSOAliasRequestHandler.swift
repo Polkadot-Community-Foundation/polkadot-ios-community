@@ -2,23 +2,23 @@ import Foundation
 import Products
 
 final class SSOAliasRequestHandler: SSORequestHandling {
-    private let accountManager: ProductsAccountManaging
-    private let messageSender: PolkadotHostMessageSending
+    private let handlerFactory: APPersonhoodHandlerMaking
+    private let messageSender: any PolkadotHostMessageSending<PolkadotHostRemoteMessage>
     private let logger: LoggerProtocol
 
     init(
-        accountManager: ProductsAccountManaging,
-        messageSender: PolkadotHostMessageSending,
+        handlerFactory: APPersonhoodHandlerMaking,
+        messageSender: any PolkadotHostMessageSending<PolkadotHostRemoteMessage>,
         logger: LoggerProtocol = Logger.shared
     ) {
-        self.accountManager = accountManager
+        self.handlerFactory = handlerFactory
         self.messageSender = messageSender
         self.logger = logger
     }
 
-    func canHandle(_ content: PolkadotHostRemoteMessage.LatestContent) -> Bool {
-        if case .aliasRequest = content { return true }
-        return false
+    func canHandle(_ message: PolkadotHostRemoteMessage) -> Bool {
+        guard case .aliasRequest = message.latestContent() else { return false }
+        return true
     }
 
     func handle(
@@ -34,14 +34,15 @@ final class SSOAliasRequestHandler: SSORequestHandling {
         let aliasResult: PolkadotHostRemoteMessage.AliasResult
 
         do {
-            let alias = try accountManager.deriveAlias(request.accountId)
-            aliasResult = .success(PolkadotHostRemoteMessage.ContextualAlias(
-                context: alias.context,
-                alias: alias.alias
-            ))
+            let handler = handlerFactory.makeAliasHandler(callingProductId: request.callingProductId)
+            let alias = try await handler.getContextualAlias(
+                context: request.context,
+                ring: request.ring
+            )
+            aliasResult = .success(alias)
         } catch {
-            logger.error("Failed to derive alias: \(error)")
-            aliasResult = .failure(error.localizedDescription)
+            logger.error("Failed to get contextual alias: \(error)")
+            aliasResult = .failure(.wrapping(error))
         }
 
         let responseMessage = PolkadotHostRemoteMessage(

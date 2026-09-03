@@ -6,6 +6,7 @@ import NovaCrypto
 import Keystore_iOS
 import SDKLogger
 import KeyDerivation
+import ChainRegistry
 
 protocol ChatRequestServiceMaking {
     func makeDiscoveryService() async throws -> ChatDiscoveryServicing
@@ -133,9 +134,11 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext {
         let encryptionManager = makeAccountEncryptionManager()
         let signManager = makeAccountSignManager()
-        let messageExchangeModeProvider = ChatMessageExchangeModeProvider()
+        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
+            tld: DotNsTldProviderFacade.shared.currentTldOrError()
+        )
 
-        return IncomingChatRequestCoordinationContext(
+        return try IncomingChatRequestCoordinationContext(
             discoveryOwnKeyIds: [Chat.Contact.Own.main()],
             matchOwnKeyIds: Chat.Contact.Own.allPossibleIds(),
             requestStoreService: ChatRequestStoreService(

@@ -1,6 +1,7 @@
 import Foundation
 import Individuality
 import KeyDerivation
+import ChainRegistry
 
 protocol MobRuleVoucherClaimServicing {}
 
@@ -17,7 +18,7 @@ final class MobRuleVoucherClaimService {
         chain: ChainModel,
         redeemCreditService: PrivacyVoucherRedeemCreditServicing,
         extrinsicOriginFactory: PersonhoodOriginFactoryProtocol,
-        selectedWallet: WalletManaging = SelectedWallet.mobRuleAlias,
+        selectedWallet: WalletManaging = WalletManagerRepository.shared.mobRuleAlias(),
         logger: LoggerProtocol = Logger.shared
     ) {
         self.chain = chain

@@ -1,3 +1,14 @@
+// NotificationServiceExtension for the PCF public Dev build. Identity must agree with
+// polkadot-app/Configs/polkadot-app.dev.xcconfig — same APP_MAIN_BUNDLE, same APP_GROUP —
+// or the extension cannot read the shared container the app writes.
+//
+// OTHER_SWIFT_FLAGS carries no feature flags, matching the pre-sync fork behaviour.
+
+#include "../../Configs/base.release.xcconfig"
+
 OTHER_SWIFT_FLAGS = $(inherited)
-BUNDLE = io.pcf.polkadotapp.NotificationServiceExtension
+
+APP_NAME        = Polkadot Dev
 APP_MAIN_BUNDLE = io.pcf.polkadotapp
+APP_GROUP       = group.pcf.polkadotapp
+BUNDLE          = $(APP_MAIN_BUNDLE).NotificationServiceExtension

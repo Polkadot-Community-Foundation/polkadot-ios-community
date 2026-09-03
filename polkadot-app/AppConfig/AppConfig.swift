@@ -1,14 +1,13 @@
 import Foundation
 import SubstrateSdk
+import ChainRegistry
 
 enum AppConfig {
-    // Brand links and endpoints are externalised into CIKeys,
-    // produced at build time by Scripts/inject-keys.sh.
-    static let termsOfUseLink: URL = CIKeys.termsOfUseLink.asConfigURL
+    static var termsOfUseLink: URL { Brand.termsURL }
 
-    static let privacyPolicyLink: URL = CIKeys.privacyPolicyLink.asConfigURL
+    static var privacyPolicyLink: URL { Brand.privacyURL }
 
-    static let contactEmail = CIKeys.contactEmail
+    static var contactEmail: String { Brand.contactEmail }
 
     static let timestampRefreshInterval: TimeInterval = 60
 

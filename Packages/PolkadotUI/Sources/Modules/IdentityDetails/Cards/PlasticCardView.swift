@@ -1,5 +1,6 @@
 import SwiftUI
 import DesignSystem
+import ExternalAccessibility
 
 struct PlasticCardView: View {
     @State var viewModel: IdentityDetailsViewModelProtocol
@@ -27,10 +28,12 @@ struct PlasticCardView: View {
                                 .typography(.titleLarge)
                                 .foregroundStyle(usernameColor)
                                 .animation(.easeInOut, value: viewModel.isPersonal)
-                                .accessibilityIdentifier("wallet_username_display")
+                                .accessibilityId(AccessibilityID.Wallet.usernameDisplay)
                         }
 
-                        rankView
+                        if viewModel.isRankVisible {
+                            rankView
+                        }
                     }
 
                     Spacer()
@@ -136,7 +139,7 @@ private extension PlasticCardView {
         if viewModel.isPersonal {
             ZStack {
                 Rectangle()
-                    .holographicShader(shader: HolographicShaders.iridescentShine)
+                    .motionFillingShader(shader: HolographicShaders.iridescentShine)
 
                 HolographicWordmarkView(
                     image: .polkadotWordmarkShape,

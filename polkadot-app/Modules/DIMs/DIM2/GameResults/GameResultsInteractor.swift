@@ -105,6 +105,7 @@ extension GameResultsInteractor: GameResultsInteractorInputProtocol {
             logger.warning("[GameDebug] submitClaim ignored — no context")
             return
         }
+        // swiftlint:disable closure_parameter_position
         Task { [
             logger,
             claimService = dependencies.claimService,
@@ -145,6 +146,7 @@ extension GameResultsInteractor: GameResultsInteractorInputProtocol {
                 logger.error("[GameDebug] submitClaim FAILED gameIndex=\(gameIndex) error=\(error)")
             }
         }
+        // swiftlint:enable closure_parameter_position
     }
 }
 
@@ -199,8 +201,8 @@ private extension GameResultsInteractor {
         logger
             .debug(
                 "[GameDebug] initial input built " +
-                    "score=\(initial.attestations.score)/\(initial.attestations.total) " +
-                    "passed=\(initial.attestations.passed) " +
+                    "score=\(String(describing: initial.attestations.score))/\(initial.attestations.total) " +
+                    "passed=\(String(describing: initial.attestations.passed)) " +
                     "matchedHashes=\(initial.attestationHashes.count) " +
                     "member.justBecameMember=\(initial.member.justBecameMember) " +
                     "member.displayName=\(initial.member.displayName ?? "nil") " +

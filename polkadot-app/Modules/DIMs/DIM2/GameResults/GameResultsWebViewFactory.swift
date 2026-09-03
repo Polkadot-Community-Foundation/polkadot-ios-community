@@ -1,7 +1,8 @@
 import Foundation
 
+@MainActor
 enum GameResultsWebViewFactory {
-    static let fallbackURL = CIKeys.gameResultsFallbackURL.asConfigURL
+    nonisolated static let fallbackURL = URL(string: "https://game-results-six.vercel.app/")!
 
     static func createView(
         url: URL,

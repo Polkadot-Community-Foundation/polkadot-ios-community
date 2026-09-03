@@ -5,6 +5,7 @@ import Operation_iOS
 import AsyncExtensions
 import Individuality
 import KeyDerivation
+import ChainRegistry
 
 protocol MobRuleInteracting: AnyObject {
     func setup() async
@@ -119,7 +120,7 @@ final class MobRuleInteractor: RuntimeConstantFetching {
         runtimeProvider: RuntimeProviderProtocol,
         voteService: MobRuleVoteServicing,
         scoreInfoSyncService: ScoreInfoSyncServicing,
-        selectedWallet: WalletManaging = SelectedWallet.mobRuleAlias,
+        selectedWallet: WalletManaging = WalletManagerRepository.shared.mobRuleAlias(),
         mobRuleCasesFactory: MobRuleCasesOperationFactoryProtocol = MobRuleCasesOperationFactory(),
         proofOfInkFactory: ProofOfInkOperationFactoryProtocol = ProofOfInkOperationFactory(),
         logger: LoggerProtocol = Logger.shared

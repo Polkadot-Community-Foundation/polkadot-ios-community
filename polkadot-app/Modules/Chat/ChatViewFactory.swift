@@ -4,7 +4,9 @@ import Keystore_iOS
 import Operation_iOS
 import MessageExchangeKit
 import UIKitExt
+import ChainRegistry
 
+@MainActor
 enum ChatViewFactory {
     static func createChatView(
         with openModel: ChatOpenModel,
@@ -92,7 +94,7 @@ enum ChatViewFactory {
             ),
             productRepository: ProductRepositoryFactory().createRepository(),
             productNameCache: ProductNameCache(),
-            dotNsResolver: SPAFlowState.create()?.dotNsResolver
+            flowState: flowState.flowState
         )
 
         let presenter = ChatPresenter(
@@ -135,9 +137,16 @@ enum ChatViewFactory {
         )
 
         let engineFactory: ChatEngineFactoryProtocol = ChatEngineFactory(flowState: flowState)
-        let chatEngine = pendingRequest.map {
-            engineFactory.createChatEngine(for: $0)
-        } ?? engineFactory.createChatEngine(for: chatId)
+        let chatEngine: any ChatEngineProtocol
+        do {
+            if let pendingRequest {
+                chatEngine = try engineFactory.createChatEngine(for: pendingRequest)
+            } else {
+                chatEngine = try engineFactory.createChatEngine(for: chatId)
+            }
+        } catch {
+            return nil
+        }
 
         return ChatInteractor(
             chatId: chatId,

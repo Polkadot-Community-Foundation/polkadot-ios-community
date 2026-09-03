@@ -5,6 +5,7 @@ import BandersnatchApi
 import ExtrinsicService
 import Foundation_iOS
 import KeyDerivation
+import ChainRegistry
 
 protocol ClaimRewardsServicing {
     func claimVouchers(
@@ -46,7 +47,7 @@ final class ClaimRewardsService: ClaimRewardsServicing {
         runtimeProvider: RuntimeProviderProtocol,
         extrinsicMonitor: ExtrinsicSubmitMonitorFactoryProtocol,
         originFactory: ExtrinsicOriginDefiningFactoryProtocol,
-        payoutAccount: WalletManaging = SelectedWallet.internalPayout,
+        payoutAccount: WalletManaging = WalletManagerRepository.shared.internalPayout(),
         privacyVoucherOperationFactory: PrivacyVoucherOperationMaking = PrivacyVoucherOperationFactory(),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue
     ) {

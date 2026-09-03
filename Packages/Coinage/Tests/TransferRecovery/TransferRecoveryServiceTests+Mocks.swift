@@ -59,31 +59,9 @@ extension TransferRecoveryServiceTests {
                 }
             }.eraseToAnyAsyncSequence()
         }
-    }
 
-    actor MockTransferWALStore: TransferWALStoring {
-        private(set) var savedEntries: [TransferWALEntry] = []
-        private(set) var deletedIds: [UUID] = []
-        nonisolated(unsafe) var fetchAllResult: [TransferWALEntry] = []
-
-        func save(_ entry: TransferWALEntry) async throws {
-            savedEntries.append(entry)
-        }
-
-        func update(id _: UUID, checkpointBlock _: Coinage.CheckpointBlock) async throws {
-            // Not tested in recovery scenarios
-        }
-
-        func fetchAll() async throws -> [TransferWALEntry] {
-            fetchAllResult
-        }
-
-        func save(contentsOf entries: [TransferWALEntry]) async throws {
-            savedEntries.append(contentsOf: entries)
-        }
-
-        func delete(id: UUID) async throws {
-            deletedIds.append(id)
+        func subscribeNewHeads() -> AnyAsyncSequence<Block.Header> {
+            AsyncStream<Block.Header> { $0.finish() }.eraseToAnyAsyncSequence()
         }
     }
 
@@ -97,8 +75,9 @@ extension TransferRecoveryServiceTests {
         var savedCoins: [Coin] { state.withLock { $0.savedCoins } }
         var markedSpentIds: [String] { state.withLock { $0.markedSpentIds } }
         var markedAvailableIds: [String] { state.withLock { $0.markedAvailableIds } }
+        var fetchAllResult: [Coin] = []
 
-        func fetchAllCoins() async throws -> [Coin] { [] }
+        func fetchAllCoins() async throws -> [Coin] { fetchAllResult }
 
         func save(coins: [Coin]) async throws {
             state.withLock { $0.savedCoins.append(contentsOf: coins) }

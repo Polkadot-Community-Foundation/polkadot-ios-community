@@ -28,7 +28,7 @@ let package = Package(
         ),
         .package(
             url: "https://github.com/novasamatech/extrinsic-service-ios",
-            from: "1.8.0"
+            from: "1.11.0"
         ),
         .package(
             url: "https://github.com/attaswift/BigInt",
@@ -59,7 +59,8 @@ let package = Package(
         .package(path: "../SubstrateSdkExt"),
         .package(path: "../Individuality"),
         .package(path: "../StateMachine"),
-        .package(path: "../SubstrateOperation")
+        .package(path: "../SubstrateOperation"),
+        .package(path: "../BackgroundExecution")
     ],
     targets: [
         .target(
@@ -84,12 +85,13 @@ let package = Package(
                 "SubstrateSdkExt",
                 "Individuality",
                 "StateMachine",
-                "SubstrateOperation"
+                "SubstrateOperation",
+                "BackgroundExecution"
             ],
         ),
         .testTarget(
             name: "CoinageTests",
-            dependencies: ["Coinage"],
+            dependencies: ["Coinage", "BackgroundExecution"],
             path: "Tests"
         )
     ]

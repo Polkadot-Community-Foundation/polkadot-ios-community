@@ -9,8 +9,22 @@ import KeyDerivation
 protocol MessageExchageServiceMaking {
     func makeService<M: MessageExchange.CodableMessage>(
         statementStoreConnection: StatementStoreConnecting,
-        delegate: AnyPeerSessionDelegate<M>
+        delegate: AnyPeerSessionDelegate<M>,
+        compactorFactory: AnyMessageCompactorFactory<M>?
     ) throws -> AnyMessageExchangeService<M>
+}
+
+extension MessageExchageServiceMaking {
+    func makeService<M: MessageExchange.CodableMessage>(
+        statementStoreConnection: StatementStoreConnecting,
+        delegate: AnyPeerSessionDelegate<M>
+    ) throws -> AnyMessageExchangeService<M> {
+        try makeService(
+            statementStoreConnection: statementStoreConnection,
+            delegate: delegate,
+            compactorFactory: nil
+        )
+    }
 }
 
 final class MessageExchangeServiceFactory {
@@ -18,6 +32,7 @@ final class MessageExchangeServiceFactory {
     let encryptionManager: MessageExchangeEncryptionManaging
     let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
     let messageExchangeModeProvider: MessageExchangeModeProviding
+    let messageRouteSelector: (Any) -> PeerSessionRoute
     let workQueue: DispatchQueue
     let operationQueue: OperationQueue
     let maxStatementSize: Int
@@ -28,6 +43,7 @@ final class MessageExchangeServiceFactory {
         signManager: StatementStoreSignerManaging,
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
+        messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -37,6 +53,7 @@ final class MessageExchangeServiceFactory {
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
         self.messageExchangeModeProvider = messageExchangeModeProvider
+        self.messageRouteSelector = messageRouteSelector
         self.workQueue = workQueue
         self.operationQueue = operationQueue
         self.maxStatementSize = maxStatementSize
@@ -47,6 +64,7 @@ final class MessageExchangeServiceFactory {
         messageExchangeModeProvider: MessageExchangeModeProviding,
         entropyManager: RootEntropyManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
+        messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -57,6 +75,7 @@ final class MessageExchangeServiceFactory {
             signManager: ChatSignerManager(entropyManager: entropyManager),
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
+            messageRouteSelector: messageRouteSelector,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
             operationQueue: operationQueue,
@@ -68,9 +87,10 @@ final class MessageExchangeServiceFactory {
 extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
     func makeService<M: MessageExchange.CodableMessage>(
         statementStoreConnection: StatementStoreConnecting,
-        delegate: AnyPeerSessionDelegate<M>
+        delegate: AnyPeerSessionDelegate<M>,
+        compactorFactory: AnyMessageCompactorFactory<M>? = nil
     ) throws -> AnyMessageExchangeService<M> {
-        let pollerFactory = StatementSubscriptionFactory(
+        let subscriptionFactory = StatementSubscriptionFactory(
             statementStoreFetcher: statementStoreConnection,
             workQueue: workQueue,
             operationQueue: operationQueue,
@@ -88,8 +108,12 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             sessionIdFactory: PeerSessionIdFactory(),
             channelFactory: ChatStatementChannelFactory(),
             preSendHandler: AnyPeerSessionPreSendHandler.empty(),
-            pollerFactory: pollerFactory,
+            preferredRouteSelector: PeerSessionRouteSelector<M> { [messageRouteSelector] message in
+                messageRouteSelector(message)
+            },
+            subscriptionFactory: subscriptionFactory,
             maxStatementSize: maxStatementSize,
+            compactorFactory: compactorFactory,
             operationQueue: operationQueue,
             logger: logger
         )
