@@ -185,25 +185,112 @@ jobs:
       - name: Test (user store v36 migration)
         run: |
           set -o pipefail
+          rm -rf TestResults.xcresult
           xcodebuild \
             -project polkadot-app.xcodeproj \
             -scheme polkadot-appTests \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:polkadot-appTests/UserStorageMigrationV36Tests \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             test 2>&1 | tee xcodebuild-test.log
 
       # An -only-testing: filter that matches nothing passes VACUOUSLY: xcodebuild reports
-      # ** TEST SUCCEEDED ** having run zero tests. A renamed or unregistered test class would
-      # therefore turn this lane into a permanent false green, which is worse than not having it.
-      # Require positive evidence that tests actually executed.
+      # ** TEST SUCCEEDED ** having run zero tests, and exits 0. A renamed class, or one that never
+      # made it into the target, would therefore turn this lane into a permanent false green —
+      # worse than having no lane at all, because it looks like proof.
+      #
+      # The count is read from the result bundle rather than grepped out of the log on purpose:
+      # xcodebuild's console format is not a stable contract (it differs between XCTest and
+      # swift-testing and has changed across Xcode releases), so a log regex that silently stops
+      # matching would reintroduce exactly the false green this step exists to prevent.
       - name: Assert the tests actually executed
         run: |
-          if ! grep -qE "Executed [1-9][0-9]* test" xcodebuild-test.log; then
-            echo "::error::no tests executed — the -only-testing filter matched nothing, or the test class is not in the target"
-            grep -E "Test Suite|Executed .* test|TEST SUCCEEDED|TEST FAILED" xcodebuild-test.log || true
+          set -o pipefail
+
+          if [ ! -d TestResults.xcresult ]; then
+            echo "::error::no result bundle was produced — the test step did not run tests"
             exit 1
           fi
-          grep -E "Test Case .* (passed|failed)|Executed [0-9]+ test" xcodebuild-test.log
+
+          xcrun xcresulttool get test-results summary \
+            --path TestResults.xcresult --format json > test-summary.json
+
+          python3 - <<'PY'
+          import json, sys
+
+          summary = json.load(open("test-summary.json"))
+
+          if "totalTestCount" not in summary:
+              print("::error::unexpected xcresulttool summary shape; raw payload follows")
+              print(json.dumps(summary, indent=2)[:4000])
+              sys.exit(1)
+
+          total = summary.get("totalTestCount", 0)
+          passed = summary.get("passedTests", 0)
+          failed = summary.get("failedTests", 0)
+          skipped = summary.get("skippedTests", 0)
+
+          print(f"result: {summary.get('result')}  total={total} passed={passed} "
+                f"failed={failed} skipped={skipped}")
+
+          for case in summary.get("testFailures", []):
+              print(f"  FAILED {case.get('testName')}: {case.get('failureText')}")
+
+          if total == 0:
+              print("::error::no tests executed - the -only-testing filter matched nothing, "
+                    "or UserStorageMigrationV36Tests is not in the polkadot-appTests target")
+              sys.exit(1)
+
+          if passed == 0:
+              print("::error::no tests passed")
+              sys.exit(1)
+
+          print(f"::notice::{passed} of {total} tests executed and passed")
+          PY
+
+      # Diagnostic only — never fails the job. If the assertion above ever reports zero tests, the
+      # question is always the same: did the class make it into the built test bundle? Answer it
+      # here rather than guessing from the console log on the next iteration.
+      - name: Diagnose the built test bundle
+        if: always()
+        run: |
+          bundle=$(find ~/Library/Developer/Xcode/DerivedData \
+            -name 'polkadot-appTests.xctest' -type d 2>/dev/null | head -1)
+
+          if [ -z "$bundle" ]; then
+            echo "no polkadot-appTests.xctest bundle was produced"
+            exit 0
+          fi
+
+          echo "bundle: $bundle"
+          binary="$bundle/polkadot-appTests"
+
+          if [ ! -f "$binary" ]; then
+            echo "no executable inside the bundle"
+            ls -la "$bundle"
+            exit 0
+          fi
+
+          echo "--- XCTestCase subclasses found in the binary ---"
+          nm -gU "$binary" 2>/dev/null | grep -oE '[A-Za-z_]*Tests' | sort -u | head -50
+
+          echo "--- is UserStorageMigrationV36Tests present? ---"
+          if nm -gU "$binary" 2>/dev/null | grep -q 'UserStorageMigrationV36Tests'; then
+            echo "YES - the class is in the test bundle"
+          else
+            echo "NO - the class is NOT in the test bundle (synchronized group did not pick it up)"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-migration-test-results
+          path: |
+            TestResults.xcresult
+            xcodebuild-test.log
+          retention-days: 7
+          if-no-files-found: warn
