@@ -10,6 +10,7 @@ import Individuality
 import SDKLogger
 import SubstrateStorageQuery
 import Products
+import ChainRegistry
 
 final class PGASSlotAllocatorTests: XCTestCase {
     private let mnemonic = "city digital broken voice chef envelope swarm disagree claw fox friend casual"
@@ -29,15 +30,19 @@ final class PGASSlotAllocatorTests: XCTestCase {
             operationManager: OperationManager(operationQueue: operationQueue)
         )
 
-        let liteVrfManager = BandersnatchKeyManager.litePerson(entropyManager: setupResult.entropyManager)
-        let fullVrfManager = BandersnatchKeyManager.fullPerson(entropyManager: setupResult.entropyManager)
+        let liteVrfManager = BandersnatchKeyManager.litePerson(for: "dot", entropyManager: setupResult.entropyManager)
+        let fullVrfManager = BandersnatchKeyManager.fullPerson(for: "dot", entropyManager: setupResult.entropyManager)
 
         let keyResolver = BandersnatchKeyResolver(
             liteKeyManager: liteVrfManager,
             fullKeyManager: fullVrfManager
         )
 
-        let originFactory = PGasOriginFactory(keyResolver: keyResolver, chainRegistry: chainRegistry)
+        let originFactory = PGasOriginFactory(
+            keyResolver: keyResolver,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
+        )
 
         let facade = ExtrinsicSubmissionMonitorFacade(
             chainRegistry: chainRegistry,
@@ -49,15 +54,22 @@ final class PGASSlotAllocatorTests: XCTestCase {
         let chain = try chainRegistry.getChainOrError(for: AppConfig.Chains.assethubChain)
         let monitorFactory = try facade.createMonitorFactory(chain: chain)
 
+        let chainTimeProvider = ChainTimeProvider(
+            chainId: chain.chainId,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
+        )
+
         let slotInfoProvider = PGASSlotInfoProvider(
             chainId: chain.chainId,
             peopleChainId: KnownChainId.previewNetPeople,
             chainRegistry: chainRegistry,
             storageRequestFactory: storageRequestFactory,
-            keyResolver: keyResolver
+            keyResolver: keyResolver,
+            chainTimeProvider: chainTimeProvider
         )
 
-        let allocator = PGASSlotAllocator(
+        let allocator: AllowanceSlotAllocating = PGASSlotAllocator(
             submissionChainId: chain.chainId,
             originChainId: KnownChainId.previewNetPeople,
             originFactory: originFactory,
@@ -68,7 +80,7 @@ final class PGASSlotAllocatorTests: XCTestCase {
         let accountHolder = ProductAccountHolder(entropyManager: setupResult.entropyManager)
         let accountId = try accountHolder.deriveStatementStoreAccount(for: "test-product1").getRawPublicKey()
 
-        try await allocator.assignSlot(accountId: accountId)
+        try await allocator.assignSlot(accountId: accountId, priority: .normal)
     }
 }
 

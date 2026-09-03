@@ -3,7 +3,13 @@ import Common
 import Keystore_iOS
 import ExtrinsicService
 import KeyDerivation
+import ChainRegistry
+import Individuality
+import SubstrateSdk
+import SubstrateStorageQuery
+import Operation_iOS
 
+@MainActor
 enum ClaimUsernameViewFactory {
     static func createLiteClaimView(
         observer: RootStateObserving
@@ -73,20 +79,28 @@ enum ClaimUsernameViewFactory {
 
     private static func createLiteInteractor(hasWallets: Bool) -> ClaimLiteUsernameInteractor? {
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
-
+        let timeProvider = ChainTimeProvider(
+            chainId: AppConfig.Chains.chatChain,
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            storageRequestFactory: StorageRequestFactory(
+                remoteFactory: StorageKeyFactory(),
+                operationManager: OperationManager(operationQueue: operationQueue)
+            )
+        )
         let dependencies = ClaimLiteUsernameDependency(
             walletSetupManagerFactory: { createWalletManager() },
-            registrationParamsFactory: { mainWallet in
+            registrationParamsFactory: { mainWallet, liteVrfManager in
                 try LitePersonParamsFactory(
                     mainWallet: mainWallet,
-                    liteVrfManager: BandersnatchKeyManager.litePerson(),
+                    liteVrfManager: liteVrfManager,
                     chatEncryptorManager: ChatEncryptionManager()
                 )
             },
+            chainTimeProvider: { timeProvider },
             usernameOperationFactory: { UsernameOperationFactory(tokenProvider: JWTTokenManager.shared) },
             usernameStorage: { UsernameStorage() },
-            operationQueue: { operationQueue },
-            mainWallet: SelectedWallet.main
+            walletRepo: .shared,
+            vrfRepo: .shared
         )
 
         return ClaimLiteUsernameInteractor(
@@ -111,6 +125,8 @@ enum ClaimUsernameViewFactory {
         let chainRegistry = ChainRegistryFacade.sharedRegistry
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let logger = Logger.shared
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
+        let vrfRepo: BandersnatchManagerRepositoryProtocol = .shared
 
         let extrinsicSubmissionFacade = ExtrinsicSubmissionMonitorFacade(
             chainRegistry: chainRegistry,
@@ -119,9 +135,13 @@ enum ClaimUsernameViewFactory {
             logger: logger
         )
 
+        // Full claim is only reachable after lite onboarding cached the TLD, so the built-in
+        // accounts resolve synchronously here.
         guard
             let chain = chainRegistry.getChain(for: AppConfig.Chains.usernameChain),
-            let extrinsicSubmitMonitor = try? extrinsicSubmissionFacade.createMonitorFactory(chain: chain)
+            let extrinsicSubmitMonitor = try? extrinsicSubmissionFacade.createMonitorFactory(chain: chain),
+            let fullVRFManager = try? vrfRepo.fullPerson(),
+            let liteWallet = try? walletRepo.main()
         else {
             return nil
         }
@@ -131,8 +151,6 @@ enum ClaimUsernameViewFactory {
             operationQueue: operationQueue,
             logger: logger
         )
-
-        let fullVRFManager = BandersnatchKeyManager.fullPerson()
 
         let gameExtrinsicOriginFactory = PersonhoodOriginFactory(
             vrfManager: fullVRFManager,
@@ -146,7 +164,9 @@ enum ClaimUsernameViewFactory {
             registeredData: registeredData,
             extrinsicSubmitMonitor: extrinsicSubmitMonitor,
             extrinsicOriginFactory: gameExtrinsicOriginFactory,
-            litePersonOriginFactory: litePersonOriginFactory
+            litePersonOriginFactory: litePersonOriginFactory,
+            liteWallet: liteWallet,
+            resourcesWallet: walletRepo.resourcesAlias()
         )
 
         return ClaimFullUsernameInteractor(

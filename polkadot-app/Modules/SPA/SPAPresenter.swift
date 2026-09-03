@@ -7,15 +7,18 @@ final class SPAPresenter {
     let interactor: SPAInteractorInputProtocol
     let wireframe: SPAWireframeProtocol
     let configuration: SPAConfiguration
+    let hostProvider: ProductHostProviding
 
     init(
         interactor: SPAInteractorInputProtocol,
         wireframe: SPAWireframeProtocol,
-        configuration: SPAConfiguration
+        configuration: SPAConfiguration,
+        hostProvider: ProductHostProviding
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
         self.configuration = configuration
+        self.hostProvider = hostProvider
     }
 }
 
@@ -28,13 +31,13 @@ extension SPAPresenter: SPAPresenterProtocol {
     func didTapMoreButton() {
         var actions: [SPAMoreAction] = []
 
-        if interactor.hasChatEntry() {
+        if hasChatEntry() {
             actions.append(
                 SPAMoreAction(
                     icon: .iconChatBubble,
                     title: String(localized: .spaActionOpenChat),
                     isEnabled: true,
-                    handler: { [weak self] in self?.interactor.openChat() }
+                    handler: { [weak self] in self?.didTapOpenChat() }
                 )
             )
         }
@@ -50,14 +53,7 @@ extension SPAPresenter: SPAPresenterProtocol {
                 icon: .iconShare,
                 title: String(localized: .spaActionShare),
                 isEnabled: true,
-                handler: { [weak self] in
-                    guard let self else { return }
-                    let host = configuration.page.host.name
-                    guard let url = AppConfig.ProductUniversalLink.url(for: host) else {
-                        return
-                    }
-                    wireframe.shareURL(url, from: view)
-                }
+                handler: { [weak self] in self?.didTapShare() }
             )
         ].forEach { actions.append($0) }
 
@@ -68,8 +64,37 @@ extension SPAPresenter: SPAPresenterProtocol {
         )
     }
 
+    func didTapMinimize() {
+        wireframe.minimize()
+    }
+
+    func didTapClose() {
+        #if FEATURE_PRODUCTS
+            guard let browserTabId = configuration.browserTabId else { return }
+            wireframe.close(tabId: browserTabId)
+        #else
+            wireframe.dismissProduct(from: view)
+        #endif
+    }
+
+    func hasChatEntry() -> Bool {
+        interactor.hasChatEntry()
+    }
+
+    func didTapOpenChat() {
+        interactor.openChat()
+    }
+
+    func didTapShare() {
+        let host = configuration.page.host.name
+        guard let url = AppConfig.ProductUniversalLink.url(for: host) else {
+            return
+        }
+        wireframe.shareURL(url, from: view)
+    }
+
     func didInterceptNavigation(to url: URL) {
-        guard let productHost = ProductHost.fromUrl(url) else { return }
+        guard let productHost = hostProvider.host(url: url) else { return }
 
         wireframe.showProductSPA(from: view, productHost: productHost)
     }
@@ -89,11 +114,17 @@ extension SPAPresenter: SPAInteractorOutputProtocol {
         wireframe.openChat(from: view, chatId: chatId)
     }
 
+    func didUpdateLoadProgress(_ progress: DotNsLoadProgress) {
+        view?.updateLoadProgress(progress)
+    }
+
     func didFail(error _: Error) {
         view?.hideLoading()
         wireframe.presentRequestStatus(on: view) { [weak self] in
-            self?.view?.showLoading()
-            self?.interactor.retry()
+            Task { @MainActor in
+                self?.view?.showLoading()
+                self?.interactor.retry()
+            }
         }
     }
 }

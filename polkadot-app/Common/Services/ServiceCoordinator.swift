@@ -12,6 +12,7 @@ import SubstrateSdk
 import FoundationExt
 import Individuality
 import UniqueDevice
+import ChainRegistry
 
 protocol ServiceCoordinatorProtocol: ApplicationServiceProtocol {
     var depositService: DepositServiceProtocol { get }
@@ -34,6 +35,8 @@ protocol ServiceCoordinatorProtocol: ApplicationServiceProtocol {
     var accountManager: ProductsAccountManaging { get }
     var allowanceManagerFacade: AllowanceManagerFacade { get }
     var turnService: TURNCredentialsProviding { get }
+    var networkStatusService: NetworkStatusProviding { get }
+    var truapiRuntimeProvider: TrUAPIHostRuntimeProviding { get }
 }
 
 final class ServiceCoordinator {
@@ -50,17 +53,23 @@ final class ServiceCoordinator {
     let attachmentUploadService: AttachmentUploadingServicing
     let attachmentDownloadService: AttachmentDownloadingServicing
     let coinageTransferMonitor: CoinageTransferMonitoring
+    let w3sPaymentTracking: W3sPaymentTracking
     let audioSessionManager: AudioSessionManaging
     let determineStateSyncService: DetermineStateSyncServicing
     let personhoodBackgroundService: PersonhoodBackgroundService
     let personDataStore: DetermineStatePersonDataStore
     let coinageBackupSyncService: CoinageBackupSyncServicing
+    let messageExpansionService: CompactedMessageExpansionServicing
     let spentCoinsRecoveryService: SpentCoinsRecoveryServicing
     let notificationBadgeSyncService: NotificationBadgeSyncService
     let accountManager: ProductsAccountManaging
     let allowanceManagerFacade: AllowanceManagerFacade
+    let allowanceRenewalService: AllowanceRenewalService
     let turnService: TURNCredentialsProviding
     let deviceSyncService: DeviceSyncServicing
+    let networkStatusService: NetworkStatusProviding
+    let truapiRuntimeProvider: TrUAPIHostRuntimeProviding
+    let tldProvider: DotNsTldProviding
     let logger: LoggerProtocol
 
     // Retained so the weakly-held dependency-locator entry stays alive for the product host.
@@ -84,18 +93,24 @@ final class ServiceCoordinator {
         attachmentUploadService: AttachmentUploadingServicing,
         attachmentDownloadService: AttachmentDownloadingServicing,
         coinageTransferMonitor: CoinageTransferMonitoring,
+        w3sPaymentTracking: W3sPaymentTracking,
         audioSessionManager: AudioSessionManaging,
         determineStateSyncService: DetermineStateSyncServicing,
         personhoodBackgroundService: PersonhoodBackgroundService,
         personDataStore: DetermineStatePersonDataStore,
         coinageBackupSyncService: CoinageBackupSyncServicing,
+        messageExpansionService: CompactedMessageExpansionServicing,
         spentCoinsRecoveryService: SpentCoinsRecoveryServicing,
         notificationBadgeSyncService: NotificationBadgeSyncService,
         accountManager: ProductsAccountManaging,
         allowanceManagerFacade: AllowanceManagerFacade,
+        allowanceRenewalService: AllowanceRenewalService,
         paymentsSupport: PaymentsSupport,
         turnService: TURNCredentialsProviding,
         deviceSyncService: DeviceSyncServicing,
+        networkStatusService: NetworkStatusProviding,
+        truapiRuntimeProvider: TrUAPIHostRuntimeProviding,
+        tldProvider: DotNsTldProviding,
         logger: LoggerProtocol
     ) {
         self.chatCoordinator = chatCoordinator
@@ -111,16 +126,22 @@ final class ServiceCoordinator {
         self.attachmentUploadService = attachmentUploadService
         self.attachmentDownloadService = attachmentDownloadService
         self.coinageTransferMonitor = coinageTransferMonitor
+        self.w3sPaymentTracking = w3sPaymentTracking
         self.audioSessionManager = audioSessionManager
         self.determineStateSyncService = determineStateSyncService
         self.personhoodBackgroundService = personhoodBackgroundService
         self.personDataStore = personDataStore
         self.coinageBackupSyncService = coinageBackupSyncService
+        self.messageExpansionService = messageExpansionService
         self.spentCoinsRecoveryService = spentCoinsRecoveryService
         self.notificationBadgeSyncService = notificationBadgeSyncService
         self.accountManager = accountManager
         self.allowanceManagerFacade = allowanceManagerFacade
+        self.allowanceRenewalService = allowanceRenewalService
         self.deviceSyncService = deviceSyncService
+        self.networkStatusService = networkStatusService
+        self.truapiRuntimeProvider = truapiRuntimeProvider
+        self.tldProvider = tldProvider
         self.logger = logger
         self.paymentsSupport = paymentsSupport
         self.turnService = turnService
@@ -129,8 +150,14 @@ final class ServiceCoordinator {
 
 extension ServiceCoordinator: ServiceCoordinatorProtocol {
     func setup() {
-        determineStateSyncService.setup()
-        personhoodBackgroundService.setup()
+        // Keep the cached TLD warm on each launch without blocking.
+        tldProvider.refresh()
+
+        #if FEATURE_DIMS
+            determineStateSyncService.setup()
+            personhoodBackgroundService.setup()
+        #endif
+
         chatCoordinator.setup()
         chatExtensionsRegistry.discover()
         chatRequestCoordinator.setup()
@@ -138,6 +165,8 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         attachmentUploadService.setup()
         attachmentDownloadService.setup()
         notificationBadgeSyncService.setup()
+        messageExpansionService.start()
+        allowanceRenewalService.setup()
 
         Task {
             await signInHostCoordinator.setup()
@@ -157,35 +186,41 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
             do {
                 try await coinageService.setup(with: asset)
             } catch {
-                assertionFailure(error.localizedDescription)
+                logger.error("Coinage service setup failed: \(error)")
+                return
             }
             // Recovering backup 1st
             await coinageBackupSyncService.setup()
             await spentCoinsRecoveryService.setup()
             await coinageTransferMonitor.setup()
-            Logger.shared.debug(
-                "[GameDebug] depositService.setup() — enabled to onboard deposit-wallet balances (e.g. airdrop CASH) into Coinage"
-            )
+            await w3sPaymentTracking.setup()
             await depositService.setup()
             await coinageService.transferRecoveryService.recover()
         }
     }
 
     func throttle() {
-        determineStateSyncService.throttle()
-        personhoodBackgroundService.throttle()
+        #if FEATURE_DIMS
+            determineStateSyncService.throttle()
+            personhoodBackgroundService.throttle()
+        #endif
+
         chatCoordinator.throttle()
         chatRequestCoordinator.throttle()
         fiatOnrampTrackingService.throttle()
         attachmentUploadService.throttle()
         attachmentDownloadService.throttle()
         notificationBadgeSyncService.throttle()
+        allowanceRenewalService.throttle()
+
+        messageExpansionService.stop()
 
         Task {
             await deviceSyncService.throttle()
             await coinageBackupSyncService.throttle()
             await spentCoinsRecoveryService.throttle()
             await coinageTransferMonitor.throttle()
+            await w3sPaymentTracking.throttle()
             await signInHostCoordinator.throttle()
             await depositService.throttle()
         }
@@ -194,20 +229,30 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
 
 extension ServiceCoordinator {
     // swiftlint:disable:next function_body_length
-    static func createDefault() -> ServiceCoordinatorProtocol? {
-        let mainWallet = SelectedWallet.main
-        let depositWallet = SelectedWallet.depositWallet
+    static func createDefault(spaFlowState: SPAFlowState) -> ServiceCoordinatorProtocol? {
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
+
+        // The dashboard is only reachable after onboarding cached the TLD, so built-in accounts
+        // resolve synchronously here.
+        guard
+            let mainWallet = try? walletRepo.main(),
+            let depositWallet = try? walletRepo.depositWallet()
+        else {
+            return nil
+        }
 
         let logger: LoggerProtocol = Logger.shared
-
-        let chatCoordinatorFactory = MessageExchangeCoordinatorFactory()
 
         guard let allowanceManagerFacade = AllowanceManagerFacade.create() else {
             return nil
         }
 
+        let chatCoordinatorFactory = MessageExchangeCoordinatorFactory(
+            bulletInManager: allowanceManagerFacade.bulletInManager
+        )
+
         let allowanceSupport = AllowanceSupport(
-            allowancePromptRouter: AllowancePromptRouter(),
+            allowancePromptRouter: ProductsRouter(),
             sssManager: allowanceManagerFacade.sssManager,
             bulletInManager: allowanceManagerFacade.bulletInManager,
             smartContractManager: allowanceManagerFacade.smartContractManager
@@ -228,16 +273,39 @@ extension ServiceCoordinator {
             userDefaults: SharedContainerGroup.userDefaults
         )
 
+        let sponsorVrfRepo: BandersnatchManagerRepositoryProtocol = .shared
+        guard let sponsorKeyResolver = try? sponsorVrfRepo.keyResolver() else {
+            return nil
+        }
+
         let sponsorFactory = HostTransactionSponsorFactory(
             accountManager: accountManager,
             resourceKeyManager: resourceKeyManager,
             chainRegistry: ChainRegistryFacade.sharedRegistry,
+            keyResolver: sponsorKeyResolver,
             logger: logger
         )
+
+        // Single process-wide TrUAPI runtime provider. Registered in the root
+        // locator so the static SPA factory reaches the same instance the
+        // chat bot factory does — one shared runtime across all products.
+        // Host-level core confirmations route through an SSO-style facade whose
+        // presentation view is attached with the main tab bar; until then,
+        // host-level prompts deny.
+        let truapiRuntimeProvider = TrUAPIHostRuntimeProvider(
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            entropyManager: RootEntropyManager.shared,
+            settingsManager: SettingsManager.shared,
+            coreStorage: TrUAPILocalStorage.createCoreLocalStorage(),
+            confirmationRouterFacade: ProductRoutersFacade.sso(),
+            logger: logger
+        )
+        RootDependencyLocator.setDependency(truapiRuntimeProvider as TrUAPIHostRuntimeProviding)
 
         guard
             let signInHostCoordinator = createSignInHostCoordinator(
                 factory: chatCoordinatorFactory,
+                runtimeProvider: truapiRuntimeProvider,
                 accountManager: accountManager,
                 sponsorFactory: sponsorFactory,
                 logger: logger
@@ -287,12 +355,14 @@ extension ServiceCoordinator {
 
         let chatExtensionsRegistry = createChatExtensionsRegistry(
             accountManager: accountManager,
+            truapiRuntimeProvider: truapiRuntimeProvider,
             syncStore: syncServiceResult.syncStore,
             personDataStore: syncServiceResult.personDataStore,
             syncService: syncServiceResult.service,
             personhoodRegistrationService: personhoodServices.registrationService,
             claimStatusStore: coinageServices.claimStatusStore,
-            audioSessionManager: audioSessionManager
+            audioSessionManager: audioSessionManager,
+            spaFlowState: spaFlowState
         )
 
         let fiatOnrampConfiguration = MeldFiatOnrampConfiguration.prod
@@ -313,8 +383,21 @@ extension ServiceCoordinator {
         )
 
         chatCoordinator.inboxService.setupCallCoordinator(callCoordinator)
+        chatCoordinator.outboxService.setupCallCoordinator(callCoordinator)
 
         let notificationBadgeSyncService = NotificationBadgeSyncService(logger: logger)
+
+        let messageExpansionService = createCompactedMessageExpansionService(logger: logger)
+        let allowanceRenewalService = AllowanceRenewalService(
+            managerFacade: allowanceManagerFacade,
+            appStateStreamFactory: ApplicationStateStreamFactory(),
+            logger: logger
+        )
+
+        let networkStatusService = NetworkStatusService(
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            pathMonitor: NetworkPathMonitor()
+        )
 
         return ServiceCoordinator(
             chatCoordinator: chatCoordinator,
@@ -336,18 +419,24 @@ extension ServiceCoordinator {
             attachmentUploadService: attachmentUploadService,
             attachmentDownloadService: attachmentDownloadService,
             coinageTransferMonitor: coinageServices.transferMonitor,
+            w3sPaymentTracking: coinageServices.w3sPaymentTracking,
             audioSessionManager: audioSessionManager,
             determineStateSyncService: syncServiceResult.service,
             personhoodBackgroundService: personhoodServices.backgroundService,
             personDataStore: syncServiceResult.personDataStore,
             coinageBackupSyncService: coinageServices.backupSyncService,
+            messageExpansionService: messageExpansionService,
             spentCoinsRecoveryService: spentCoinsRecoveryService,
             notificationBadgeSyncService: notificationBadgeSyncService,
             accountManager: accountManager,
             allowanceManagerFacade: allowanceManagerFacade,
+            allowanceRenewalService: allowanceRenewalService,
             paymentsSupport: paymentsSupport,
             turnService: turnService,
             deviceSyncService: deviceSyncService,
+            networkStatusService: networkStatusService,
+            truapiRuntimeProvider: truapiRuntimeProvider,
+            tldProvider: DotNsTldProviderFacade.shared,
             logger: logger
         )
     }
@@ -366,14 +455,21 @@ private extension ServiceCoordinator {
         }
     }
 
+    /// - Note: The `truApiRuntimeEnabled` flag is read once at coordinator creation (app start).
+    ///   Toggling the flag takes effect on the next launch.
     static func createSignInHostCoordinator(
         factory: MessageExchangeCoordinatorMaking,
+        runtimeProvider: TrUAPIHostRuntimeProviding,
         accountManager: ProductsAccountManaging,
         sponsorFactory: TransactionSponsorMaking,
         logger: LoggerProtocol
     ) -> MessageExchangeSignInHostCoordinating? {
         do {
-            return try factory.makeSignInHostCoordinator(
+            if SettingsManager.shared.value(for: .truApiRuntimeEnabled) {
+                return try factory.makeTrUAPIHostCoordinator(runtimeProvider: runtimeProvider)
+            }
+
+            return try factory.makeNativeHostCoordinator(
                 accountManager: accountManager,
                 sponsorFactory: sponsorFactory
             )
@@ -496,21 +592,24 @@ private extension ServiceCoordinator {
         personDataStore: DetermineStatePersonDataStore
     )? {
         let logger = Logger.shared
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
+        let vrfRepo: BandersnatchManagerRepositoryProtocol = .shared
 
         guard
-            let mainAccountId = try? SelectedWallet.main.getRawPublicKey(),
-            let candidateAccountId = try? SelectedWallet.candidate.getRawPublicKey(),
-            let mobRuleAccountId = try? SelectedWallet.mobRuleAlias.getRawPublicKey(),
-            let scoreAccountId = try? SelectedWallet.scoreAlias.getRawPublicKey(),
-            let resourcesAccountId = try? SelectedWallet.resourcesAlias.getRawPublicKey()
+            let mainAccountId = try? walletRepo.main().getRawPublicKey(),
+            let candidateAccountId = try? walletRepo.candidate().getRawPublicKey(),
+            let mobRuleAccountId = try? walletRepo.mobRuleAlias().getRawPublicKey(),
+            let scoreAccountId = try? walletRepo.scoreAlias().getRawPublicKey(),
+            let resourcesAccountId = try? walletRepo.resourcesAlias().getRawPublicKey()
         else {
             logger.error("Failed to get wallet account IDs for DetermineStateSyncService")
             return nil
         }
 
-        let vrfManager = BandersnatchKeyManager.fullPerson()
-
-        guard let memberKey = try? vrfManager.getMemberKey() else {
+        guard
+            let vrfManager = try? vrfRepo.fullPerson(),
+            let memberKey = try? vrfManager.getMemberKey()
+        else {
             logger.error("Failed to get member key for DetermineStateSyncService")
             return nil
         }

@@ -1,10 +1,11 @@
 import Foundation
 
+@MainActor
 enum PolkadotSigningViewFactory {
     static func createView(
         signingContext: PolkadotSigningContextProtocol
     ) -> PolkadotSigningViewProtocol? {
-        let wireframe = PolkadotSigningWireframe()
+        let wireframe = PolkadotSigningWireframe(signingContext: signingContext)
         let interactor = PolkadotSigningInteractor(
             signingContext: signingContext
         )

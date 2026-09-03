@@ -9,11 +9,15 @@ import CommonService
 import KeyDerivation
 import AsyncExtensions
 import AsyncAlgorithms
+import ChainRegistry
+import EventCenter
+import BackgroundExecution
+import Products
+import UIKitExt
 
 final class AssetDetailsInteractor: AnyProviderAutoCleaning {
     weak var presenter: AssetDetailsInteractorOutputProtocol?
 
-    let depositWallet: WalletManaging
     let priceLocalSubscriptionFactory: PriceProviderFactoryProtocol
     let chainAsset: ChainAsset
 
@@ -30,10 +34,18 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
 
     private var recoveryStateTask: Task<Void, Error>?
 
+    enum TopUpProductError: Error {
+        case unresolvedHost
+    }
+
+    private let hostProvider: ProductHostProviding
+    private var topUpProductTask: Task<Void, Never>?
+
     #if TESTNET_FEATURE
         private var coinageSubscriptionTask: Task<Void, Never>?
         private let coinProvider: StreamableProvider<Coin>
         private let voucherProvider: StreamableProvider<Voucher>
+        private let backgroundExecutor: BackgroundExecuting
 
         let voucherRepository: AnyDataProviderRepository<Voucher>
 
@@ -42,7 +54,6 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
     #endif
 
     init(
-        depositWallet: WalletManaging,
         priceLocalSubscriptionFactory: PriceProviderFactoryProtocol,
         fiatOnrampTrackingService: FiatOnrampTrackingServiceProtocol,
         chainAsset: ChainAsset,
@@ -52,9 +63,10 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         coinProvider: StreamableProvider<Coin>,
         voucherProvider: StreamableProvider<Voucher>,
         voucherRepository: AnyDataProviderRepository<Voucher>,
+        backgroundExecutor: BackgroundExecuting,
+        hostProvider: ProductHostProviding,
         eventCenter: EventCenterProtocol = EventCenter.shared
     ) {
-        self.depositWallet = depositWallet
         self.priceLocalSubscriptionFactory = priceLocalSubscriptionFactory
         self.fiatOnrampTrackingService = fiatOnrampTrackingService
         self.chainAsset = chainAsset
@@ -62,7 +74,9 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         self.coinageBackupSyncService = coinageBackupSyncService
         self.balanceSyncStateStorage = balanceSyncStateStorage
         self.eventCenter = eventCenter
+        self.hostProvider = hostProvider
         #if TESTNET_FEATURE
+            self.backgroundExecutor = backgroundExecutor
             self.coinProvider = coinProvider
             self.voucherProvider = voucherProvider
 
@@ -75,6 +89,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         balanceSubscriptionTask?.cancel()
         recoveryStateTask?.cancel()
         priceSubscriptionTask?.cancel()
+        topUpProductTask?.cancel()
         #if TESTNET_FEATURE
             coinageSubscriptionTask?.cancel()
         #endif
@@ -116,6 +131,23 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
         fiatOnrampTrackingService.removeFailedTransactions()
     }
 
+    func openTopUpProduct() {
+        topUpProductTask?.cancel()
+        topUpProductTask = Task { [weak presenter, hostProvider] in
+            do {
+                guard
+                    let host = try await hostProvider.resolveHost(label: AppConfig.DotNs.dotNsGetSome)
+                else {
+                    throw TopUpProductError.unresolvedHost
+                }
+
+                await presenter?.didResolveTopUpProduct(.success(ProductPage(host: host)))
+            } catch {
+                await presenter?.didResolveTopUpProduct(.failure(error))
+            }
+        }
+    }
+
     #if TESTNET_FEATURE
         func topUp() {
             faucetTask?.cancel()
@@ -128,8 +160,16 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
                         return
                     }
 
-                    try await topupService.topUp(depositWallet, amount: .plank(amount))
-                    try await coinageService.loadVouchers(amount: amount, externalAssetHolder: depositWallet)
+                    let randomSeed = try Data.randomOrError(of: 32)
+                    let depositWallet = try DynamicDerivedWallet(seedBytes: randomSeed)
+
+                    try await backgroundExecutor.execute {
+                        try await markStallActivity("Topup") {
+                            try await topupService.topUp(depositWallet, amount: .plank(amount))
+                            try await coinageService.loadVouchers(amount: amount, externalAssetHolder: depositWallet)
+                        }
+                    }
+
                     await presenter?.didCompleteTopUp(.success(()))
                 } catch {
                     await presenter?.didCompleteTopUp(.failure(error))
@@ -287,7 +327,7 @@ private extension AssetDetailsInteractor {
     }
 }
 
-extension AssetDetailsInteractor: EventVisitorProtocol {
+extension AssetDetailsInteractor: AppEventVisiting {
     func processBalanceSyncState(event _: BalanceSyncState) {
         let pending = balanceSyncStateStorage.isRestorePending
         Task { @MainActor [weak self] in
@@ -297,5 +337,14 @@ extension AssetDetailsInteractor: EventVisitorProtocol {
                 self?.presenter?.didClearBackupNotification()
             }
         }
+    }
+}
+
+extension AssetDetailsInteractor.TopUpProductError: ErrorContentConvertible {
+    func toErrorContent() -> ErrorContent {
+        ErrorContent(
+            title: String(localized: .Common.error),
+            message: String(localized: .Products.topUpResolveError)
+        )
     }
 }

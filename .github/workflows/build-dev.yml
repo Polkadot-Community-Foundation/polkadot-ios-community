@@ -1,17 +1,29 @@
 name: Build (Dev, unsigned)
 
-# Compile-only lane for the Dev configuration: builds the app (and its embedded
-# NotificationServiceExtension) for a generic iOS device WITHOUT code signing, so it
-# needs no Apple Developer portal registration, no provisioning profile and no App
-# Store Connect API key. Its job is to catch build-process issues early — Swift
-# compile errors behind the -DDEV flag (`#elseif NIGHTLY || DEV` gates), pbxproj
-# configuration mistakes in the Dev build configuration, SwiftPM resolution — before
-# the signed TestFlight lane (release-dev.yml) is exercised.
+# The fork's own gate for the Dev configuration. Two jobs, running in parallel:
+#
+#   build                    - compiles the app and its embedded NotificationServiceExtension for
+#                              a generic iOS device WITHOUT code signing, so it needs no Apple
+#                              Developer portal registration, no provisioning profile and no App
+#                              Store Connect API key. Catches Swift compile errors behind the
+#                              -DDEV flag (`#elseif NIGHTLY || DEV` gates), pbxproj configuration
+#                              mistakes in the Dev build configuration, and SwiftPM resolution
+#                              failures before the signed TestFlight lane (release-dev.yml) is
+#                              exercised. It also asserts the Dev lane's pinned PCF identity.
+#   storage-migration-tests  - the only lane in this repo that EXECUTES code. Runs the v36 -> v42
+#                              Core Data migration on a simulator. Upstream's 0.10.0 squash
+#                              deleted models 1...36 while every pre-squash PCF install is at v36,
+#                              so this upgrade path is the fork's highest-consequence claim and
+#                              the one that source review cannot settle.
+#
+# Neither job needs Parity's signing material, which is what makes them runnable on this fork at
+# all — upstream's pr.yml cannot pass here (it wants secrets.FASTLANE_RO_PAT for Parity's Match
+# repo and a GoogleService-Info.plist pinned to io.parity.polkadotapp.develop).
 #
 # Required repository secrets (already used by release-dev.yml):
 #   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the .dev Firebase app's GoogleService-Info.plist
-#   W3S_AUTH_KEY                         auth keypair seed (hex); optional for compiling —
-#                                        inject-keys.sh falls back to an empty value.
+#
+# W3S_AUTH_KEY is no longer used — see release-dev.yml.
 
 on:
   workflow_dispatch:
@@ -41,20 +53,65 @@ jobs:
           GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
-      - name: Generate build-time config (CIKeys)
-        env:
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
-        run: ./Scripts/inject-keys.sh
+      # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
+      # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
+      - name: Generate build-time secrets
+        run: ./Runscripts/generate_secrets.sh
 
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
+      # The fork's whole reason for existing on this lane is that the Dev configuration is pinned
+      # to PCF's own identity. Configs/brand.xcconfig is deliberately kept byte-identical to
+      # upstream (so it never conflicts on a sync), which means BRAND_BUNDLE_ROOT is still
+      # io.parity.polkadotapp and the pinning in polkadot-app/Configs/polkadot-app.dev.xcconfig is
+      # the only thing overriding it. A sync that silently drops that override would still build,
+      # still pass every other check, and ship under Parity's identity into Parity's App Group.
+      # Assert it instead of trusting it.
+      - name: Verify the Dev lane's pinned identity
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project polkadot-app.xcodeproj \
+            -scheme polkadot-app \
+            -configuration Dev \
+            -showBuildSettings 2>/dev/null | sed -e 's/^[[:space:]]*//' > build-settings.txt
+
+          fail=0
+          expect() {
+            if grep -qxF "$1" build-settings.txt; then
+              echo "ok: $1"
+            else
+              echo "::error::expected build setting not found: $1"
+              grep -E "^${1%% =*} = " build-settings.txt || echo "  (setting absent entirely)"
+              fail=1
+            fi
+          }
+
+          expect "APP_MAIN_BUNDLE = io.pcf.polkadotapp"
+          expect "BUNDLE = io.pcf.polkadotapp"
+          expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp"
+          expect "APP_GROUP = group.pcf.polkadotapp"
+
+          # DEEPLINK is derived from BRAND_DEEPLINK by upstream's 4c1a647 refactor. An empty value
+          # here flows into Info.plist's CFBundleURLSchemes and silently kills the custom scheme.
+          if grep -qxE "DEEPLINK = .+" build-settings.txt; then
+            echo "ok: $(grep -m1 -xE 'DEEPLINK = .+' build-settings.txt)"
+          else
+            echo "::error::DEEPLINK is empty or unset for the Dev configuration"
+            fail=1
+          fi
+
+          # Nothing on the Dev lane may ship under Parity's bundle identifier.
+          if grep -qE "^PRODUCT_BUNDLE_IDENTIFIER = io\.parity\." build-settings.txt; then
+            echo "::error::a target on the Dev lane still uses a Parity bundle identifier"
+            grep -E "^PRODUCT_BUNDLE_IDENTIFIER = " build-settings.txt
+            fail=1
+          fi
+
+          exit $fail
+
       - name: Build (Dev, no code signing)
-        env:
-          # The scheme pre-action re-runs Scripts/inject-keys.sh on every build, so
-          # W3S_AUTH_KEY must be in scope here too or CIKeys.generated.swift is rewritten
-          # with an empty seed (keeps this lane consistent with release-dev.yml).
-          W3S_AUTH_KEY: ${{ secrets.W3S_AUTH_KEY }}
         run: |
           set -o pipefail
           xcodebuild \
@@ -66,3 +123,174 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+  # Runs in parallel with `build`: that lane targets a generic device, this one a simulator, so
+  # there is no shared derived data to reuse and serialising them would only add wall clock.
+  #
+  # This is the only lane in the repo that EXECUTES anything. `build` proves the code compiles;
+  # this proves the v36 -> v42 Core Data migration actually works, which is the fork's central
+  # claim about the upgrade path and cannot be established by reading source.
+  storage-migration-tests:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      RUN_IN_CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Provide GoogleService-Info.plist (.dev Firebase app)
+        env:
+          GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
+        run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+
+      - name: Generate build-time secrets
+        run: ./Runscripts/generate_secrets.sh
+
+      - name: Resolve SwiftPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+
+      # Runner images change their installed simulators between releases, so resolve one rather
+      # than pinning a device name that silently disappears.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          set -o pipefail
+          # "    iPhone 16 (UDID) (Shutdown)" -> UDID. Only the UUID matches the 36-char group,
+          # so the trailing "(Shutdown)" cannot be picked up by mistake.
+          udid=$(xcrun simctl list devices available \
+            | grep -E '^[[:space:]]+iPhone' \
+            | head -1 \
+            | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          if [ -z "$udid" ]; then
+            echo "::error::no available iPhone simulator on this runner"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$udid"
+
+      # Scoped to the migration tests on purpose. The rest of the suite has never run in CI, so
+      # adopting it wholesale here would make this lane red for reasons unrelated to the upgrade
+      # path it is meant to guard. Widen once the suite is known green.
+      #
+      # No -configuration override: the Dev configuration builds without testability, so
+      # `@testable import polkadot_app` fails to compile. The polkadot-appTests scheme's own Debug
+      # configuration has ENABLE_TESTABILITY, and the Core Data models are identical across
+      # configurations, so nothing under test is configuration-specific.
+      - name: Test (user store v36 migration)
+        run: |
+          set -o pipefail
+          rm -rf TestResults.xcresult
+          xcodebuild \
+            -project polkadot-app.xcodeproj \
+            -scheme polkadot-appTests \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:polkadot-appTests/UserStorageMigrationV36Tests \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            test 2>&1 | tee xcodebuild-test.log
+
+      # An -only-testing: filter that matches nothing passes VACUOUSLY: xcodebuild reports
+      # ** TEST SUCCEEDED ** having run zero tests, and exits 0. A renamed class, or one that never
+      # made it into the target, would therefore turn this lane into a permanent false green —
+      # worse than having no lane at all, because it looks like proof.
+      #
+      # The count is read from the result bundle rather than grepped out of the log on purpose:
+      # xcodebuild's console format is not a stable contract (it differs between XCTest and
+      # swift-testing and has changed across Xcode releases), so a log regex that silently stops
+      # matching would reintroduce exactly the false green this step exists to prevent.
+      - name: Assert the tests actually executed
+        run: |
+          set -o pipefail
+
+          if [ ! -d TestResults.xcresult ]; then
+            echo "::error::no result bundle was produced — the test step did not run tests"
+            exit 1
+          fi
+
+          xcrun xcresulttool get test-results summary \
+            --path TestResults.xcresult --format json > test-summary.json
+
+          python3 - <<'PY'
+          import json, sys
+
+          summary = json.load(open("test-summary.json"))
+
+          if "totalTestCount" not in summary:
+              print("::error::unexpected xcresulttool summary shape; raw payload follows")
+              print(json.dumps(summary, indent=2)[:4000])
+              sys.exit(1)
+
+          total = summary.get("totalTestCount", 0)
+          passed = summary.get("passedTests", 0)
+          failed = summary.get("failedTests", 0)
+          skipped = summary.get("skippedTests", 0)
+
+          print(f"result: {summary.get('result')}  total={total} passed={passed} "
+                f"failed={failed} skipped={skipped}")
+
+          for case in summary.get("testFailures", []):
+              print(f"  FAILED {case.get('testName')}: {case.get('failureText')}")
+
+          if total == 0:
+              print("::error::no tests executed - the -only-testing filter matched nothing, "
+                    "or UserStorageMigrationV36Tests is not in the polkadot-appTests target")
+              sys.exit(1)
+
+          if passed == 0:
+              print("::error::no tests passed")
+              sys.exit(1)
+
+          print(f"::notice::{passed} of {total} tests executed and passed")
+          PY
+
+      # Diagnostic only — never fails the job. If the assertion above ever reports zero tests, the
+      # question is always the same: did the class make it into the built test bundle? Answer it
+      # here rather than guessing from the console log on the next iteration.
+      - name: Diagnose the built test bundle
+        if: always()
+        run: |
+          bundle=$(find ~/Library/Developer/Xcode/DerivedData \
+            -name 'polkadot-appTests.xctest' -type d 2>/dev/null | head -1)
+
+          if [ -z "$bundle" ]; then
+            echo "no polkadot-appTests.xctest bundle was produced"
+            exit 0
+          fi
+
+          echo "bundle: $bundle"
+          binary="$bundle/polkadot-appTests"
+
+          if [ ! -f "$binary" ]; then
+            echo "no executable inside the bundle"
+            ls -la "$bundle"
+            exit 0
+          fi
+
+          echo "--- XCTestCase subclasses found in the binary ---"
+          nm -gU "$binary" 2>/dev/null | grep -oE '[A-Za-z_]*Tests' | sort -u | head -50
+
+          echo "--- is UserStorageMigrationV36Tests present? ---"
+          if nm -gU "$binary" 2>/dev/null | grep -q 'UserStorageMigrationV36Tests'; then
+            echo "YES - the class is in the test bundle"
+          else
+            echo "NO - the class is NOT in the test bundle (synchronized group did not pick it up)"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-migration-test-results
+          path: |
+            TestResults.xcresult
+            xcodebuild-test.log
+          retention-days: 7
+          if-no-files-found: warn

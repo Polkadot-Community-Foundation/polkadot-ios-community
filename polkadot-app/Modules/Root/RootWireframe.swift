@@ -6,24 +6,28 @@ final class RootWireframe: RootWireframeProtocol {
     private let userNotificationService: UserNotificationServicing
     private weak var foregroundVisibilityReporter: PushForegroundVisibilityReporting?
     private let deepLinkHandler: DeferredLinkHandling
+    private let flowStateProvider: any SPAFlowStateProviding
 
     init(
         window: UIWindow,
         userNotificationService: UserNotificationServicing,
         foregroundVisibilityReporter: PushForegroundVisibilityReporting?,
-        deepLinkHandling: DeferredLinkHandling
+        deepLinkHandling: DeferredLinkHandling,
+        flowStateProvider: any SPAFlowStateProviding
     ) {
         self.window = window
         self.userNotificationService = userNotificationService
         self.foregroundVisibilityReporter = foregroundVisibilityReporter
         deepLinkHandler = deepLinkHandling
+        self.flowStateProvider = flowStateProvider
     }
 
     func showDashboard() {
         guard let dashboard = MainTabBarViewFactory.createView(
             userNotificationService: userNotificationService,
             foregroundVisibilityReporter: foregroundVisibilityReporter,
-            deepLinkHandling: deepLinkHandler
+            deepLinkHandling: deepLinkHandler,
+            flowStateProvider: flowStateProvider
         ) else {
             return
         }
@@ -61,24 +65,6 @@ final class RootWireframe: RootWireframeProtocol {
 
     func showThemeSelection(with observer: RootStateObserving) {
         let view = ThemeSelectionViewFactory.createView(observer: observer)
-        animation.animateTransition(to: view, in: window)
-    }
-
-    func showW3SSpa(with observer: RootStateObserving) {
-        guard let view = Web3SummitSpaViewFactory.createView(observer: observer) else {
-            return
-        }
-
-        animation.animateTransition(to: view.controller, in: window)
-    }
-
-    func showW3SEnded() {
-        let view = Web3SummitHardGateViewFactory.createEndedView()
-        animation.animateTransition(to: view, in: window)
-    }
-
-    func showW3SNotStarted() {
-        let view = Web3SummitHardGateViewFactory.createNotStartedView()
         animation.animateTransition(to: view, in: window)
     }
 

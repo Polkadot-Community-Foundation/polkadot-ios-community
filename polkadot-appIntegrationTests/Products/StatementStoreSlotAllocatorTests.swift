@@ -9,7 +9,10 @@ import KeyDerivation
 import Individuality
 import SDKLogger
 import SubstrateStorageQuery
+import SubstrateOperation
 import Products
+import ChainRegistry
+import StructuredConcurrency
 
 final class StatementStoreSlotAllocatorTests: XCTestCase {
     private let mnemonic = "city digital broken voice chef envelope swarm disagree claw fox friend casual"
@@ -29,8 +32,8 @@ final class StatementStoreSlotAllocatorTests: XCTestCase {
             operationManager: OperationManager(operationQueue: operationQueue)
         )
 
-        let liteVrfManager = BandersnatchKeyManager.litePerson(entropyManager: setupResult.entropyManager)
-        let fullVrfManager = BandersnatchKeyManager.fullPerson(entropyManager: setupResult.entropyManager)
+        let liteVrfManager = BandersnatchKeyManager.litePerson(for: "dot", entropyManager: setupResult.entropyManager)
+        let fullVrfManager = BandersnatchKeyManager.fullPerson(for: "dot", entropyManager: setupResult.entropyManager)
 
         let keyResolver = BandersnatchKeyResolver(
             liteKeyManager: liteVrfManager,
@@ -40,7 +43,8 @@ final class StatementStoreSlotAllocatorTests: XCTestCase {
         let originFactory = AsResourcesOriginFactory(
             wallet: setupResult.wallet,
             keyResolver: keyResolver,
-            chainRegistry: chainRegistry
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
         )
 
         let facade = ExtrinsicSubmissionMonitorFacade(
@@ -53,25 +57,52 @@ final class StatementStoreSlotAllocatorTests: XCTestCase {
         let chain = try chainRegistry.getChainOrError(for: KnownChainId.previewNetPeople)
         let monitorFactory = try facade.createMonitorFactory(chain: chain)
 
+        let timeProvider = ChainTimeProvider(
+            chainId: KnownChainId.previewNetPeople,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
+        )
+
+        let allowanceRepository = AllowanceRepositoryFactory(storageFacade: UserDataStorageFacade.shared)
+            .createStatementStoreRepository()
+        let accounting = StatementStoreSlotAccountant(repository: allowanceRepository)
+        let originPersonProvider = ChainOriginPersonProvider(
+            chainId: KnownChainId.previewNetPeople,
+            chainRegistry: chainRegistry,
+            keyResolver: keyResolver
+        )
+
         let slotInfoProvider = StatementStoreSlotInfoProvider(
             chainId: KnownChainId.previewNetPeople,
             chainRegistry: chainRegistry,
             storageRequestFactory: storageRequestFactory,
-            keyResolver: keyResolver,
+            resourcesParameters: CachedResourcesParametersProvider(
+                viewFunctionExecutor: ViewFunctionExecutor(
+                    chainRegistry: chainRegistry,
+                    operationQueue: operationQueue
+                ),
+                ttl: 0
+            ),
+            chainTimeProvider: timeProvider,
+            originPersonProvider: originPersonProvider,
+            accounting: accounting,
             logger: MockLogger()
         )
+
+        let serialQueue = SerialOperationQueue()
 
         let allocator = StatementStoreSlotAllocator(
             chainId: KnownChainId.previewNetPeople,
             originFactory: originFactory,
             submitter: SlotAssignmentSubmitter(monitorFactory: monitorFactory),
-            slotInfoProvider: slotInfoProvider
+            slotInfoProvider: slotInfoProvider,
+            serialQueue: serialQueue
         )
 
         let holder = ProductAccountHolder(entropyManager: setupResult.entropyManager)
-        let accountId = try holder.deriveAccount(ProductAccountId(productId: "browse.dot", derivationIndex: 0))
+        let accountId = try holder.deriveAccount(ProductAccountId(productId: "browse.dot", derivationIndex: .index(0)))
 
-        try await allocator.assignSlot(accountId: accountId)
+        try await allocator.assignSlot(accountId: accountId, priority: .normal)
     }
 }
 

@@ -1,7 +1,9 @@
 import Foundation
+import Foundation_iOS
 import SubstrateSdk
 import HandoffService
 import SDKLogger
+import ChainRegistry
 
 enum HOPFileLoaderError: Error {
     case invalidUrl
@@ -34,7 +36,13 @@ extension HOPFileLoaderFactory: HOPFileLoaderMaking {
         }
 
         let service = HandoffService(connection: connection)
-        return HandoffFileLoader(service: service)
+        let remoteStore = BitswapRemoteStore(connection: connection, logger: logger)
+        let decoratedService = HandoffServiceDecorator(
+            handoffService: service,
+            remoteStore: remoteStore
+        )
+
+        return HandoffFileLoader(service: decoratedService, config: HandoffFileLoadConfig())
     }
 }
 
@@ -43,6 +51,12 @@ extension HOPFileLoaderFactory: HOPFileLoaderMaking {
 protocol HOPNodeProviding {
     func selectNode() -> ChatRemoteMessageContent.NodeEndpoint?
     func isNodeAllowed(_ node: ChatRemoteMessageContent.NodeEndpoint) -> Bool
+}
+
+extension HOPNodeProviding {
+    func selectNodeOrError() throws -> ChatRemoteMessageContent.NodeEndpoint {
+        try selectNode().mapOrThrow(HOPFileLoaderError.noAvailableNodes)
+    }
 }
 
 final class HOPNodeProvider {

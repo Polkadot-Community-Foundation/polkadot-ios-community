@@ -2,6 +2,7 @@ import Foundation
 import PolkadotUI
 import Products
 
+@MainActor
 final class AppsListPresenter {
     weak var view: AppsListViewProtocol?
 
@@ -31,8 +32,7 @@ extension AppsListPresenter: AppsListPresenterProtocol {
 }
 
 extension AppsListPresenter: AppsListInteractorOutputProtocol {
-    func didReceive(productIds: [ProductId]) {
-        let items = viewModelFactory.createItems(from: productIds)
-        view?.didReceive(items: items)
+    func didReceive(products: [ResolvedProduct]) {
+        view?.didReceive(items: viewModelFactory.createItems(from: products))
     }
 }

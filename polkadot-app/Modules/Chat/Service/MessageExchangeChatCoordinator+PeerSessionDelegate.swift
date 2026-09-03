@@ -10,6 +10,10 @@ extension MessageExchangeChatCoordinator: PeerSessionDelegate, TypeErasedDelegat
         didUpdateState state: PeerSessionState
     ) {
         logger.debug("Did change session state to \(state)")
+
+        if case .active = state {
+            outboxService.schedulePendingMessages()
+        }
     }
 
     func peerSession(
@@ -119,4 +123,18 @@ extension MessageExchangeChatCoordinator: PeerSessionDelegate, TypeErasedDelegat
         _: any PeerSessionProtocol,
         shouldReinitializeAfterSubmitError _: Error
     ) -> Bool { true }
+
+    func peerSession(
+        _ session: any PeerSessionProtocol,
+        didCompactMessages compactedMessage: Message,
+        originalMessages: [Message]
+    ) {
+        let compactedRemote = compactedMessage.remoteMessage
+        let originalRemotes = originalMessages.map(\.remoteMessage)
+        handleCompactedMessages(
+            compactedMessage: compactedRemote,
+            originalMessages: originalRemotes,
+            for: session.peer
+        )
+    }
 }

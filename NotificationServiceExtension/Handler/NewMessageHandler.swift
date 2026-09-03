@@ -3,6 +3,7 @@ import Foundation_iOS
 import Operation_iOS
 import SubstrateSdk
 import StructuredConcurrency
+import ChainRegistry
 
 final class NewMessageHandler {
     let pushId: String
@@ -147,7 +148,8 @@ private extension NewMessageHandler {
              .dataChannelCandidates,
              .deviceAdded,
              .deviceRemoved,
-             .dataChannelClosed:
+             .dataChannelClosed,
+             .compactedMessages:
             throw NewMessageHandlerError.unsupportedMessage
         case .none:
             NotificationContentResult(

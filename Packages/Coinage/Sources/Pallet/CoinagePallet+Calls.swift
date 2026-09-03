@@ -17,7 +17,18 @@ extension CoinagePallet.Calls {
         var moduleName: String { CoinagePallet.name }
         var name: String { "load_recycler_with_external_asset_unpaid_batch" }
 
+        @StringCodable var instanceId: CoinageInstanceId
         let items: [UnpaidLoadInput]
+
+        init(instanceId: CoinageInstanceId, items: [UnpaidLoadInput]) {
+            self.instanceId = instanceId
+            self.items = items
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case instanceId = "instance_id"
+            case items
+        }
 
         struct UnpaidLoadInput: Codable {
             @StringCodable var value: Int16
@@ -103,6 +114,7 @@ extension CoinagePallet.Calls {
         var moduleName: String { CoinagePallet.name }
         var name: String { "unload_recycler_into_coins" }
 
+        @StringCodable var instanceId: CoinageInstanceId
         let aliases: [BytesCodable]
 
         /// Denomination exponent (all vouchers must have same value)
@@ -119,6 +131,7 @@ extension CoinagePallet.Calls {
         @StringCodable var maxFee: Balance
 
         init(
+            instanceId: CoinageInstanceId,
             aliases: [Data],
             value: Int8,
             index: UInt32,
@@ -126,6 +139,7 @@ extension CoinagePallet.Calls {
             splitInto: [Split.SplitDestination],
             maxFee: Balance = 0 // pay no fees by default
         ) {
+            self.instanceId = instanceId
             self.aliases = aliases.map { BytesCodable(wrappedValue: $0) }
             self.value = value
             self.index = index
@@ -135,6 +149,7 @@ extension CoinagePallet.Calls {
         }
 
         enum CodingKeys: String, CodingKey {
+            case instanceId = "instance_id"
             case aliases
             case value
             case index
@@ -166,69 +181,92 @@ extension CoinagePallet.Calls {
         var moduleName: String { CoinagePallet.name }
         var name: String { "unload_recycler_into_external_asset" }
 
+        @StringCodable var instanceId: CoinageInstanceId
         let aliases: [BytesCodable]
         @StringCodable var value: Int8
         @StringCodable var index: UInt32
         @StringCodable var revision: UInt32
         @BytesCodable var to: AccountId
 
+        /// Only enforced under `UnloadFee::FromOutput`. Every unload the app makes rides
+        /// `AsUnloadTokenPeople`, i.e. `Prepaid`, where the pallet ignores this value —
+        /// and `unload_recycler_into_coins` outright requires it to be zero. Do not raise it.
+        @StringCodable var maxFee: Balance
+
         init(
+            instanceId: CoinageInstanceId,
             aliases: [Data],
             value: Int8,
             index: UInt32,
             revision: UInt32,
-            to: AccountId
+            to: AccountId,
+            maxFee: Balance = 0
         ) {
+            self.instanceId = instanceId
             self.aliases = aliases.map { BytesCodable(wrappedValue: $0) }
             self.value = value
             self.index = index
             self.revision = revision
             self.to = to
+            self.maxFee = maxFee
         }
 
         enum CodingKeys: String, CodingKey {
+            case instanceId = "instance_id"
             case aliases
             case value
             case index
             case revision
             case to
+            case maxFee = "max_fee"
         }
     }
 
-    /// unload_recycler_into_external_asset_and_vouchers — atomically unloads vouchers,
-    /// transfers an external asset amount to a destination, and mints new vouchers from surplus.
+    /// unload_recycler_into_external_asset_and_loaded_coins — atomically unloads coins,
+    /// transfers an external asset amount to a destination, and puts recycler-loaded coins from
+    /// surplus into the alias state.
     /// Origin: AsUnloadToken
-    struct UnloadRecyclerIntoExternalAssetAndVouchers: RuntimeCallConvertible {
+    struct UnloadRecyclerIntoExternalAssetAndLoadedCoins: RuntimeCallConvertible {
         var moduleName: String { CoinagePallet.name }
-        var name: String { "unload_recycler_into_external_asset_and_vouchers" }
+        var name: String { "unload_recycler_into_external_asset_and_loaded_coins" }
 
+        @StringCodable var instanceId: CoinageInstanceId
         let aliases: [BytesCodable]
         @StringCodable var value: Int8
         @StringCodable var index: UInt32
         @StringCodable var revision: UInt32
         @BytesCodable var to: AccountId
         @StringCodable var externalAssetAmount: Balance
-        let newVouchers: [NewVoucher]
+        let loadedCoins: [LoadedCoin]
+
+        /// Only enforced under `UnloadFee::FromOutput`. Every unload the app makes rides
+        /// `AsUnloadTokenPeople`, i.e. `Prepaid`, where the pallet ignores this value —
+        /// and `unload_recycler_into_coins` outright requires it to be zero. Do not raise it.
+        @StringCodable var maxFee: Balance
 
         init(
+            instanceId: CoinageInstanceId,
             aliases: [Data],
             value: Int8,
             index: UInt32,
             revision: UInt32,
             to: AccountId,
             externalAssetAmount: Balance,
-            newVouchers: [NewVoucher]
+            loadedCoins: [LoadedCoin],
+            maxFee: Balance = 0
         ) {
+            self.instanceId = instanceId
             self.aliases = aliases.map { BytesCodable(wrappedValue: $0) }
             self.value = value
             self.index = index
             self.revision = revision
             self.to = to
             self.externalAssetAmount = externalAssetAmount
-            self.newVouchers = newVouchers
+            self.loadedCoins = loadedCoins
+            self.maxFee = maxFee
         }
 
-        struct NewVoucher: Codable {
+        struct LoadedCoin: Codable {
             let coinValue: Int8
             let memberKey: Data
 
@@ -240,13 +278,15 @@ extension CoinagePallet.Calls {
         }
 
         enum CodingKeys: String, CodingKey {
+            case instanceId = "instance_id"
             case aliases
             case value
             case index
             case revision
             case to
             case externalAssetAmount = "external_asset_amount"
-            case newVouchers = "new_vouchers"
+            case loadedCoins = "loaded_coins"
+            case maxFee = "max_fee"
         }
     }
 

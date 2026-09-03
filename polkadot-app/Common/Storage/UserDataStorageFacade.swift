@@ -14,35 +14,28 @@ enum UserStorageParams {
     ///  and implement migration policy;
     ///  - update mappings between CoreData Entities and App Models;
     ///  - switch version of UserStorageParams.modelVersion;
-    static let modelVersion: UserStorageVersion = .version36
+    static let modelVersion: UserStorageVersion = .version42
     static let modelDirectory: String = "UserDataModel.momd"
     static let databaseName = "UserDataModel.sqlite"
 
-    static let sharedStorageDirectoryURL: URL = {
-        let baseURL = FileManager.default
-            .containerURL(
-                forSecurityApplicationGroupIdentifier: SharedContainerGroup.name
-            )?
-            .appendingPathComponent("CoreData")
-        return baseURL!
-    }()
+    static let sharedStorageDirectoryURL: URL = SharedContainerGroup
+        .containerURL
+        .appendingPathComponent("CoreData")
 
     static var storageURL: URL {
         sharedStorageDirectoryURL.appendingPathComponent(databaseName)
     }
 
+    /// CoreDataHistoryCleaner needs a timestamp for EVERY target before it deletes anything,
+    /// and each process writes its timestamp under its own bundle identifier.
+    /// Bundle.main is unusable here: in the NSE process it resolves to the extension.
     static var historyTrackingTargets: [String] {
-        #if F_DEV
-            return [
-                "io.paritytech.polkadotapp.develop",
-                "io.paritytech.polkadotapp.develop.NotificationServiceExtension"
-            ]
-        #else
-            return [
-                "io.paritytech.polkadotapp",
-                "io.paritytech.polkadotapp.NotificationServiceExtension"
-            ]
-        #endif
+        let bundleRoot = AppConfig.Brand.bundleRoot
+
+        return [
+            bundleRoot,
+            bundleRoot + ".NotificationServiceExtension"
+        ]
     }
 }
 

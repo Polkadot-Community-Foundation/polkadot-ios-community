@@ -6,6 +6,9 @@ import KeyDerivation
 import Individuality
 import SubstrateSdk
 import SubstrateStorageQuery
+import ChainRegistry
+import BulletinChain
+import TrUAPIHost
 
 enum SPAViewFactory {
     @MainActor
@@ -13,6 +16,21 @@ enum SPAViewFactory {
         configuration: SPAConfiguration,
         flowState: SPAFlowState
     ) -> SPAViewProtocol? {
+        let truapiEnabled = SettingsManager.shared.value(for: .truApiRuntimeEnabled)
+
+        if truapiEnabled {
+            return createRustView(configuration: configuration, flowState: flowState)
+        }
+
+        return createNativeView(configuration: configuration, flowState: flowState)
+    }
+
+    @MainActor
+    private static func createNativeView(
+        configuration: SPAConfiguration,
+        flowState: SPAFlowState
+    ) -> SPAViewProtocol? {
+        let routers = ProductRoutersFacade.spa()
         let dependencyLocator: TruApiDependenciesLocator = RootDependencyLocator.getDependency()
             ?? TruApiDependenciesLocator()
         let allowanceSupport: AllowanceSupport? = dependencyLocator.getDependency()
@@ -21,12 +39,7 @@ enum SPAViewFactory {
             allowanceSupport: allowanceSupport
         )
 
-        let wireframe = SPAWireframe(flowState: flowState)
-        let signingRouter = ProductsSigningRouter()
-        let navigationRouter = ProductsNavigationRouter()
-        let permissionRouter = ProductPermissionRouter()
-        let topUpRequestRouter = TopUpRequestRouter()
-        let paymentRequestRouter = PaymentRequestRouter()
+        let wireframe = SPAWireframe()
 
         let entropyManager = RootEntropyManager.shared
 
@@ -37,10 +50,16 @@ enum SPAViewFactory {
             userDefaults: SharedContainerGroup.userDefaults
         )
 
+        let sponsorVrfRepo: BandersnatchManagerRepositoryProtocol = .shared
+        guard let sponsorKeyResolver = try? sponsorVrfRepo.keyResolver() else {
+            return nil
+        }
+
         let sponsorFactory = HostTransactionSponsorFactory(
             accountManager: accountManager,
             resourceKeyManager: resourceKeyManager,
             chainRegistry: chainRegistry,
+            keyResolver: sponsorKeyResolver,
             logger: Logger.shared
         )
 
@@ -51,35 +70,32 @@ enum SPAViewFactory {
                 productId: configuration.page.host.toDotDomain(),
                 settingsManager: SettingsManager.shared
             ),
-            nonProductAccountRegistry: NonProductAccountRegistry.main,
             notificationService: UserNotificationService.shared,
             entropyManager: entropyManager,
             dependencyLocator: dependencyLocator,
             accountManager: accountManager,
             resourceKeyManager: resourceKeyManager,
             sponsorFactory: sponsorFactory,
-            substrateStorageFacade: SubstrateDataStorageFacade.shared
+            substrateStorageFacade: SubstrateDataStorageFacade.shared,
+            hostProvider: flowState.hostProvider
         )
 
         let nativeApi = nativeApiFactory.makeApi(
             productId: configuration.page.host.toDotDomain(),
-            signingRouter: signingRouter,
-            navigationRouter: navigationRouter,
-            permissionRouter: permissionRouter,
-            topUpRequestRouter: topUpRequestRouter,
-            paymentRequestRouter: paymentRequestRouter
+            routers: routers
         )
 
         let schemeHandlerProxy = SchemeHandlerProxy()
 
-        let scriptsFactory = SPAScriptsFactory(
+        let scriptsFactory = SPANativeRuntimeScriptsFactory(
             containerScriptProvider: BundledContainerScriptProvider()
         )
 
-        let interactor = SPAInteractor(
+        let interactor = SPANativeRuntimeInteractor(
             nativeApi: nativeApi,
             scriptsFactory: scriptsFactory,
             dotNsResolver: flowState.dotNsResolver,
+            productResolver: flowState.productResolver,
             schemeHandlerProxy: schemeHandlerProxy,
             configuration: configuration,
             logger: Logger.shared,
@@ -90,24 +106,21 @@ enum SPAViewFactory {
         let presenter = SPAPresenter(
             interactor: interactor,
             wireframe: wireframe,
-            configuration: configuration
+            configuration: configuration,
+            hostProvider: flowState.hostProvider
         )
         let view = SPAViewController(
             presenter: presenter,
             configuration: configuration,
             schemeHandlerProxy: schemeHandlerProxy,
-            logger: Logger.shared
+            logger: Logger.shared,
+            hostProvider: flowState.hostProvider
         )
 
         presenter.view = view
         interactor.presenter = presenter
 
-        signingRouter.setPresentationView(view)
-        navigationRouter.setPresentationView(view)
-        navigationRouter.setFlowState(flowState)
-        permissionRouter.setPresentationView(view)
-        topUpRequestRouter.setPresentationView(view)
-        paymentRequestRouter.setPresentationView(view)
+        routers.setPresentationView(view)
 
         if !configuration.isRootScreen {
             view.hidesBottomBarWhenPushed = true
@@ -119,45 +132,104 @@ enum SPAViewFactory {
     @MainActor
     static func createView(
         page: ProductPage,
-        flowState: SPAFlowState
+        flowState: SPAFlowState,
+        isBrowserTab: Bool = false,
+        browserTabId: UUID? = nil
     ) -> SPAViewProtocol? {
         let configuration = SPAConfiguration(
             title: nil,
             isRootScreen: false,
             showMoreButton: true,
-            page: page
+            page: page,
+            isBrowserTab: isBrowserTab,
+            browserTabId: browserTabId
         )
 
-        return createView(configuration: configuration, flowState: flowState)
+        return createView(
+            configuration: configuration,
+            flowState: flowState
+        )
     }
+}
 
+// MARK: - Rust runtime assembly
+
+extension SPAViewFactory {
+    /// Internal so the debug playground launcher can assemble a rust SPA view.
+    /// The shared ``TrUAPIHostRuntime`` is sourced from the process-wide
+    /// provider registered by `ServiceCoordinator`.
     @MainActor
-    static func createView(
-        productHost: ProductHost,
+    static func createRustView(
+        configuration: SPAConfiguration,
         flowState: SPAFlowState
     ) -> SPAViewProtocol? {
-        createView(page: ProductPage(host: productHost), flowState: flowState)
-    }
+        let routers = ProductRoutersFacade.spa()
+        let wireframe = SPAWireframe()
+        let schemeHandlerProxy = SchemeHandlerProxy()
 
-    @MainActor
-    static func createView(page: ProductPage) -> SPAViewProtocol? {
-        guard let state = SPAFlowState.create() else {
+        guard let runtimeProvider: TrUAPIHostRuntimeProviding = RootDependencyLocator.getDependency() else {
+            Logger.shared.error("Rust SPA unavailable: TrUAPI runtime provider missing")
             return nil
         }
 
-        return createView(page: page, flowState: state)
-    }
+        let runtime: TrUAPIHostRuntime
+        do {
+            runtime = try runtimeProvider.sharedRuntime()
+        } catch {
+            Logger.shared.error("Rust SPA unavailable: \(error)")
+            return nil
+        }
 
-    @MainActor
-    static func createView(productHost: ProductHost) -> SPAViewProtocol? {
-        createView(page: ProductPage(host: productHost))
-    }
+        let rustEnvironment = RustRuntimeEnvironment(
+            runtime: runtime,
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            notificationScheduler: ProductNotificationScheduler.shared,
+            ipfsFetcher: IpfsFetcher(ipfsBaseURL: AppConfig.KnownIPFS.main),
+            hostProvider: flowState.hostProvider,
+            logger: Logger.shared
+        )
 
-    @MainActor
-    static func makeCardNavigationController(for spaView: SPAViewProtocol) -> AppNavigationController {
-        let navigationController = AppNavigationController(rootViewController: spaView.controller)
-        navigationController.barSettings = .transparentSettings
-        navigationController.scrollEdgeBarSettings = .defaultSettings
-        return navigationController
+        let runtimeFactory = SPARustRuntimeFactory(environment: .init(
+            rust: rustEnvironment,
+            configuration: configuration,
+            dotNsResolver: flowState.dotNsResolver,
+            productResolver: flowState.productResolver,
+            schemeHandlerProxy: schemeHandlerProxy,
+            routers: routers
+        ))
+
+        let interactor = SPARustRuntimeInteractor(
+            runtimeFactory: runtimeFactory,
+            productResolver: flowState.productResolver,
+            configuration: configuration,
+            logger: Logger.shared,
+            productRepository: ProductRepositoryFactory().createRepository(),
+            chatProviderFactory: ChatContactDataProviderFactory()
+        )
+
+        let presenter = SPAPresenter(
+            interactor: interactor,
+            wireframe: wireframe,
+            configuration: configuration,
+            hostProvider: flowState.hostProvider
+        )
+
+        let view = SPAViewController(
+            presenter: presenter,
+            configuration: configuration,
+            schemeHandlerProxy: schemeHandlerProxy,
+            logger: Logger.shared,
+            hostProvider: flowState.hostProvider
+        )
+
+        presenter.view = view
+        interactor.presenter = presenter
+        runtimeFactory.setPresentationView(view)
+
+        if !configuration.isRootScreen {
+            view.hidesBottomBarWhenPushed = true
+        }
+
+        return view
     }
 }

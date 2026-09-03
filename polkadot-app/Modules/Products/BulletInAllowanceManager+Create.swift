@@ -1,25 +1,45 @@
 import Foundation
+import Products
 import Individuality
 import KeyDerivation
 import Operation_iOS
+import ChainRegistry
+import SubstrateStorageQuery
+import SubstrateSdk
+import BackgroundExecution
 
 extension BulletInAllowanceManager {
     static func create(
         chainRegistry: ChainRegistryProtocol,
         substrateStorageFacade: StorageFacadeProtocol = SubstrateDataStorageFacade.shared,
-        entropyManager: RootEntropyManaging = RootEntropyManager.shared
+        entropyManager: RootEntropyManaging = RootEntropyManager.shared,
+        walletRepo: WalletManagerRepositoryProtocol = .shared,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
     ) -> BulletInAllowanceManager? {
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
 
+        guard
+            let tld = try? tldProvider.currentTldOrError(),
+            let wallet = try? walletRepo.main()
+        else {
+            return nil
+        }
+
         let keyResolver = BandersnatchKeyResolver(
-            liteKeyManager: BandersnatchKeyManager.litePerson(entropyManager: entropyManager),
-            fullKeyManager: BandersnatchKeyManager.fullPerson(entropyManager: entropyManager)
+            liteKeyManager: BandersnatchKeyManager.litePerson(for: tld, entropyManager: entropyManager),
+            fullKeyManager: BandersnatchKeyManager.fullPerson(for: tld, entropyManager: entropyManager)
+        )
+
+        let storageRequestFactory = StorageRequestFactory(
+            remoteFactory: StorageKeyFactory(),
+            operationManager: OperationManager(operationQueue: operationQueue)
         )
 
         let originFactory = AsResourcesOriginFactory(
-            wallet: SelectedWallet.main,
+            wallet: wallet,
             keyResolver: keyResolver,
-            chainRegistry: chainRegistry
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
         )
 
         let extrinsicFacade = ExtrinsicSubmissionMonitorFacade(
@@ -35,12 +55,20 @@ extension BulletInAllowanceManager {
             return nil
         }
 
+        let chainTimeProvider = ChainTimeProvider(
+            chainId: AppConfig.Chains.bulletInChain,
+            chainRegistry: chainRegistry,
+            storageRequestFactory: storageRequestFactory
+        )
+
         let infoProvider = BulletInSlotInfoProvider(
             bulletInChainId: AppConfig.Chains.bulletInChain,
             peopleChainId: AppConfig.Chains.usernameChain,
             chainRegistry: chainRegistry,
             keyResolver: keyResolver,
-            operationQueue: operationQueue
+            operationQueue: operationQueue,
+            chainTimeProvider: chainTimeProvider,
+            resourcesParameters: ResourcesParametersFacade.shared
         )
 
         let allocator = BulletinSlotAllocator(
@@ -52,7 +80,8 @@ extension BulletInAllowanceManager {
 
         return BulletInAllowanceManager(
             infoProvider: infoProvider,
-            allocator: allocator
+            allocator: allocator,
+            backgroundExecutor: ConnectionRetainingExecutor(provider: chainRegistry)
         )
     }
 }

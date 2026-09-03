@@ -1,7 +1,8 @@
 import Foundation
 import Foundation_iOS
-import Combine
+import PolkadotUI
 
+@MainActor
 final class ClaimUsernamePresenter {
     weak var view: ClaimUsernameViewProtocol?
     let wireframe: ClaimUsernameWireframeProtocol
@@ -17,13 +18,11 @@ final class ClaimUsernamePresenter {
     private var usernameCheckResult: UsernameAvailableType?
     private var usernameViewModel: InputViewModelProtocol?
 
-    private var availableDigits: [Int] = []
     private var selectedDigits: Int?
     private var digitsFieldState: DigitsFieldState = .hidden
-    private var digitsViewModel: InputViewModelProtocol?
 
-    private var claimCancellable: AnyCancellable?
-    private var usernameCheckCancellable: AnyCancellable?
+    private var claimTask: Task<Void, Never>?
+    private var checkTask: Task<Void, Never>?
 
     private let prefilledUsername: Username?
 
@@ -50,7 +49,6 @@ extension ClaimUsernamePresenter {
 
         DataValidationRunner(
             validators: [
-                validationFactory.hasValidDigits(from: digitsFieldState),
                 validationFactory.notViolatingMinLength(
                     for: partialNormalizedUsername,
                     minLength: metadata.minLength
@@ -68,10 +66,8 @@ extension ClaimUsernamePresenter {
     }
 
     private func resetDigitsState() {
-        availableDigits = []
         selectedDigits = nil
         digitsFieldState = .hidden
-        digitsViewModel = nil
         view?.didReceive(digitsState: .hidden)
     }
 
@@ -89,6 +85,7 @@ extension ClaimUsernamePresenter {
     }
 
     private func doUsernameCheckUpdateIfPossible() {
+        let wasVisible = digitsFieldState != .hidden
         resetDigitsState()
 
         guard
@@ -97,25 +94,32 @@ extension ClaimUsernamePresenter {
         else {
             view?.didStopLoading()
             usernameCheckResult = .invalid
-            usernameCheckCancellable?.cancel()
-            usernameCheckCancellable = nil
+            checkTask?.cancel()
+            checkTask = nil
             validateUsername()
             return
+        }
+
+        if wasVisible {
+            digitsFieldState = .loading
+            view?.didReceive(digitsState: .loading)
         }
 
         view?.didStartLoading()
 
         let username = Username(value: partialNormalizedUsername)
-        usernameCheckCancellable = interactor.check(
-            username: username
-        )
-        .catch {
-            Just(.error($0.localizedDescription))
+        checkTask?.cancel()
+        checkTask = Task { [weak self] in
+            guard let self else { return }
+            let result: UsernameAvailableType
+            do {
+                result = try await interactor.check(username: username)
+            } catch {
+                result = .error(error.localizedDescription)
+            }
+            guard !Task.isCancelled else { return }
+            didCompleteCheck(for: username, result: result)
         }
-        .receive(on: DispatchQueue.main)
-        .sink(receiveValue: { [weak self] in
-            self?.didCompleteCheck(for: username, result: $0)
-        })
     }
 }
 
@@ -131,16 +135,8 @@ extension ClaimUsernamePresenter: ClaimUsernamePresenterProtocol {
     }
 
     func updateDigits(_ value: String) {
-        let parsed = Int(value)
-        selectedDigits = parsed
-
-        if let parsed, availableDigits.contains(parsed) {
-            digitsFieldState = .valid
-        } else {
-            digitsFieldState = .invalid
-        }
-
-        view?.didReceive(digitsState: digitsFieldState)
+        selectedDigits = Int(value)
+        view?.didReceive(digitsState: .shown)
         validateUsername()
     }
 
@@ -161,7 +157,7 @@ extension ClaimUsernamePresenter: ClaimUsernamePresenterProtocol {
     }
 
     func confirm() {
-        guard claimCancellable == nil else {
+        guard claimTask == nil else {
             return
         }
 
@@ -181,18 +177,15 @@ extension ClaimUsernamePresenter: ClaimUsernamePresenterProtocol {
 
         view?.userInteraction(enabled: false)
         view?.didStartLoading()
-        claimCancellable = interactor.claim(username: username)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                switch completion {
-                case .finished:
-                    break
-                case let .failure(error):
-                    self?.didReceive(error: .claimFailed(error))
-                }
-            } receiveValue: { [weak self] in
-                self?.didReceive(username: $0)
+        claimTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let claimed = try await interactor.claim(username: username)
+                await didReceive(username: claimed)
+            } catch {
+                didReceive(error: .claimFailed(error))
             }
+        }
     }
 
     func recover() {
@@ -200,7 +193,7 @@ extension ClaimUsernamePresenter: ClaimUsernamePresenterProtocol {
     }
 }
 
-extension ClaimUsernamePresenter: ClaimUsernameInteractorOutputProtocol {
+extension ClaimUsernamePresenter: ClaimLiteUsernameInteractorOutputProtocol {
     func didSaveUsername() {
         wireframe.finishFlow(from: view)
     }
@@ -220,9 +213,9 @@ private extension ClaimUsernamePresenter {
         view?.didReceive(viewModel: viewModelProvider.viewModel())
     }
 
-    func didReceive(username: Username) {
+    func didReceive(username: Username) async {
         logger.debug("Username: \(username)")
-        interactor.save(username: username)
+        await interactor.save(username: username)
     }
 
     func didCompleteCheck(for username: Username, result: UsernameAvailableType) {
@@ -238,18 +231,17 @@ private extension ClaimUsernamePresenter {
 
         switch result {
         case let .available(digits):
-            availableDigits = digits
             if let first = digits.first {
                 selectedDigits = first
-                digitsFieldState = .valid
-
-                let viewModel = InputViewModel.createDigitsInputViewModel(
-                    initialValue: String(format: "%02d", first)
-                )
-                digitsViewModel = viewModel
-                view?.didReceive(digitsInputViewModel: viewModel)
-                view?.didReceive(digitsState: .valid)
+                digitsFieldState = .shown
+                view?.didReceive(digitsOptions: digits.map { String(format: "%02d", $0) })
+                view?.didReceive(digitsState: .shown)
             }
+            validateUsername()
+        case .taken where digitsFieldState == .loading,
+             .invalid where digitsFieldState == .loading:
+            digitsFieldState = .hidden
+            view?.didReceive(digitsState: .hidden)
             validateUsername()
         case .taken,
              .invalid:
@@ -266,7 +258,7 @@ private extension ClaimUsernamePresenter {
 
     func didReceive(error: ClaimUsernameInteractorError) {
         logger.error("Error: \(error)")
-        claimCancellable = nil
+        claimTask = nil
         view?.didStopLoading()
         view?.userInteraction(enabled: true)
 
@@ -274,14 +266,15 @@ private extension ClaimUsernamePresenter {
         case .claimTimeout:
             break
         case let .claimFailed(remoteError):
-            if !wireframe.present(error: remoteError, from: view) {
-                wireframe.present(
-                    message: String(localized: .claimUsernameActionError),
-                    title: String(localized: .Common.error),
-                    closeAction: String(localized: .Common.close),
-                    from: view
-                )
+            guard !wireframe.present(error: remoteError, from: view) else {
+                return
             }
+            wireframe.present(
+                message: String(localized: .claimUsernameActionError),
+                title: String(localized: .Common.error),
+                closeAction: String(localized: .Common.close),
+                from: view
+            )
         }
     }
 }

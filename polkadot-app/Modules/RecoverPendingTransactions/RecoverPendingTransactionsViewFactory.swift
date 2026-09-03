@@ -3,6 +3,7 @@ import Operation_iOS
 import Keystore_iOS
 import SDKLogger
 import SubstrateSdk
+import ChainRegistry
 
 enum RecoverPendingTransactionsViewFactory {
     @MainActor
@@ -37,6 +38,7 @@ enum RecoverPendingTransactionsViewFactory {
         )
 
         let view = RecoverPendingTransactionsViewController(presenter: presenter)
+        view.hidesBottomBarWhenPushed = true
 
         presenter.view = view
         interactor.presenter = presenter
