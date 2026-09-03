@@ -191,6 +191,7 @@ jobs:
             -scheme polkadot-appTests \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:polkadot-appTests/UserStorageMigrationV36Tests \
+            -only-testing:polkadot-appTests/PersonhoodProductContextTests \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -206,7 +207,14 @@ jobs:
       # xcodebuild's console format is not a stable contract (it differs between XCTest and
       # swift-testing and has changed across Xcode releases), so a log regex that silently stops
       # matching would reintroduce exactly the false green this step exists to prevent.
+      #
+      # A non-zero total is not sufficient here: this lane runs two suites, so if the crypto
+      # vectors silently stopped matching, the six migration tests alone would still make the
+      # count non-zero and the lane green. Every suite named in REQUIRED_SUITES must therefore be
+      # shown to have executed by name.
       - name: Assert the tests actually executed
+        env:
+          REQUIRED_SUITES: UserStorageMigrationV36Tests PersonhoodProductContextTests
         run: |
           set -o pipefail
 
@@ -217,9 +225,11 @@ jobs:
 
           xcrun xcresulttool get test-results summary \
             --path TestResults.xcresult --format json > test-summary.json
+          xcrun xcresulttool get test-results tests \
+            --path TestResults.xcresult --format json > test-tree.json
 
           python3 - <<'PY'
-          import json, sys
+          import json, os, sys
 
           summary = json.load(open("test-summary.json"))
 
@@ -240,15 +250,44 @@ jobs:
               print(f"  FAILED {case.get('testName')}: {case.get('failureText')}")
 
           if total == 0:
-              print("::error::no tests executed - the -only-testing filter matched nothing, "
-                    "or UserStorageMigrationV36Tests is not in the polkadot-appTests target")
+              print("::error::no tests executed - the -only-testing filters matched nothing, "
+                    "or the test classes are not in the polkadot-appTests target")
               sys.exit(1)
 
           if passed == 0:
               print("::error::no tests passed")
               sys.exit(1)
 
-          print(f"::notice::{passed} of {total} tests executed and passed")
+          # Walk the result tree schema-agnostically: collect every string value stored under a
+          # name-ish key, at any depth, so this survives xcresulttool changing its shape.
+          names = set()
+
+          def walk(node):
+              if isinstance(node, dict):
+                  for key, value in node.items():
+                      if key in ("name", "nodeIdentifier", "identifier") and isinstance(value, str):
+                          names.add(value)
+                      walk(value)
+              elif isinstance(node, list):
+                  for item in node:
+                      walk(item)
+
+          walk(json.load(open("test-tree.json")))
+
+          missing = [
+              suite for suite in os.environ["REQUIRED_SUITES"].split()
+              if not any(suite in name for name in names)
+          ]
+
+          if missing:
+              print(f"::error::these suites did not execute: {', '.join(missing)}")
+              print("suites seen in the result bundle:")
+              for name in sorted(n for n in names if n.endswith("Tests")):
+                  print(f"  {name}")
+              sys.exit(1)
+
+          print(f"::notice::{passed} of {total} tests executed and passed "
+                f"({os.environ['REQUIRED_SUITES']})")
           PY
 
       # Diagnostic only — never fails the job. If the assertion above ever reports zero tests, the
