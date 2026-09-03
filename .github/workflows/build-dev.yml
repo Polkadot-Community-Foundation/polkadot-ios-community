@@ -28,7 +28,11 @@ name: Build (Dev, unsigned)
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    # Stacked PRs target the in-flight sync branch rather than main, and would otherwise get no
+    # gate at all on the one lane that can actually validate them.
+    branches:
+      - main
+      - 'chore/sync-upstream-**'
 
 concurrency:
   group: build-dev-${{ github.ref }}
@@ -93,6 +97,14 @@ jobs:
           expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp"
           expect "APP_GROUP = group.pcf.polkadotapp"
 
+          # The Dev leaf includes base.release.xcconfig, which leaves ICON_SUFFIX unset on purpose
+          # so Release ships "AppIcon". Inheriting that empty default is exactly the bug this lane
+          # now guards: the build succeeds, every other check passes, and the public DEV build goes
+          # out wearing the production (black, unlabelled) icon. Assert the selection rather than
+          # trusting the xcconfig to still carry the override after the next sync.
+          expect "ICON_SUFFIX = Dev"
+          expect "ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev"
+
           # DEEPLINK is derived from BRAND_DEEPLINK by upstream's 4c1a647 refactor. An empty value
           # here flows into Info.plist's CFBundleURLSchemes and silently kills the custom scheme.
           if grep -qxE "DEEPLINK = .+" build-settings.txt; then
@@ -123,6 +135,63 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+      # -showBuildSettings proves which icon was SELECTED. It cannot prove what actool actually
+      # compiled, and this lane builds unsigned and never runs the app, so the rendered artwork is
+      # otherwise unverifiable. Pull the compiled icon out of the built bundle and publish it.
+      #
+      # Diagnostic only: the selection assertion above is the gate. actool's output layout is an
+      # Xcode implementation detail, so a layout change here must not turn the lane red.
+      - name: Extract the compiled app icon
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p icon-evidence
+
+          app=$(find ~/Library/Developer/Xcode/DerivedData \
+            -path '*/Build/Products/Dev-iphoneos/polkadot-app.app' -type d 2>/dev/null | head -1)
+          if [ -z "$app" ]; then
+            app=$(find ~/Library/Developer/Xcode/DerivedData \
+              -name 'polkadot-app.app' -type d 2>/dev/null | head -1)
+          fi
+          if [ -z "$app" ]; then
+            echo "no built polkadot-app.app found"
+            exit 0
+          fi
+          echo "app bundle: $app"
+
+          # Which icon name did the build bake into Info.plist / the asset catalog?
+          plutil -p "$app/Info.plist" 2>/dev/null \
+            | grep -iE 'icon' > icon-evidence/info-plist-icon-keys.txt
+          cat icon-evidence/info-plist-icon-keys.txt
+
+          # Loose icon files actool writes at the bundle root, plus anything .icon-shaped.
+          find "$app" -maxdepth 2 \( -iname '*icon*' \) -print > icon-evidence/bundle-icon-files.txt
+          cat icon-evidence/bundle-icon-files.txt
+
+          find "$app" -maxdepth 2 -iname 'AppIcon*.png' -exec cp {} icon-evidence/ \; 2>/dev/null
+
+          # The rendered artwork lives in Assets.car. Dump the catalog inventory, then rip out
+          # every AppIcon rendition so the shipped tile can be looked at directly.
+          if [ -f "$app/Assets.car" ]; then
+            xcrun assetutil --info "$app/Assets.car" > icon-evidence/assets-car-info.json 2>&1
+            grep -iE '"Name"|"Image Type"|AppIcon' icon-evidence/assets-car-info.json \
+              | sort -u | head -60
+          fi
+
+          echo "--- collected ---"
+          ls -la icon-evidence/
+
+      - name: Upload icon evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-icon-evidence
+          path: icon-evidence
+          retention-days: 7
+          if-no-files-found: warn
 
   # Runs in parallel with `build`: that lane targets a generic device, this one a simulator, so
   # there is no shared derived data to reuse and serialising them would only add wall clock.
