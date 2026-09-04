@@ -68,8 +68,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Builds and signs the .ipa and publishes the GitHub release marker. It deliberately
+  # does NOT hand the build to testers any more — that moved to `distribute` below, which
+  # sits behind a required-reviewer approval.
   testflight:
     runs-on: macos-15
+    outputs:
+      changelog: ${{ steps.channel.outputs.changelog }}
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
@@ -182,32 +187,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "channel: tag=$IS_TAG weekly=$IS_WEEKLY"
 
-      - name: Distribute to TestFlight group "Products Devnet"
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          # Read from the environment, never interpolated into the script body: the
-          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
-          # break out of the quoting.
-          CHANGELOG: ${{ steps.channel.outputs.changelog }}
-        run: |
-          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
-          echo "Uploading $IPA"
-          jq -n \
-            --arg key_id "$KEY_ID" \
-            --arg issuer_id "$ISSUER_ID" \
-            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
-            > asc_api_key.json
-          fastlane pilot upload \
-            --api_key_path asc_api_key.json \
-            --ipa "$IPA" \
-            --distribute_external true \
-            --groups "Products Devnet" \
-            --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
-            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
-            --changelog "$CHANGELOG"
-
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
@@ -257,3 +236,67 @@ jobs:
       #     --app "$FIREBASE_APP_ID" --groups "$FIREBASE_GROUPS"
       # authenticated via a service account with Firebase App Distribution Admin.
       # The .dev Firebase app id is 1:165923692956:ios:3d940e376173f34bd72859.
+
+  # ---- TestFlight distribution — MANUAL APPROVAL GATE --------------------------------
+  # Separate job so it can sit behind the protected `tester-distribution` environment,
+  # which carries a REQUIRED REVIEWER. Every push to the external "Products Devnet"
+  # TestFlight group now waits for a human to approve it in the Actions UI — the same
+  # shape as an npm publish approval.
+  #
+  # This is the behaviour change: previously `fastlane pilot upload --distribute_external`
+  # ran inline in the build job, so the Thursday 18:00 UTC cron handed a build to external
+  # testers with nobody in the loop. The cron is KEPT — it still builds, signs and cuts the
+  # weekly pre-release marker automatically — but the tester hand-off is now a decision.
+  #
+  # ⚠️ The gate lives in the ENVIRONMENT, not in this file. If `tester-distribution` does
+  # not exist, GitHub auto-creates it UNPROTECTED on first use and this job runs straight
+  # through, restoring the old unattended behaviour. Configure it under
+  # Settings → Environments → required reviewers.
+  distribute:
+    needs: testflight
+    runs-on: macos-15
+    environment:
+      name: tester-distribution
+      url: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+    steps:
+      - name: Download the signed .ipa
+        uses: actions/download-artifact@v4
+        with:
+          name: polkadot-ios-dev
+          path: build
+
+      - name: Install App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          KEY_B64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          mkdir -p ./private_keys ~/.appstoreconnect/private_keys
+          echo "$KEY_B64" | base64 --decode > "./private_keys/AuthKey_${KEY_ID}.p8"
+          cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
+
+      - name: Distribute to TestFlight group "Products Devnet"
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          # Read from the environment, never interpolated into the script body: the
+          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
+          # break out of the quoting.
+          CHANGELOG: ${{ needs.testflight.outputs.changelog }}
+        run: |
+          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "::error::no .ipa in the build artifact"; exit 1; }
+          echo "Uploading $IPA"
+          jq -n \
+            --arg key_id "$KEY_ID" \
+            --arg issuer_id "$ISSUER_ID" \
+            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > asc_api_key.json
+          fastlane pilot upload \
+            --api_key_path asc_api_key.json \
+            --ipa "$IPA" \
+            --distribute_external true \
+            --groups "Products Devnet" \
+            --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
+            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
+            --changelog "$CHANGELOG"
