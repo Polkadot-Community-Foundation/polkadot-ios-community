@@ -98,7 +98,17 @@ struct AssetDetailsView: View {
                 }
                 .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
 
-                topUpButton()
+                // Get CASH opens the `getcash` DotNS product (AppConfig.DotNs.dotNsGetSome).
+                // That name is not registered on devnet, so the lookup resolves to nothing and
+                // the user lands on a 404. Hidden on testnet builds only — Release defines no
+                // TESTNET_FEATURE, so the production entry point is unchanged. Delete this one
+                // gate to bring the button back once `getcash` is deployed.
+                //
+                // This is NOT the faucet: testnetTopUpButton() below is a separate feature and
+                // deliberately stays visible.
+                #if !TESTNET_FEATURE
+                    topUpButton()
+                #endif
             }
 
             #if TESTNET_FEATURE
