@@ -7,26 +7,30 @@ final class MainTabBarPresenter {
     let wireframe: MainTabBarWireframeProtocol
     let interactor: MainTabBarInteractorInputProtocol
 
-    // `.scan` must stay the centre slot: DSTabBarRow derives it as `itemCount / 2`, which holds
-    // for both arms (index 2 of 5, index 2 of 4). The trailing slot in the non-products arm
-    // balances `.scan` optically even when there are only four tabs.
     #if FEATURE_PRODUCTS
-        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .browse, .settings]
+        let slots: [TabBarSlot] = [
+            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.browse), .tab(.settings), .action(.more)
+        ]
     #else
-        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .settings]
+        let slots: [TabBarSlot] = [
+            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.settings), .action(.more)
+        ]
     #endif
 
     private let chipViewModelFactory: SPATabChipViewModelFactory
+    private let tabFactory: TabFactoryProtocol
     private var settingsBadge: TabBarBadge?
 
     init(
         interactor: MainTabBarInteractorInputProtocol,
         wireframe: MainTabBarWireframeProtocol,
-        chipViewModelFactory: SPATabChipViewModelFactory
+        chipViewModelFactory: SPATabChipViewModelFactory,
+        tabFactory: TabFactoryProtocol
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
         self.chipViewModelFactory = chipViewModelFactory
+        self.tabFactory = tabFactory
     }
 }
 
@@ -36,8 +40,19 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
     }
 
     func configureViews() {
-        view?.show(tabs: tabItems, selecting: .wallet)
+        view?.show(slots: slots, selecting: .wallet)
         view?.setBadge(settingsBadge, for: .settings)
+    }
+
+    func didRequestContentPanel(for action: TabBarAction) {
+        switch action {
+        case .scan:
+            view?.showTabBarPanelController(tabFactory.makeScanController(), for: action)
+        case .more:
+            view?.showTabBarPanelContent(TabBarPanelPlaceholderContent.make(), for: action)
+        case .spaTabs:
+            break
+        }
     }
 }
 

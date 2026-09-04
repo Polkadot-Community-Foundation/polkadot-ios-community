@@ -39,8 +39,14 @@ final class TabBarBottomChromeController: UIViewController {
     private var foldOffsetWidth: CGFloat?
     private var openPanel: TabBarPanelKind?
 
+    private var slots: [TabBarSlot] = []
+    private var slotMap = TabBarSlotMap(slots: [])
+    private var spaTabCount = 0
+    private var badges: [Int: DSTabBarItem.Badge] = [:]
+    private var selectedTabIndex = 0
+    private weak var hostedPanelController: UIViewController?
+
     var onSelect: ((_ index: Int, _ isReselection: Bool) -> Void)?
-    var onCentreHalfTapped: ((DSTabBarCentreSlot.Half) -> Void)?
     var onChipTapped: ((UUID) -> Void)?
     var onChipCloseRequested: ((UUID) -> Void)?
     var onPanelChanged: ((TabBarPanelKind?) -> Void)?
@@ -99,26 +105,36 @@ final class TabBarBottomChromeController: UIViewController {
         applyVisibility(state, animated: false, initialVelocity: 0)
     }
 
-    func setItems(_ items: [DSTabBarItem]) {
-        barView.items = items
+    func setItems(_ slots: [TabBarSlot]) {
+        self.slots = slots
+        rebuildItems()
     }
 
-    func setSelectedIndex(_ index: Int) {
-        barView.selectedIndex = index
+    /// Indices crossing this boundary are tab-space; `TabBarSlotMap` converts them.
+    func setSelectedIndex(_ tabIndex: Int) {
+        selectedTabIndex = tabIndex
+
+        guard let itemIndex = slotMap.itemIndex(forTabIndex: tabIndex) else {
+            return
+        }
+        barView.selectedIndex = itemIndex
     }
 
-    func setBadge(_ badge: DSTabBarItem.Badge?, at index: Int) {
-        barView.setBadge(badge, at: index)
+    func setBadge(_ badge: DSTabBarItem.Badge?, at tabIndex: Int) {
+        badges[tabIndex] = badge
+
+        guard let itemIndex = slotMap.itemIndex(forTabIndex: tabIndex) else {
+            return
+        }
+        barView.setBadge(badge, at: itemIndex)
     }
 
     func setSPATabs(_ chips: [DSTabBarChip], selected: UUID?) {
-        barView.spaTabCount = chips.count
-        barView.isSPAMounted = selected != nil
+        if spaTabCount != chips.count {
+            spaTabCount = chips.count
+            rebuildItems()
+        }
         tabsPanelView.setChips(chips, selected: selected)
-        barView.setCentreAccessibility(
-            qrLabel: String(localized: .Products.productTabsAccessibilityScanner),
-            tabsLabel: String(localized: .Products.productTabsAccessibilityOpenApps(chips.count))
-        )
         tabsPanelView.closeActionTitle = String(localized: .Common.close)
 
         if chips.isEmpty || availablePanelHeight <= 0 {
@@ -138,12 +154,22 @@ final class TabBarBottomChromeController: UIViewController {
         let animator = animated ? makePanelAnimator() : nil
 
         tabsPanelView.setOpen(kind == .spaTabs, animator: animator)
-        contentPanelView.setOpen(kind == .content, animator: animator)
-        barView.isPanelOpen = kind == .spaTabs
-        barView.isTrailingPanelOpen = kind == .content
+        contentPanelView.setOpen(kind?.contentAction != nil, animator: animator)
         (viewIfLoaded as? TabBarChromePassthroughView)?.isOutsideTapEnabled = kind != nil
         openPanel = kind
+        updateActiveActionIndex()
         updateGlassContainerHeight(animator: animator)
+
+        // The scanner's capture session must be released once the panel is gone, so the teardown
+        // rides the same animator and still runs when there is none (a fold closes unanimated).
+        if previousPanel?.contentAction != nil, kind?.contentAction == nil {
+            let teardown = { [weak self] in self?.clearContentPanel() }
+            if let animator {
+                animator.addCompletion { _ in teardown() }
+            } else {
+                teardown()
+            }
+        }
 
         // Every open and close routes through here — an outside tap or a fold would be missed
         // by a hook on the trailing button. An open is reported once the animation settles, so
@@ -169,8 +195,37 @@ final class TabBarBottomChromeController: UIViewController {
         setPanel(openPanel == kind ? nil : kind, animated: true)
     }
 
-    func setContentPanel(_ configuration: (any HashableContentConfiguration)?) {
+    func setContentPanel(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction) {
+        guard openPanel == .content(action) else {
+            return
+        }
+
+        detachHostedController()
         contentPanelView.setConfiguration(configuration)
+        resizeForContentPanel()
+    }
+
+    /// A camera controller needs its appearance callbacks, so it is hosted as a child rather than
+    /// wrapped in a content view.
+    func setContentController(_ controller: UIViewController?, for action: TabBarAction) {
+        guard openPanel == .content(action) else {
+            return
+        }
+
+        detachHostedController()
+
+        guard let controller else {
+            contentPanelView.setHostedView(nil, preferredHeight: nil)
+            resizeForContentPanel()
+            return
+        }
+
+        addChild(controller)
+        contentPanelView.setHostedView(controller.view, preferredHeight: availablePanelHeight)
+        controller.didMove(toParent: self)
+        hostedPanelController = controller
+
+        resizeForContentPanel()
     }
 
     func apply(
@@ -239,6 +294,65 @@ final class TabBarBottomChromeController: UIViewController {
     deinit {
         cancelAnimator(panelAnimator)
         cancelAnimator(foldAnimator)
+    }
+}
+
+// MARK: - Bar items and panel content
+
+private extension TabBarBottomChromeController {
+    /// The SPA-tabs action exists only while there are open apps, so the item list is derived
+    /// rather than stored — and with it the map every index conversion goes through.
+    func rebuildItems() {
+        let effectiveSlots = spaTabCount > 0 ? slots + [.action(.spaTabs)] : slots
+        slotMap = TabBarSlotMap(slots: effectiveSlots)
+
+        barView.items = effectiveSlots.enumerated().map { itemIndex, slot in
+            let badge = slotMap.tabIndex(forItemIndex: itemIndex).flatMap { badges[$0] }
+            return slot.makeBarItem(badge: badge, spaTabCount: spaTabCount)
+        }
+
+        setSelectedIndex(selectedTabIndex)
+        updateActiveActionIndex()
+    }
+
+    func updateActiveActionIndex() {
+        barView.activeActionIndex =
+            switch openPanel {
+            case .spaTabs:
+                slotMap.itemIndex(for: .spaTabs)
+            case let .content(action):
+                slotMap.itemIndex(for: action)
+            case nil:
+                nil
+            }
+    }
+
+    /// Content arrives after the open animation settles, so the panel grows to fit it.
+    func resizeForContentPanel() {
+        guard openPanel?.contentAction != nil else {
+            return
+        }
+
+        let animator = makePanelAnimator()
+        updateGlassContainerHeight(animator: animator)
+        animator.startAnimation()
+    }
+
+    func clearContentPanel() {
+        detachHostedController()
+        contentPanelView.setHostedView(nil, preferredHeight: nil)
+        contentPanelView.setConfiguration(nil)
+    }
+
+    func detachHostedController() {
+        guard let controller = hostedPanelController else {
+            return
+        }
+
+        controller.willMove(toParent: nil)
+        controller.view.removeFromSuperview()
+        controller.removeFromParent()
+        hostedPanelController = nil
     }
 }
 
@@ -465,16 +579,22 @@ private extension TabBarBottomChromeController {
             make.height.equalTo(DSTabBarView.capsuleHeight)
         }
 
-        barView.onSelect = { [weak self] index, isReselection in
-            self?.onSelect?(index, isReselection)
-        }
-
         barView.onFoldChangeRequested = { [weak self] folded, velocityX in
             self?.setUserOverride(folded ? .folded : .shown, velocityX: velocityX)
         }
 
-        barView.onCentreHalfTapped = { [weak self] half in
-            self?.onCentreHalfTapped?(half)
+        barView.onSelect = { [weak self] itemIndex, isReselection in
+            guard let self, let tabIndex = slotMap.tabIndex(forItemIndex: itemIndex) else {
+                return
+            }
+            onSelect?(tabIndex, isReselection)
+        }
+
+        barView.onActionTapped = { [weak self] itemIndex in
+            guard let self, let action = slotMap.action(forItemIndex: itemIndex) else {
+                return
+            }
+            togglePanel(action == .spaTabs ? .spaTabs : .content(action))
         }
     }
 

@@ -54,11 +54,11 @@ final class MainTabBarViewController: UIViewController {
             self?.handleSelection(index: index, isReselection: isReselection)
         }
 
-        chromeController.onCentreHalfTapped = { [weak self] half in
-            guard let self, half == .tabs else {
+        chromeController.onPanelChanged = { [weak self] kind in
+            guard let action = kind?.contentAction else {
                 return
             }
-            chromeController.togglePanel(.spaTabs)
+            self?.presenter.didRequestContentPanel(for: action)
         }
 
         chromeController.onChipTapped = { [weak self] id in
@@ -269,8 +269,8 @@ extension MainTabBarViewController {
 // MARK: - MainTabBarViewProtocol
 
 extension MainTabBarViewController: MainTabBarViewProtocol {
-    func show(tabs: [TabBarItem], selecting tab: TabBarItem) {
-        let content = tabs.compactMap { item in
+    func show(slots: [TabBarSlot], selecting tab: TabBarItem) {
+        let content = slots.compactMap(\.tab).compactMap { item in
             viewFactory.view(for: item).map { (item: item, controller: $0) }
         }
         content.forEach { entry in
@@ -278,12 +278,13 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
             (entry.controller as? AppNavigationController)?.transitionObserver = self
         }
 
-        self.tabs = content.map(\.item)
+        tabs = content.map(\.item)
 
-        let index = self.tabs.firstIndex(of: tab) ?? 0
+        let index = tabs.firstIndex(of: tab) ?? 0
 
-        chromeController.setItems(self.tabs.map { $0.makeBarItem(badge: badges[$0]) })
+        chromeController.setItems(slots)
         chromeController.setSelectedIndex(index)
+        badges.forEach { setBadge($0.value, for: $0.key) }
         container.setControllers(content.map(\.controller), selecting: index)
         reconcileChromeWithSelectedTab()
     }
@@ -316,8 +317,12 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         applyChips()
     }
 
-    func showTabBarPanelContent(_ configuration: (any HashableContentConfiguration)?) {
-        chromeController.setContentPanel(configuration)
+    func showTabBarPanelContent(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction) {
+        chromeController.setContentPanel(configuration, for: action)
+    }
+
+    func showTabBarPanelController(_ controller: UIViewController?, for action: TabBarAction) {
+        chromeController.setContentController(controller, for: action)
     }
 
     func showChainStatus(_ models: [ChainConnectionStatusViewModel]) {
