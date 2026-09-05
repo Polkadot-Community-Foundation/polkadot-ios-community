@@ -147,16 +147,29 @@ extension TransferAmountPresenter: TransferAmountInteractorOutputProtocol {
 @MainActor
 private extension TransferAmountPresenter {
     func provideAvailableBalance() {
-        guard let maxAmount = calculateMax() else {
+        guard let breakdown = spendableBreakdown else {
             return
         }
 
-        let amount = balanceViewModelFactory.plainAmountFromValue(maxAmount).value(for: .current)
+        // `Max:` shows what costs no privacy to spend; the gaining-privacy extra is surfaced as a hint.
+        let amount = balanceViewModelFactory.plainAmountFromValue(breakdown.availablePrivate).value(for: .current)
         view?.didReceive(availableBalance: amount)
+        providePrivacyHint(breakdown: breakdown)
     }
 
+    func providePrivacyHint(breakdown: TransferSpendableBreakdown) {
+        guard breakdown.gainingPrivacy > 0 else {
+            view?.didReceive(privacyHint: nil)
+            return
+        }
+        let formatted = balanceViewModelFactory.plainAmountFromValue(breakdown.gainingPrivacy).value(for: .current)
+        view?.didReceive(privacyHint: String(localized: .Transfer.privacyCostHint(formatted)))
+    }
+
+    /// The input cap: everything reachable, so the field accepts amounts into the gaining-privacy range
+    /// (a spend there is then gated behind the confirmation sheet).
     func calculateMax() -> BigUInt? {
-        spendableBreakdown.map { $0.secured + $0.lowPrivacy }
+        spendableBreakdown.map { $0.availablePrivate + $0.gainingPrivacy }
     }
 
     func provideInputAmount() {
@@ -272,12 +285,32 @@ private extension TransferAmountPresenter {
             guard let self else { return }
             do {
                 let validation = try await interactor.previewTransfer(for: amount)
-                doSubmit(validation: validation)
+                if validation.requiresPrivacyConfirmation {
+                    presentPrivacyConfirmation(validation: validation, amount: amount)
+                } else {
+                    doSubmit(validation: validation)
+                }
             } catch {
                 view?.didStopSubmission()
                 showTransferFailed(error)
             }
         }
+    }
+
+    /// The spend dips into gaining-privacy funds: confirm before submitting, matching Android's
+    /// "This payment might reduce your privacy" sheet.
+    func presentPrivacyConfirmation(validation: TransferPreviewValidation, amount _: Decimal) {
+        let amountText = formattedAmount(validation.fullAmount)
+        wireframe.showGainingPrivacyConfirmation(
+            from: view,
+            amount: amountText,
+            onSendAnyway: { [weak self] in
+                self?.doSubmit(validation: validation)
+            },
+            onCancel: { [weak self] in
+                self?.view?.didStopSubmission()
+            }
+        )
     }
 
     func doSubmit(validation: TransferPreviewValidation) {
@@ -355,12 +388,12 @@ private extension TransferAmountPresenter {
     }
 
     func buildBalanceInfoModel(breakdown: TransferSpendableBreakdown) -> BalanceInfoModel {
-        let total = breakdown.secured + breakdown.lowPrivacy + (lockedBalance ?? 0)
+        let total = breakdown.availablePrivate + breakdown.gainingPrivacy + (lockedBalance ?? 0)
         let totalStr = formattedAmount(total)
-        let availableNowDecimal = breakdown.secured + breakdown.lowPrivacy
+        let availableNowDecimal = breakdown.availablePrivate + breakdown.gainingPrivacy
         let availableNowStr = formattedAmount(availableNowDecimal)
-        let securedStr = formattedAmount(breakdown.secured)
-        let lowPrivacyStr = formattedAmount(breakdown.lowPrivacy)
+        let availablePrivateStr = formattedAmount(breakdown.availablePrivate)
+        let gainingPrivacyStr = formattedAmount(breakdown.gainingPrivacy)
 
         var availableSoonStr: String?
         if let locked = lockedBalance, locked > 0 {
@@ -370,8 +403,8 @@ private extension TransferAmountPresenter {
         return BalanceInfoModel(
             totalBalance: totalStr,
             availableNow: availableNowStr,
-            secured: securedStr,
-            lowPrivacy: lowPrivacyStr,
+            availablePrivate: availablePrivateStr,
+            gainingPrivacy: gainingPrivacyStr,
             availableSoon: availableSoonStr
         )
     }

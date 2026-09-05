@@ -200,15 +200,15 @@ private extension TransferAmountInteractor {
             do {
                 let balanceService = try await service.coinageBalanceService()
                 for try await balance in balanceService.balanceStream {
-                    // `secured` is spendable at no privacy cost; `lowPrivacy` is the gaining-privacy
+                    // `availablePrivate` is spendable at no privacy cost; `gainingPrivacy` is the
                     // funds this strategy would still release behind a confirmation (none under max
                     // privacy). Together they form the reachable amount.
-                    let lowPrivacy = balance.gainingPrivacy.canSpendWithConfirmation
+                    let gainingPrivacy = balance.gainingPrivacy.canSpendWithConfirmation
                         ? balance.gainingPrivacy.amount
                         : 0
                     let breakdown = TransferSpendableBreakdown(
-                        secured: balance.availablePrivate,
-                        lowPrivacy: lowPrivacy
+                        availablePrivate: balance.availablePrivate,
+                        gainingPrivacy: gainingPrivacy
                     )
                     await self?.presenter?.didReceive(spendableBreakdown: breakdown)
                     await self?.presenter?.didReceive(lockedBalance: balance.pending)

@@ -313,20 +313,30 @@ extension CoinageService: CoinageServicing {
         let coins = try await coinService.fetchAllTrackedCoins()
         let vouchers = try await voucherService.fetchAllTracked()
 
-        let (availableCoins, availableVouchers) = await selectableAssets(
-            coins: coins,
-            vouchers: vouchers,
-            scope: .spendable
-        )
+        // Spendable first; widen to gaining-privacy funds only if spendable cannot cover the amount.
+        // Under `maxPrivacy` the selector never widens, so the second pass is a no-op and the loop
+        // still terminates in `insufficientFunds`.
+        for scope in [SpendScope.spendable, .withConfirmation] {
+            let (availableCoins, availableVouchers) = await selectableAssets(
+                coins: coins,
+                vouchers: vouchers,
+                scope: scope
+            )
 
-        let result = try await senderService.previewStrategy(
-            amount: amount,
-            availableCoins: availableCoins,
-            availableVouchers: availableVouchers,
-            breakdownContext: denominationContext
-        )
+            do {
+                let result = try await senderService.previewStrategy(
+                    amount: amount,
+                    availableCoins: availableCoins,
+                    availableVouchers: availableVouchers,
+                    breakdownContext: denominationContext
+                )
+                return TransferPreview(selectionResult: result, fullAmount: amount, scope: scope)
+            } catch CoinSelectionError.insufficientFunds, CoinSelectionError.emptyWallet {
+                continue
+            }
+        }
 
-        return TransferPreview(selectionResult: result, fullAmount: amount)
+        throw CoinSelectionError.insufficientFunds
     }
 
     public func executeTransfer(
