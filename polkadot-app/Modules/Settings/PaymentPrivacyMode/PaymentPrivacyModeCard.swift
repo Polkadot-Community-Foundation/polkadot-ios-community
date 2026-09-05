@@ -4,16 +4,27 @@ import DesignSystem
 import Coinage
 
 /// Inline "Payments Privacy Mode" row — the first cell of the Security & Privacy group (the enclosing
-/// layout supplies the grouped-cell surface). Three modes on a connected track you can tap or slide
-/// between, with a description card reflecting the selection.
+/// layout supplies the grouped-cell surface). Three modes as lit spheres resting in a recessed groove that
+/// carries a stepped speed-to-privacy scale; tap a mode to switch in place, or drag a sphere and it snaps
+/// to the nearest mode on release. A description card reflects the selection.
 ///
 /// A dumb view: it renders the ``selected`` mode supplied by the Settings view model and reports user
-/// input through ``onSelect``; the presenter/interactor own persistence and re-gating.
+/// input through ``onSelect``; the presenter/interactor own persistence and re-gating. Mirrors the Android
+/// `PaymentPrivacyModeSelector` redesign.
 struct PaymentPrivacyModeCard: View {
     let selected: RecyclingStrategyType
     let onSelect: (RecyclingStrategyType) -> Void
 
     private let modes = RecyclingStrategyType.allCases
+
+    /// Fractional mode index under the finger while dragging; `nil` when the selection is settled.
+    @State private var dragFraction: CGFloat?
+    /// The scale mark the drag last crossed — the haptic grain of a drag.
+    @State private var markIndex = 0
+    /// How long the dragged sphere's glyph/accent cross-fade runs, shortened as the drag speeds up.
+    @State private var dragFadeDuration = Metrics.slowDragFade
+    @State private var lastDragX: CGFloat?
+    @State private var lastDragTime: Date?
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSSpacings.mediumIncreased) {
@@ -25,9 +36,11 @@ struct PaymentPrivacyModeCard: View {
         .padding(.top, DSSpacings.small)
         .padding(.bottom, DSSpacings.mediumIncreased)
         .sensoryFeedback(.selection, trigger: selected)
-        .animation(.easeOut(duration: 0.18), value: selected)
+        .sensoryFeedback(.selection, trigger: markIndex)
     }
 }
+
+// MARK: - Header
 
 private extension PaymentPrivacyModeCard {
     var header: some View {
@@ -50,77 +63,106 @@ private extension PaymentPrivacyModeCard {
 private extension PaymentPrivacyModeCard {
     var selector: some View {
         VStack(spacing: DSSpacings.small) {
-            track
-            markers
-        }
-    }
-
-    var track: some View {
-        GeometryReader { geo in
-            ZStack {
-                Capsule()
-                    .fill(.bgSurfaceMain)
-                    .overlay(Capsule().stroke(.strokePrimary, lineWidth: 1))
-
-                gradientLine
-                    .padding(.horizontal, geo.size.width / 6)
-
-                HStack(spacing: 0) {
-                    ForEach(modes, id: \.self) { mode in
-                        knob(mode)
-                            .frame(maxWidth: .infinity)
-                    }
+            GeometryReader { geo in
+                let width = geo.size.width
+                ZStack {
+                    trackGroove(width: width)
+                    TickScale(start: centerX(0, width: width), end: centerX(lastIndex, width: width))
+                    circles(width: width)
                 }
+                .frame(width: width, height: Metrics.boxHeight)
+                .contentShape(Rectangle())
+                .gesture(dragGesture(width: width))
             }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in select(atPositionX: value.location.x, width: geo.size.width) }
-            )
+            .frame(height: Metrics.boxHeight)
+
+            GeometryReader { geo in
+                markersRow(width: geo.size.width)
+            }
+            .frame(height: Metrics.selectedMarker + Metrics.markerGlowBlur)
+
+            labelsRow
         }
-        .frame(height: 44)
     }
 
-    var gradientLine: some View {
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: modes.map(\.displayAccentColor),
-                    startPoint: .leading,
-                    endPoint: .trailing
+    func trackGroove(width: CGFloat) -> some View {
+        // The floor is the card's own surface taken a shade down — a recess, not a darker token that would
+        // read as a hole punched through the card. Depth comes from the two inner shadows below.
+        let floor = Color.bgSurfaceContainer.blended(with: .bgSurfaceMain, fraction: 0.4)
+        // Two copies of the groove a point above and below it, covered by the opaque floor: what stays
+        // visible is the lit lip along the top and bottom edges only, never a full outline.
+        return ZStack {
+            Capsule().fill(Color.bgSurfaceNested).offset(y: -1)
+            Capsule().fill(Color.bgSurfaceNested).offset(y: 1)
+            Capsule()
+                .fill(
+                    floor
+                        .shadow(.inner(color: .shadowMedium.opacity(0.5), radius: 6, y: 3))
+                        .shadow(.inner(color: .shadowMedium.opacity(0.5), radius: 5, y: 7))
                 )
-            )
-            .frame(height: 4)
+        }
+        .frame(width: width, height: Metrics.trackHeight)
     }
 
-    func knob(_ mode: RecyclingStrategyType) -> some View {
-        let isSelected = mode == selected
-        let size: CGFloat = isSelected ? 40 : 28
-        return Image(systemName: mode.displayIconName)
-            .font(.system(size: isSelected ? 18 : 13, weight: .semibold))
-            .foregroundStyle(mode.displayAccentColor)
-            .frame(width: size, height: size)
-            .background(mode.displayFillColor, in: Circle())
-            .overlay(Circle().stroke(mode.displayAccentColor, lineWidth: isSelected ? 1.5 : 1))
-            .shadow(color: isSelected ? mode.displayAccentColor.opacity(0.6) : .clear, radius: 8)
-    }
-
-    var markers: some View {
-        HStack(spacing: 0) {
-            ForEach(modes, id: \.self) { mode in
-                VStack(spacing: DSSpacings.extraTiny) {
-                    Image(systemName: "triangle.fill")
-                        .font(.system(size: 6))
-                        .foregroundStyle(mode == selected ? mode.displayAccentColor : .fgTertiary)
-
-                    Text(mode.displayTitle)
-                        .typography(.bodySmallEmphasized)
-                        .foregroundStyle(mode == selected ? .fgPrimary : .fgSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                .frame(maxWidth: .infinity)
+    func circles(width: CGFloat) -> some View {
+        ZStack {
+            ForEach(Array(modes.enumerated()), id: \.element) { index, mode in
+                ModeCircleView(
+                    mode: mode,
+                    isSelected: index == highlightedIndex,
+                    hasGlow: dragFraction == nil && index == selectedIndex
+                )
+                // While dragging, the covered mode hands its place to the dragged sphere below.
+                .opacity(dragFraction != nil && index == highlightedIndex ? 0 : 1)
+                .position(x: centerX(CGFloat(index), width: width), y: Metrics.boxHeight / 2)
             }
+
+            if let fraction = dragFraction {
+                ModeCircleView(
+                    mode: modes[highlightedIndex],
+                    isSelected: true,
+                    hasGlow: false,
+                    fadeDuration: dragFadeDuration
+                )
+                .position(x: centerX(fraction, width: width), y: Metrics.boxHeight / 2)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: highlightedIndex)
+        .animation(.easeInOut(duration: 0.2), value: dragFraction == nil)
+    }
+
+    /// Triangles pinned under their spheres at the inset-based centres, so a marker stays under its mode.
+    func markersRow(width: CGFloat) -> some View {
+        ZStack {
+            ForEach(Array(modes.enumerated()), id: \.element) { index, mode in
+                ModeMarkerView(mode: mode, isSelected: index == highlightedIndex)
+                    .position(x: centerX(CGFloat(index), width: width), y: Metrics.selectedMarker / 2)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: highlightedIndex)
+    }
+
+    /// Equal-width label columns; the outer labels hug the track ends the way their spheres do, only the
+    /// middle one is free to centre.
+    var labelsRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(modes.enumerated()), id: \.element) { index, mode in
+                Text(mode.displayTitle)
+                    .typography(.bodySmallEmphasized)
+                    .foregroundStyle(index == highlightedIndex ? .fgPrimary : .fgSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: labelAlignment(index))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: highlightedIndex)
+    }
+
+    func labelAlignment(_ index: Int) -> Alignment {
+        switch index {
+        case 0: .leading
+        case modes.count - 1: .trailing
+        default: .center
         }
     }
 }
@@ -142,20 +184,91 @@ private extension PaymentPrivacyModeCard {
         .padding(.horizontal, DSSpacings.mediumIncreased)
         .padding(.vertical, DSSpacings.extraMedium)
         .background(.bgSurfaceNested, in: RoundedRectangle(cornerRadius: DSRadii.extraMedium, style: .continuous))
+        .animation(.easeOut(duration: 0.18), value: selected)
     }
 }
 
-// MARK: - Interaction
+// MARK: - Geometry & interaction
 
 private extension PaymentPrivacyModeCard {
-    /// Maps the touch x-position to the nearest mode, so tapping and sliding both select.
-    func select(atPositionX positionX: CGFloat, width: CGFloat) {
-        guard width > 0 else { return }
-        let ratio = min(max(positionX / width, 0), 0.999)
-        let index = Int(ratio * CGFloat(modes.count))
-        let mode = modes[index]
-        guard mode != selected else { return }
-        onSelect(mode)
+    var selectedIndex: Int { modes.firstIndex(of: selected) ?? 0 }
+    var lastIndex: CGFloat { CGFloat(modes.count - 1) }
+
+    /// The mode the visuals track: the one nearest the finger while dragging, else the settled selection.
+    var highlightedIndex: Int {
+        guard let fraction = dragFraction else { return selectedIndex }
+        return Int(fraction.rounded())
+    }
+
+    /// Centre of a (possibly fractional) mode position: inset from each edge by half a sphere, then evenly
+    /// spread — so the outer modes sit `inset` from the track ends, not a full column-width in.
+    func centerX(_ position: CGFloat, width: CGFloat) -> CGFloat {
+        Metrics.inset + position * trackStep(width: width)
+    }
+
+    /// Distance between neighbouring mode centres.
+    func trackStep(width: CGFloat) -> CGFloat {
+        guard modes.count > 1 else { return 0 }
+        return (width - Metrics.inset * 2) / lastIndex
+    }
+
+    /// A single gesture that reads a tap and a drag apart: a touch that never crosses the slop selects the
+    /// mode it lands on in place (`dragFraction` stays nil, so nothing travels), while one that does moves a
+    /// sphere under the finger and snaps to the nearest mode on release.
+    func dragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard dragFraction != nil || abs(value.translation.width) >= 8 else { return }
+                if dragFraction == nil { beginDrag() }
+                trackSpeed(locationX: value.location.x, time: value.time, width: width)
+
+                let fraction = fractionAt(value.location.x, width: width)
+                dragFraction = fraction
+
+                let scaleStart = centerX(0, width: width)
+                markIndex = max(0, Int((centerX(fraction, width: width) - scaleStart) / Metrics.tickStep))
+            }
+            .onEnded { value in
+                let target = dragFraction.map { Int($0.rounded()) }
+                    ?? Int(fractionAt(value.location.x, width: width).rounded())
+                dragFraction = nil
+                lastDragX = nil
+                lastDragTime = nil
+                let mode = modes[target]
+                guard mode != selected else { return }
+                onSelect(mode)
+            }
+    }
+
+    func beginDrag() {
+        dragFadeDuration = Metrics.slowDragFade
+        lastDragX = nil
+        lastDragTime = nil
+    }
+
+    /// Follows the finger's speed in mode-widths per second and eases the cross-fade duration towards its
+    /// fast end, smoothed so a single jittery sample does not swing it. Mirrors Android's `DragFade`.
+    func trackSpeed(locationX: CGFloat, time: Date, width: CGFloat) {
+        defer {
+            lastDragX = locationX
+            lastDragTime = time
+        }
+        guard let previousX = lastDragX, let previousTime = lastDragTime else { return }
+        let elapsed = time.timeIntervalSince(previousTime)
+        let step = trackStep(width: width)
+        guard elapsed > 0, step > 0 else { return }
+
+        let speed = abs(locationX - previousX) / step / CGFloat(elapsed)
+        let reach = min(max(speed / Metrics.fastDragSpeed, 0), 1)
+        let target = Metrics.slowDragFade + (Metrics.fastDragFade - Metrics.slowDragFade) * Double(reach)
+        dragFadeDuration += (target - dragFadeDuration) * 0.4
+    }
+
+    /// The fractional mode index at a touch x, clamped to the outer modes.
+    func fractionAt(_ locationX: CGFloat, width: CGFloat) -> CGFloat {
+        let step = trackStep(width: width)
+        guard step > 0 else { return 0 }
+        return min(max((locationX - Metrics.inset) / step, 0), lastIndex)
     }
 }
 
