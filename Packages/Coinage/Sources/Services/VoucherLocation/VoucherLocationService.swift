@@ -16,19 +16,22 @@ import os
 
 /// A service that monitors local vouchers and synchronizes their on-chain status.
 ///
-/// This service performs two primary synchronization tasks:
-/// 1. **Location Resolution**: For vouchers missing recycler information, it queries the chain to find which
-///    recycler and revision the voucher's public key is associated with.
-/// 2. **Pending Status Resolution**: For vouchers marked as pending, it monitors the recycler's pending queue.
-///    Once the voucher's public key is removed from the chain's pending list, the local record is updated
-///    to `isPending = false`.
+/// Tracks every voucher the durability layer still cares about (`shouldTrackOnchain` — not spent, not
+/// mint-failed), not just those outside a recycler: a ring keeps filling after a voucher lands in it, and
+/// the member count is what the strategies read to decide when it may be spent. Two-phase per batch, held
+/// together entirely by stream operators (the port of Android's `flatMapLatest`) rather than in-memory
+/// reconciliation:
+/// 1. **Members**: subscribe `Members[collection][voucherPubKey]` for every voucher and `scan` the
+///    per-key deltas into a complete positions snapshot.
+/// 2. **RingKeysStatus**: `flatMapLatest` re-derives the ring-status subscription from the current
+///    positions and `scan`s its deltas into a complete status snapshot, then joins the two snapshots into
+///    the resolved location — onboarding, or in-recycler(ringIndex, ringMembers).
 public final class VoucherLocationService: BaseSyncService {
     private let instanceId: CoinageInstanceId
     private let voucherRepository: AnyDataProviderRepository<Voucher>
     private let databaseFactory: any DatabaseDependencyFactoring
     private let connection: JSONRPCEngine
     private let runtimeService: RuntimeCodingServiceProtocol
-    private let stateLock = OSAllocatedUnfairLock(initialState: SyncStateData())
 
     private var localVouchersMonitoringTask: Task<Void, Error>?
     private var voucherStatusSubscriptionTask: Task<Void, Error>?
@@ -53,15 +56,14 @@ public final class VoucherLocationService: BaseSyncService {
         stopSyncUp()
     }
 
-    /// Begins monitoring the local database for vouchers not yet in a recycler, resolving their
-    /// on-chain location (onboarding → in-recycler) in a single subscription batch.
+    /// Begins monitoring the local database for vouchers worth tracking on chain (`shouldTrackOnchain`),
+    /// resolving their location (onboarding → in-recycler) and refreshing the ring member count.
     override public func performSyncUp() {
         localVouchersMonitoringTask = Task { [weak self] in
             guard let self else { return }
 
             let stream = databaseFactory.makeTrackedVoucherSnapshotStream()
-                .map { $0.map(\.voucher) }
-                .map { vouchers in vouchers.filter { !$0.remoteState.isInRecycler } }
+                .map { $0.filter(\.shouldTrackOnchain).map(\.voucher) }
                 // Resubscribe only when the tracked key-set changes; non-key voucher edits keep the
                 // existing subscription.
                 .removeDuplicates { previous, current in
@@ -69,19 +71,16 @@ public final class VoucherLocationService: BaseSyncService {
                 }
 
             for try await vouchers in stream {
+                voucherStatusSubscriptionTask?.cancel()
+
                 guard !vouchers.isEmpty else {
                     logger.debug("Voucher sync stopped")
-                    voucherStatusSubscriptionTask?.cancel()
                     continue
                 }
                 try Task.checkCancellation()
 
-                do {
-                    logger.debug("Voucher sync started")
-                    try await sync(vouchers)
-                } catch {
-                    logger.error("Voucher sync failed during monitoring: \(error)")
-                }
+                logger.debug("Voucher sync started")
+                startLocationSync(for: vouchers)
             }
         }
     }
@@ -89,27 +88,109 @@ public final class VoucherLocationService: BaseSyncService {
     override public func stopSyncUp() {
         localVouchersMonitoringTask?.cancel()
         voucherStatusSubscriptionTask?.cancel()
-        stateLock.withLock { $0 = SyncStateData() }
     }
 }
 
 extension VoucherLocationService {
-    /// Generates storage subscription requests for vouchers that are not yet `.inRecycler`.
-    /// Subscribes to Members[identifier][voucherPubKey] to detect Onboarding -> Included transitions.
-    func memberRequests(_ vouchers: [Voucher]) throws -> [BatchStorageSubscriptionRequest] {
-        let pending = vouchers.filter { !$0.remoteState.isInRecycler }
+    private func startLocationSync(for vouchers: [Voucher]) {
+        voucherStatusSubscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await runLocationPipeline(for: vouchers)
+            } catch is CancellationError {
+                // Expected: superseded by a newer tracked-voucher set.
+            } catch {
+                logger.error("Voucher sync failed during monitoring: \(error)")
+            }
+        }
+    }
 
-        guard !pending.isEmpty else {
-            return []
+    /// The reactive two-phase pipeline. `scan` keeps a complete positions snapshot up to date from the
+    /// member subscription's deltas; `flatMapLatest` re-derives the ring-status subscription whenever the
+    /// positions change and `scan`s its deltas into a complete status snapshot. Joining the two is a pure
+    /// function, so nothing needs to be reconciled by hand between emissions.
+    private func runLocationPipeline(for vouchers: [Voucher]) async throws {
+        let memberReqs = try memberRequests(vouchers)
+        guard !memberReqs.isEmpty else { return }
+
+        let memberStream: AnyAsyncSequence<MemberStatusResult> = CallbackBatchStorageSubscription
+            .asyncStream(
+                requests: memberReqs,
+                connection: connection,
+                runtimeService: runtimeService,
+                logger: logger
+            )
+
+        let positionsStream = memberStream.scan([DerivationIndex: MembersPallet.RingPosition]()) { positions, result in
+            var positions = positions
+            for update in result.ringPositionUpdates {
+                positions[update.derivationIndex] = update.ringPosition
+            }
+            return positions
         }
 
-        return pending.map { voucher in
+        let resolvedStream = positionsStream
+            .flatMapLatest { [weak self] positions -> AnyAsyncSequence<[DerivationIndex: Voucher.OnChainState]> in
+                guard let self else {
+                    return AsyncEmptySequence().eraseToAnyAsyncSequence()
+                }
+                return resolvedLocationsStream(positions: positions, vouchers: vouchers)
+            }
+            .removeDuplicates { $0 == $1 }
+
+        for try await locations in resolvedStream {
+            try Task.checkCancellation()
+            try await writeLocations(locations)
+        }
+    }
+
+    /// Subscribes to `RingKeysStatus` for the rings the current positions land in, `scan`s the deltas into
+    /// a complete status snapshot, and resolves each voucher's location against it. When no voucher is yet
+    /// placed in a ring, emits the onboarding-only resolution once so those writes still happen.
+    private func resolvedLocationsStream(
+        positions: [DerivationIndex: MembersPallet.RingPosition],
+        vouchers: [Voucher]
+    ) -> AnyAsyncSequence<[DerivationIndex: Voucher.OnChainState]> {
+        let voucherByIndex = Dictionary(uniqueKeysWithValues: vouchers.map { ($0.derivationIndex, $0) })
+        let requests = ringStatusRequests(positions: positions, voucherByIndex: voucherByIndex)
+
+        guard !requests.isEmpty else {
+            let resolved = Self.resolveLocations(positions: positions, statuses: [:])
+            return AsyncJustSequence(resolved).eraseToAnyAsyncSequence()
+        }
+
+        let statusStream: AnyAsyncSequence<MemberStatusResult> = CallbackBatchStorageSubscription
+            .asyncStream(
+                requests: requests,
+                connection: connection,
+                runtimeService: runtimeService,
+                logger: logger
+            )
+
+        return statusStream
+            .scan([DerivationIndex: MembersPallet.RingKeysStatus]()) { statuses, result in
+                var statuses = statuses
+                for update in result.ringStatusUpdates {
+                    statuses[update.derivationIndex] = update.ringKeysStatus
+                }
+                return statuses
+            }
+            .map { Self.resolveLocations(positions: positions, statuses: $0) }
+            .eraseToAnyAsyncSequence()
+    }
+}
+
+// MARK: - Requests
+
+extension VoucherLocationService {
+    /// Subscribes to `Members[identifier][voucherPubKey]` for every tracked voucher — including those
+    /// already in a recycler, so a ring that keeps filling refreshes the voucher's position and member
+    /// count. Detects Onboarding -> Included transitions and in-ring member growth.
+    func memberRequests(_ vouchers: [Voucher]) throws -> [BatchStorageSubscriptionRequest] {
+        vouchers.map { voucher in
             let publicKey = voucher.publicKey
             let collectionId = RecyclerCollectionIdentifier.identifier(instanceId: instanceId, for: voucher.exponent)
-
-            let mappingKey = SubscriptionKey.member(
-                derivationIndex: voucher.derivationIndex
-            ).mappingKey
+            let mappingKey = SubscriptionKey.member(derivationIndex: voucher.derivationIndex).mappingKey
 
             let innerRequest = DoubleMapSubscriptionRequest(
                 storagePath: MembersPallet.Storage.members(),
@@ -126,14 +207,14 @@ extension VoucherLocationService {
         }
     }
 
-    private func ringStatusRequests(snapshot: SyncSnapshot) -> [BatchStorageSubscriptionRequest] {
-        var requests: [BatchStorageSubscriptionRequest] = []
-
-        // Transitioning vouchers: ring position accumulated, need ringKeysStatus to confirm ring index.
-        for (derivationIndex, ringPosition) in snapshot.accumulatedRingPositions {
-            guard let ringIndex = ringPosition.ringIndex,
-                  let voucher = snapshot.pendingVouchers.first(where: { $0.derivationIndex == derivationIndex })
-            else { continue }
+    private func ringStatusRequests(
+        positions: [DerivationIndex: MembersPallet.RingPosition],
+        voucherByIndex: [DerivationIndex: Voucher]
+    ) -> [BatchStorageSubscriptionRequest] {
+        positions.compactMap { derivationIndex, position in
+            guard let ringIndex = position.ringIndex,
+                  let voucher = voucherByIndex[derivationIndex]
+            else { return nil }
 
             let collectionId = RecyclerCollectionIdentifier.identifier(instanceId: instanceId, for: voucher.exponent)
             let mappingKey = SubscriptionKey.ringStatus(derivationIndex: derivationIndex).mappingKey
@@ -149,180 +230,51 @@ extension VoucherLocationService {
                 }
             )
 
-            requests.append(BatchStorageSubscriptionRequest(innerRequest: innerRequest, mappingKey: mappingKey))
+            return BatchStorageSubscriptionRequest(innerRequest: innerRequest, mappingKey: mappingKey)
         }
-
-        return requests
     }
+}
 
-    /// Orchestrates the blockchain subscription for a set of vouchers.
-    /// Cancels existing subscriptions and creates a new batch request for locations and pending
-    /// statuses in a single subscription.
-    private func sync(_ vouchers: [Voucher]) async throws {
-        voucherStatusSubscriptionTask?.cancel()
+// MARK: - Resolution & persistence
 
-        let snapshot = stateLock.withLock { state -> SyncSnapshot in
-            // Drop accumulated state for vouchers no longer monitored to avoid stale ring status subscriptions.
-            let currentIndices = Set(vouchers.map(\.derivationIndex))
-            state.accumulatedRingPositions = state.accumulatedRingPositions.filter { currentIndices.contains($0.key) }
-            state.accumulatedRingStatuses = state.accumulatedRingStatuses.filter { currentIndices.contains($0.key) }
-            state.pendingVouchers = vouchers
-            // Reset baseline so the resubscription diff check reflects what this batch actually subscribes to.
-            state.subscribedDerivationIndices = Set(state.accumulatedRingPositions.keys)
-            return SyncSnapshot(
-                pendingVouchers: state.pendingVouchers,
-                accumulatedRingPositions: state.accumulatedRingPositions,
-                accumulatedRingStatuses: state.accumulatedRingStatuses,
-            )
-        }
+extension VoucherLocationService {
+    /// Pure join of the two snapshots: an included voucher whose ring status confirms its key becomes
+    /// in-recycler with the real member count; an included-but-not-yet-confirmed voucher is deferred (no
+    /// write); anything else is still onboarding.
+    static func resolveLocations(
+        positions: [DerivationIndex: MembersPallet.RingPosition],
+        statuses: [DerivationIndex: MembersPallet.RingKeysStatus]
+    ) -> [DerivationIndex: Voucher.OnChainState] {
+        positions.reduce(into: [:]) { resolved, entry in
+            let (derivationIndex, position) = entry
 
-        let memberReqs = try memberRequests(vouchers)
-        let allRequests = memberReqs + ringStatusRequests(snapshot: snapshot)
-
-        guard !allRequests.isEmpty else {
-            logger.error("Found no subscription requests for non-empty vouchers input")
-            return
-        }
-
-        voucherStatusSubscriptionTask = Task { [weak self] in
-            guard let self else { return }
-
-            let stream: AnyAsyncSequence<MemberStatusResult> = CallbackBatchStorageSubscription
-                .asyncStream(
-                    requests: allRequests,
-                    connection: connection,
-                    runtimeService: runtimeService,
-                    logger: logger
-                )
-
-            for try await result in stream {
-                try Task.checkCancellation()
-                try await handleSubscriptionUpdate(result)
+            guard let ringIndex = position.ringIndex else {
+                resolved[derivationIndex] = .onboarding
+                return
             }
+
+            guard let status = statuses[derivationIndex], status.includesKey(from: position) else {
+                return
+            }
+
+            resolved[derivationIndex] = .inRecycler(
+                Voucher.Recycler(index: ringIndex, membersCount: status.included)
+            )
         }
     }
 
-    /// Processes updates received from the blockchain subscription.
-    /// Updates local voucher records if a recycler is found or if a voucher is no longer in the
-    /// pending queue.
-    private func handleSubscriptionUpdate(
-        _ result: MemberStatusResult
-    ) async throws {
-        let (needsResubscription, snapshot) = stateLock.withLock { state -> (Bool, SyncSnapshot) in
-            for update in result.ringPositionUpdates {
-                if let position = update.ringPosition, position.isIncluded {
-                    state.accumulatedRingPositions[update.derivationIndex] = position
-                } else {
-                    state.accumulatedRingPositions.removeValue(forKey: update.derivationIndex)
-                }
-            }
-            for update in result.ringStatusUpdates {
-                state.accumulatedRingStatuses[update.derivationIndex] = update.ringKeysStatus
-            }
-            // A new .included position was discovered — its ringKeysStatus subscription must be added to the batch.
-            let needsResubscription = Set(state.accumulatedRingPositions.keys) != state.subscribedDerivationIndices
-            let snapshot = SyncSnapshot(
-                pendingVouchers: state.pendingVouchers,
-                accumulatedRingPositions: state.accumulatedRingPositions,
-                accumulatedRingStatuses: state.accumulatedRingStatuses
-            )
-            return (needsResubscription, snapshot)
-        }
+    private func writeLocations(_ locations: [DerivationIndex: Voucher.OnChainState]) async throws {
+        guard !locations.isEmpty else { return }
 
-        if needsResubscription {
-            try await sync(snapshot.pendingVouchers)
-            return
-        }
-
-        let vouchers = try await voucherRepository.fetchAllOperation(with: RepositoryFetchOptions()).asyncExecute()
-        guard !vouchers.isEmpty else { return }
-        let voucherMap = Dictionary(uniqueKeysWithValues: vouchers.map { ($0.derivationIndex, $0) })
-
-        var updates = ringPositionUpdates(from: result.ringPositionUpdates, snapshot: snapshot, voucherMap: voucherMap)
-        applyRingStatusUpdates(result.ringStatusUpdates, snapshot: snapshot, voucherMap: voucherMap, into: &updates)
-
-        guard !updates.isEmpty else { return }
         // A dedicated write-only mapper touches only remoteState, so a concurrent change to any other
         // voucher field is not clobbered by this location write.
-        let locationUpdates = updates.values.map {
-            VoucherLocationUpdate(
-                derivationIndex: $0.derivationIndex,
-                remoteState: $0.remoteState
-            )
+        let updates = locations.map {
+            VoucherLocationUpdate(derivationIndex: $0.key, remoteState: $0.value)
         }
         try await databaseFactory.makeVoucherLocationRepository()
-            .saveOperation({ locationUpdates }, { [] })
+            .saveOperation({ updates }, { [] })
             .asyncExecute()
-        logger.debug("Updated \(updates.count) vouchers via subscription")
-    }
-
-    private func ringPositionUpdates(
-        from memberUpdates: [MemberStatusResult.MemberUpdate],
-        snapshot: SyncSnapshot,
-        voucherMap: [DerivationIndex: Voucher]
-    ) -> [DerivationIndex: Voucher] {
-        var updates: [DerivationIndex: Voucher] = [:]
-
-        for update in memberUpdates {
-            let derivationIndex = update.derivationIndex
-            guard var voucher = updates[derivationIndex] ?? voucherMap[derivationIndex] else { continue }
-            var didChange = false
-
-            if let ringPosition = snapshot.accumulatedRingPositions[derivationIndex],
-               let ringIndex = ringPosition.ringIndex,
-               let ringStatus = snapshot.accumulatedRingStatuses[derivationIndex],
-               ringStatus.includesKey(from: ringPosition) {
-                let newState = Voucher.OnChainState.inRecycler(
-                    Voucher.Recycler(index: ringIndex, membersCount: UInt32(ringStatus.included))
-                )
-                if voucher.remoteState != newState {
-                    voucher = voucher.adjusting(state: newState)
-                    didChange = true
-                }
-            } else if update.ringPosition?.isIncluded == true {
-                // Ring position is .included but ringKeysStatus hasn't arrived yet — defer until it does.
-                continue
-            } else if voucher.remoteState != .onboarding {
-                voucher = voucher.adjusting(state: .onboarding)
-                didChange = true
-            }
-
-            guard didChange else { continue }
-            updates[derivationIndex] = voucher
-        }
-
-        return updates
-    }
-
-    // Second pass: ringKeysStatus arrived in this emission while the ring position was already accumulated
-    // from a prior emission. The ring position update loop above won't cover this case.
-    private func applyRingStatusUpdates(
-        _ ringStatusUpdates: [MemberStatusResult.RingStatusUpdate],
-        snapshot: SyncSnapshot,
-        voucherMap: [DerivationIndex: Voucher],
-        into updates: inout [DerivationIndex: Voucher]
-    ) {
-        for update in ringStatusUpdates {
-            let derivationIndex = update.derivationIndex
-            guard let ringStatus = update.ringKeysStatus,
-                  var voucher = updates[derivationIndex] ?? voucherMap[derivationIndex] else { continue }
-            var didChange = false
-
-            if let ringPosition = snapshot.accumulatedRingPositions[derivationIndex],
-               let ringIndex = ringPosition.ringIndex,
-               ringStatus.includesKey(from: ringPosition) {
-                let newState = Voucher.OnChainState.inRecycler(
-                    Voucher.Recycler(index: ringIndex, membersCount: UInt32(ringStatus.included))
-                )
-                if voucher.remoteState != newState {
-                    voucher = voucher.adjusting(state: newState)
-                    didChange = true
-                }
-            }
-
-            guard didChange else { continue }
-            updates[derivationIndex] = voucher
-        }
+        logger.debug("Updated \(updates.count) voucher locations via subscription")
     }
 }
 
@@ -330,27 +282,5 @@ public extension Voucher.OnChainState {
     var isInRecycler: Bool {
         guard case .inRecycler = self else { return false }
         return true
-    }
-}
-
-// MARK: Sync state
-
-extension VoucherLocationService {
-    private struct SyncStateData {
-        var pendingVouchers: [Voucher] = []
-        // Tracks which derivation indices have an active ringKeysStatus subscription in the current batch.
-        // Compared against discovered ring positions after each emission to detect when resubscription is needed.
-        var subscribedDerivationIndices: Set<DerivationIndex> = []
-        // Persisted across partial emissions — Substrate subscriptions may deliver position and status in separate
-        // batches.
-        // Keyed by derivation index
-        var accumulatedRingPositions: [DerivationIndex: MembersPallet.RingPosition] = [:]
-        var accumulatedRingStatuses: [DerivationIndex: MembersPallet.RingKeysStatus] = [:]
-    }
-
-    private struct SyncSnapshot {
-        let pendingVouchers: [Voucher]
-        let accumulatedRingPositions: [DerivationIndex: MembersPallet.RingPosition]
-        let accumulatedRingStatuses: [DerivationIndex: MembersPallet.RingKeysStatus]
     }
 }

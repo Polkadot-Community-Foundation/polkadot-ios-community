@@ -40,6 +40,13 @@ extension TrackedVoucher {
     public var isBalanceCounted: Bool {
         isSelectable || isOnboarding || isMinting
     }
+
+    /// Whether the location service should keep this voucher subscribed on-chain. A ring keeps
+    /// filling after a voucher lands in it, so an in-recycler voucher stays tracked to refresh its
+    /// member count — until it is spent (`isConsumed`) or its mint provably failed.
+    var shouldTrackOnchain: Bool {
+        !state.isConsumed && !state.isMintingFailed
+    }
 }
 
 extension TrackedVoucher: Operation_iOS.Identifiable {
