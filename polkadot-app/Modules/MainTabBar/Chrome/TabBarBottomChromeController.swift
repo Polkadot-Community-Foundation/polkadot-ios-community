@@ -26,6 +26,7 @@ final class TabBarBottomChromeController: UIViewController {
     private var panelAnimator: UIViewPropertyAnimator?
     private var openPanel: TabBarPanelKind?
     private var pendingPanel: TabBarPanelKind?
+    private var isApplyingPanel = false
 
     private var slots: [TabBarSlot] = []
     private var slotMap = TabBarSlotMap(slots: [])
@@ -158,6 +159,17 @@ final class TabBarBottomChromeController: UIViewController {
         (viewIfLoaded as? TabBarChromePassthroughView)?.isOutsideTapEnabled = kind != nil
         openPanel = kind
         updateActiveActionIndex()
+
+        // Content is requested before the height is measured, so the open animates
+        // straight to its final size and the scanner's capture session warms up during
+        // the animation rather than after it. `isApplyingPanel` stops that push starting
+        // a rival animator.
+        if previousPanel != kind {
+            isApplyingPanel = true
+            onPanelChanged?(kind)
+            isApplyingPanel = false
+        }
+
         updateGlassContainerHeight(animator: animator)
 
         // The scanner's capture session must be released once the panel is gone, so the teardown
@@ -168,23 +180,6 @@ final class TabBarBottomChromeController: UIViewController {
                 animator.addCompletion { _ in teardown() }
             } else {
                 teardown()
-            }
-        }
-
-        // Every open and close routes through here — an outside tap or a fold would be missed
-        // by a hook on the trailing button. An open is reported once the animation settles, so
-        // content pushed by the newly activated source cannot start a second animator on the
-        // glass container height while this one is still running.
-        if previousPanel != kind {
-            if let kind, let animator {
-                animator.addCompletion { [weak self] _ in
-                    guard let self, openPanel == kind else {
-                        return
-                    }
-                    onPanelChanged?(kind)
-                }
-            } else {
-                onPanelChanged?(kind)
             }
         }
 
@@ -333,9 +328,10 @@ private extension TabBarBottomChromeController {
         barView.activeActionIndex = openPanel.flatMap { slotMap.itemIndex(for: $0.action) }
     }
 
-    /// Content arrives after the open animation settles, so the panel grows to fit it.
+    /// A push that arrives while `setPanel` is applying is already covered by the
+    /// open animation.
     func resizeForContentPanel() {
-        guard openPanel?.contentAction != nil else {
+        guard !isApplyingPanel, openPanel?.contentAction != nil else {
             return
         }
 
