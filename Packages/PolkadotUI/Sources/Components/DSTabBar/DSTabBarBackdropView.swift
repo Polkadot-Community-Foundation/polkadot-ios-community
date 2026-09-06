@@ -54,6 +54,13 @@ public final class DSTabBarBackdropView: UIView {
         }
         isOpen = open
 
+        if open {
+            // The held interpolation is discarded whenever the chrome leaves the render tree,
+            // leaving the model value behind — the full effect. Rebuilding on each open
+            // restores the fraction without having to enumerate every trigger.
+            applyIntensity()
+        }
+
         let apply = { [self] in
             effectView.alpha = open ? 1 : 0
         }
