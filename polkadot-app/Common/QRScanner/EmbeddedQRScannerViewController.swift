@@ -5,6 +5,6 @@ import UIKit
 /// the inherited presentation.
 final class EmbeddedQRScannerViewController: QRScannerViewController {
     override func loadView() {
-        view = EmbeddedQRScannerViewLayout(frame: .zero)
+        view = EmbeddedQRScannerViewLayout()
     }
 }

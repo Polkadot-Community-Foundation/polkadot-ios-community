@@ -63,27 +63,6 @@ class QRScannerViewController: UIViewController, ViewHolder {
         }
     }
 
-    func present(message: String, animated: Bool, autoDismiss: Bool) {
-        // A pending hide from an earlier message would otherwise dismiss this one.
-        invalidateMessageScheduling()
-
-        rootView.messageLabel.text = message
-
-        let block: () -> Void = { [weak self] in
-            self?.rootView.messageLabel.alpha = 1.0
-        }
-
-        if animated {
-            messageAppearanceAnimator.animate(block: block, completionBlock: nil)
-        } else {
-            block()
-        }
-
-        if autoDismiss {
-            scheduleMessageHide()
-        }
-    }
-
     // MARK: Message Management
 
     private func scheduleMessageHide() {
@@ -116,5 +95,26 @@ extension QRScannerViewController: QRScannerViewProtocol {
 
     func didReceive(session: AVCaptureSession) {
         configureVideoLayer(with: session)
+    }
+
+    func present(message: String, animated: Bool, autoDismiss: Bool) {
+        // A pending hide from an earlier message would otherwise dismiss this one.
+        invalidateMessageScheduling()
+
+        rootView.messageLabel.text = message
+
+        let block: () -> Void = { [weak self] in
+            self?.rootView.messageLabel.alpha = 1.0
+        }
+
+        if animated {
+            messageAppearanceAnimator.animate(block: block, completionBlock: nil)
+        } else {
+            block()
+        }
+
+        if autoDismiss {
+            scheduleMessageHide()
+        }
     }
 }
