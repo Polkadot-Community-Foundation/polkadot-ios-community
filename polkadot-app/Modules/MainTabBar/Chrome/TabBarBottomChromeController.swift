@@ -38,6 +38,7 @@ final class TabBarBottomChromeController: UIViewController {
     private var panelAnimator: UIViewPropertyAnimator?
     private var foldOffsetWidth: CGFloat?
     private var openPanel: TabBarPanelKind?
+    private var pendingPanel: TabBarPanelKind?
 
     private var slots: [TabBarSlot] = []
     private var slotMap = TabBarSlotMap(slots: [])
@@ -150,6 +151,8 @@ final class TabBarBottomChromeController: UIViewController {
     }
 
     func setPanel(_ kind: TabBarPanelKind?, animated: Bool) {
+        pendingPanel = nil
+
         let previousPanel = openPanel
         let animator = animated ? makePanelAnimator() : nil
 
@@ -188,11 +191,36 @@ final class TabBarBottomChromeController: UIViewController {
             }
         }
 
+        // `togglePanel` sets `pendingPanel` after this close returns, so the reopen is read at
+        // completion time: a fold or another tap in between clears it and cancels the switch.
+        if kind == nil, let animator {
+            animator.addCompletion { [weak self] _ in
+                guard let self, let pendingPanel else {
+                    return
+                }
+                self.pendingPanel = nil
+                setPanel(pendingPanel, animated: true)
+            }
+        }
+
         animator?.startAnimation()
     }
 
+    /// Selecting a different action closes the open panel before opening the new one, so the
+    /// change reads as a close followed by an open instead of a silent content swap.
     func togglePanel(_ kind: TabBarPanelKind) {
-        setPanel(openPanel == kind ? nil : kind, animated: true)
+        guard let openPanel else {
+            setPanel(kind, animated: true)
+            return
+        }
+
+        guard openPanel != kind else {
+            setPanel(nil, animated: true)
+            return
+        }
+
+        setPanel(nil, animated: true)
+        pendingPanel = kind
     }
 
     func setContentPanel(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction) {
