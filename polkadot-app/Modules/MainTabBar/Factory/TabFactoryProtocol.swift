@@ -46,7 +46,10 @@ final class TabFactory: TabFactoryProtocol {
     }
 
     func makeScanController() -> UIViewController? {
-        WalletQRScanViewFactory.createView(for: scanResultHandler)?.controller
+        WalletQRScanViewFactory.createView(
+            for: scanResultHandler,
+            presentation: .embedded
+        )?.controller
     }
 }
 

@@ -1,9 +1,9 @@
 import UIKit
 import DesignSystem
 
-/// Hosts either a self-sizing content configuration or a child controller's view. A controller
-/// cannot be wrapped in a `UIContentView` without losing its appearance callbacks, so the two
-/// modes exist side by side and are mutually exclusive.
+/// Hosts either a content configuration or a child controller's view; both size themselves and
+/// are measured the same way. A controller cannot be wrapped in a `UIContentView` without
+/// losing its appearance callbacks, so the two modes exist side by side and are exclusive.
 public final class DSTabBarContentPanelView: UIView {
     public private(set) var isOpen = false
 
@@ -11,7 +11,6 @@ public final class DSTabBarContentPanelView: UIView {
     private var contentView: (UIView & UIContentView)?
     private var contentReuseIdentifier: String?
     private var hostedView: UIView?
-    private var hostedPreferredHeight: CGFloat?
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
@@ -51,10 +50,9 @@ public final class DSTabBarContentPanelView: UIView {
         setNeedsLayout()
     }
 
-    /// `preferredHeight` is the content height the panel should aim for; `nil` fills the panel.
-    public func setHostedView(_ view: UIView?, preferredHeight: CGFloat?) {
-        hostedPreferredHeight = preferredHeight
-
+    /// The hosted view's own constraints decide the panel height. The bottom pin yields so a view
+    /// with a required aspect constraint keeps its shape while the container animates to fit it.
+    public func setHostedView(_ view: UIView?) {
         guard let view else {
             clearHostedView()
             return
@@ -69,23 +67,30 @@ public final class DSTabBarContentPanelView: UIView {
 
         hostedView?.removeFromSuperview()
         hostedView = view
+        view.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(view)
+
+        let bottom = view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        bottom.priority = .defaultHigh
+
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: container.topAnchor),
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bottom
+        ])
+
         setNeedsLayout()
     }
 
     public func preferredHeight(availableHeight: CGFloat) -> CGFloat {
-        if hostedView != nil {
-            return DSTabBarPanelLayout.panelHeight(
-                contentHeight: hostedPreferredHeight ?? availableHeight,
-                availableHeight: availableHeight
-            )
-        }
+        let candidate: UIView? = hostedView ?? contentView
 
-        guard let contentView, bounds.width > 0 else {
+        guard let measuredView = candidate, bounds.width > 0 else {
             return DSTabBarMetrics.capsuleHeight
         }
 
-        let measuredSize = contentView.systemLayoutSizeFitting(
+        let measuredSize = measuredView.systemLayoutSizeFitting(
             CGSize(width: bounds.width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
@@ -122,7 +127,6 @@ public final class DSTabBarContentPanelView: UIView {
 
         container.frame = bounds
         contentView?.frame = container.bounds
-        hostedView?.frame = container.bounds
     }
 }
 
@@ -136,6 +140,5 @@ private extension DSTabBarContentPanelView {
     func clearHostedView() {
         hostedView?.removeFromSuperview()
         hostedView = nil
-        hostedPreferredHeight = nil
     }
 }

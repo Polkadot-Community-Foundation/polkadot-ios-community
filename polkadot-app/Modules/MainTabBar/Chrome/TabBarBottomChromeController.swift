@@ -243,13 +243,13 @@ final class TabBarBottomChromeController: UIViewController {
         detachHostedController()
 
         guard let controller else {
-            contentPanelView.setHostedView(nil, preferredHeight: nil)
+            contentPanelView.setHostedView(nil)
             resizeForContentPanel()
             return
         }
 
         addChild(controller)
-        contentPanelView.setHostedView(controller.view, preferredHeight: availablePanelHeight)
+        contentPanelView.setHostedView(controller.view)
         controller.didMove(toParent: self)
         hostedPanelController = controller
 
@@ -368,7 +368,7 @@ private extension TabBarBottomChromeController {
 
     func clearContentPanel() {
         detachHostedController()
-        contentPanelView.setHostedView(nil, preferredHeight: nil)
+        contentPanelView.setHostedView(nil)
         contentPanelView.setConfiguration(nil)
     }
 
