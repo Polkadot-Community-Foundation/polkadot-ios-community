@@ -21,7 +21,7 @@ public final class DSTabBarView: UIView {
             guard previousCount > 0, newValue.count != previousCount else {
                 return
             }
-            animateRowReflow()
+            applyRowReflow()
         }
     }
 
@@ -144,18 +144,11 @@ private extension DSTabBarView {
         itemsStorage.indices.filter { itemsStorage[$0].role == .tab }
     }
 
-    func animateRowReflow() {
-        animatesLensOnNextLayout = true
+    /// The apps action sits mid-row, so springing the reflow slides its neighbours across a whole
+    /// slot and reads as the whole bar moving. The new layout is applied outright instead.
+    func applyRowReflow() {
         setNeedsLayout()
-
-        UIView.animate(
-            withDuration: DSTabBarMetrics.selectionSpringDuration,
-            delay: 0,
-            usingSpringWithDamping: DSTabBarMetrics.selectionSpringDamping,
-            initialSpringVelocity: 0,
-            options: [.allowUserInteraction, .beginFromCurrentState],
-            animations: { self.layoutIfNeeded() }
-        )
+        layoutIfNeeded()
     }
 
     func setupHierarchy() {
