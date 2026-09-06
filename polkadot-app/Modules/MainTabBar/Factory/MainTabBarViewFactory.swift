@@ -76,8 +76,7 @@ enum MainTabBarViewFactory {
         let presenter = MainTabBarPresenter(
             interactor: interactor,
             wireframe: wireframe,
-            chipViewModelFactory: chipViewModelFactory,
-            tabFactory: tabFactory
+            chipViewModelFactory: chipViewModelFactory
         )
 
         interactor.presenter = presenter

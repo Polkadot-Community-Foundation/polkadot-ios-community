@@ -9,28 +9,25 @@ final class MainTabBarPresenter {
 
     #if FEATURE_PRODUCTS
         let slots: [TabBarSlot] = [
-            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.browse), .tab(.settings), .action(.more)
+            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.browse), .tab(.settings)
         ]
     #else
         let slots: [TabBarSlot] = [
-            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.settings), .action(.more)
+            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.settings)
         ]
     #endif
 
     private let chipViewModelFactory: SPATabChipViewModelFactory
-    private let tabFactory: TabFactoryProtocol
     private var settingsBadge: TabBarBadge?
 
     init(
         interactor: MainTabBarInteractorInputProtocol,
         wireframe: MainTabBarWireframeProtocol,
-        chipViewModelFactory: SPATabChipViewModelFactory,
-        tabFactory: TabFactoryProtocol
+        chipViewModelFactory: SPATabChipViewModelFactory
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
         self.chipViewModelFactory = chipViewModelFactory
-        self.tabFactory = tabFactory
     }
 }
 
@@ -47,9 +44,7 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
     func didRequestContentPanel(for action: TabBarAction) {
         switch action {
         case .scan:
-            view?.showTabBarPanelController(tabFactory.makeScanController(), for: action)
-        case .more:
-            view?.showTabBarPanelContent(TabBarPanelPlaceholderContent.make(), for: action)
+            view?.showScanPanel()
         case .spaTabs:
             break
         }

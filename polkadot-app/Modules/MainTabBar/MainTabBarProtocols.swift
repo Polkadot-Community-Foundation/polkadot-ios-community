@@ -10,7 +10,7 @@ protocol MainTabBarViewProtocol: ControllerBackedProtocol, AppWidgetManaging {
     func setBadge(_ badge: TabBarBadge?, for tab: TabBarItem)
     func showSPATabs(_ viewModels: [SPATabChipViewModel])
     func showTabBarPanelContent(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction)
-    func showTabBarPanelController(_ controller: UIViewController?, for action: TabBarAction)
+    func showScanPanel()
     func showChainStatus(_ rows: [ChainConnectionStatusViewModel])
 }
 

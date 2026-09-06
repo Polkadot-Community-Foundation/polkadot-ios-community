@@ -321,8 +321,8 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         chromeController.setContentPanel(configuration, for: action)
     }
 
-    func showTabBarPanelController(_ controller: UIViewController?, for action: TabBarAction) {
-        chromeController.setContentController(controller, for: action)
+    func showScanPanel() {
+        chromeController.setContentController(viewFactory.makeScanController(), for: .scan)
     }
 
     func showChainStatus(_ models: [ChainConnectionStatusViewModel]) {
