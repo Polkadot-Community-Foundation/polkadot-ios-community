@@ -17,6 +17,10 @@ public final class DSTabBarContentPanelView: UIView {
 
         container.clipsToBounds = true
         container.alpha = 0
+        // A closed panel keeps the open panel's frame and would otherwise
+        // hit-test as itself, swallowing touches meant for whatever sits
+        // behind it.
+        isUserInteractionEnabled = false
         addSubview(container)
     }
 
@@ -107,6 +111,10 @@ public final class DSTabBarContentPanelView: UIView {
             return
         }
         isOpen = open
+
+        // Not `isHidden`: that cannot animate, so it would have to wait on the animator and
+        // then race a reopen during the fade. Interaction can flip immediately instead.
+        isUserInteractionEnabled = open
 
         let apply = { [self] in
             container.alpha = open ? 1 : 0
