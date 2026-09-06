@@ -179,6 +179,7 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         allowanceRenewalService.setup()
 
         Task {
+            await chainStatusProvider.start()
             await signInHostCoordinator.setup()
             await setupDeviceSyncService()
 
@@ -238,7 +239,6 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
 
 extension ServiceCoordinator {
     // swiftlint:disable:next function_body_length
-    @MainActor
     static func createDefault(spaFlowState: SPAFlowState) -> ServiceCoordinatorProtocol? {
         let walletRepo: WalletManagerRepositoryProtocol = .shared
 

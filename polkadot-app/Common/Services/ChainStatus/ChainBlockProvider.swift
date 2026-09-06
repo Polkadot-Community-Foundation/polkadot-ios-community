@@ -12,9 +12,8 @@ struct ChainBlockInfo: Equatable {
     let finalizedNumber: BlockNumber?
 }
 
-@MainActor
-protocol ChainBlockProviding: AnyObject {
-    func blockStream() -> AnyAsyncSequence<[ChainConnectionTarget: ChainBlockInfo]>
+protocol ChainBlockProviding: Actor {
+    nonisolated func blockStream() -> AnyAsyncSequence<[ChainConnectionTarget: ChainBlockInfo]>
     func setActive(_ isActive: Bool)
     func clear(for target: ChainConnectionTarget)
 }
@@ -23,8 +22,7 @@ protocol ChainBlockProviding: AnyObject {
 ///
 /// Sibling to `ChainStatusProvider` rather than part of it: this owns head subscriptions only, so
 /// row composition stays in one place.
-@MainActor
-final class ChainBlockProvider {
+actor ChainBlockProvider {
     private let blocksSubject = AsyncCurrentValueSubject<[ChainConnectionTarget: ChainBlockInfo]>([:])
 
     private let blockProviders: [ChainConnectionTarget: BlockInfoProviding]
@@ -60,7 +58,7 @@ final class ChainBlockProvider {
 }
 
 extension ChainBlockProvider: ChainBlockProviding {
-    func blockStream() -> AnyAsyncSequence<[ChainConnectionTarget: ChainBlockInfo]> {
+    nonisolated func blockStream() -> AnyAsyncSequence<[ChainConnectionTarget: ChainBlockInfo]> {
         blocksSubject.eraseToAnyAsyncSequence()
     }
 
@@ -121,7 +119,7 @@ private extension ChainBlockProvider {
         Task { [weak self, logger] in
             do {
                 let number = try await fetch()
-                self?.record(number, for: target, kind: kind, isFromFetch: true)
+                await self?.record(number, for: target, kind: kind, isFromFetch: true)
             } catch {
                 logger.error("Fetch \(kind.title) failed for \(target.chainId): \(error)")
             }
@@ -141,7 +139,7 @@ private extension ChainBlockProvider {
                         continue
                     }
 
-                    self?.record(BlockNumber(number), for: target, kind: kind)
+                    await self?.record(BlockNumber(number), for: target, kind: kind)
                 }
             } catch {
                 logger.error("Stream of \(kind.title) failed for \(target.chainId): \(error)")

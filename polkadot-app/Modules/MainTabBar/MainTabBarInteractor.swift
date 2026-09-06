@@ -80,7 +80,7 @@ private extension MainTabBarInteractor {
     func subscribeToChainStatus() {
         chainStatusSubscription = Task { [weak self, chainStatusProvider, logger] in
             do {
-                let statusStream = await chainStatusProvider.statusStream()
+                let statusStream = chainStatusProvider.statusStream()
 
                 for try await rows in statusStream {
                     await self?.handleChainStatusUpdate(rows)

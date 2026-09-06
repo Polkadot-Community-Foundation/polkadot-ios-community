@@ -22,13 +22,11 @@ extension StatementDeliveryState {
     }
 }
 
-@MainActor
 protocol StatementDeliveryTracking: AnyObject, Sendable {
     func stateStream() -> AnyAsyncSequence<StatementDeliveryState>
     func report(_ state: StatementDeliveryState)
 }
 
-@MainActor
 final class StatementDeliveryTracker: StatementDeliveryTracking {
     private let subject = AsyncCurrentValueSubject<StatementDeliveryState>(.noSubscriptions)
 

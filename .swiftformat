@@ -1,5 +1,8 @@
 --swiftversion 5.10
 
+# excludes
+  --exclude **/checkouts
+
 # format options
   --allman false
   --indent 4
@@ -44,4 +47,6 @@
   --disable testSuiteAccessControl
   --disable wrapPropertyBodies
   --disable wrapFunctionBodies
+  --disable wrapIfStatementBodies
+  --disable wrapIfExpressionBodies
   --disable redundantViewBuilder
