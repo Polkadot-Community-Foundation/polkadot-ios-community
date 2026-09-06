@@ -5,7 +5,9 @@ final class DSTabBarItemView: UIView {
     /// Action items never receive the pill, so an open panel is signalled by tinting the item.
     var isActive: Bool = false {
         didSet {
-            guard isActive != oldValue else { return }
+            guard isActive != oldValue else {
+                return
+            }
             applyTint()
         }
     }

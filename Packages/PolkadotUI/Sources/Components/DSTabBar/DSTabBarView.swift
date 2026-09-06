@@ -215,21 +215,24 @@ private extension DSTabBarView {
             return
         }
 
+        lens.update(pillFrame: lensPillFrame(), isLifted: dragState != nil, animated: animated)
+    }
+
+    /// The pill rests on the selected tab; a drag in flight carries it, clamped to the row.
+    func lensPillFrame() -> CGRect {
         let row = row
-        let resolvedPillFrame: CGRect
-        if let dragState {
-            var frame = row.pillFrame(at: dragState.index)
-            frame.origin.x = DSTabBarGeometry.clampedPillOriginX(
-                dragState.currentX,
-                pillWidth: frame.width,
-                rowWidth: row.width
-            )
-            resolvedPillFrame = frame
-        } else {
-            resolvedPillFrame = row.pillFrame(at: selectedIndex)
+
+        guard let dragState else {
+            return row.pillFrame(at: selectedIndex)
         }
 
-        lens.update(pillFrame: resolvedPillFrame, isLifted: dragState != nil, animated: animated)
+        var frame = row.pillFrame(at: dragState.index)
+        frame.origin.x = DSTabBarGeometry.clampedPillOriginX(
+            dragState.currentX,
+            pillWidth: frame.width,
+            rowWidth: row.width
+        )
+        return frame
     }
 
     func drawnPillIndex(currentX: CGFloat, referenceIndex: Int) -> Int {
@@ -333,16 +336,17 @@ private extension DSTabBarView {
         element.accessibilityFrameInContainerSpace = lens.convert(row.itemFrame(at: index), to: self)
         element.accessibilityTraits = [.button]
 
-        guard item.role == .tab else {
+        switch item.role {
+        case .tab:
+            if index == selectedIndex {
+                element.accessibilityTraits = [.button, .selected]
+            }
+        case .action:
             if #available(iOS 18.0, *) {
                 element.accessibilityExpandedStatus = index == activeActionIndex ? .expanded : .collapsed
             }
-            return element
         }
 
-        if index == selectedIndex {
-            element.accessibilityTraits = [.button, .selected]
-        }
         return element
     }
 }
