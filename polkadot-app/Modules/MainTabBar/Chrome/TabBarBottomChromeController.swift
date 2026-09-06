@@ -14,6 +14,7 @@ final class TabBarBottomChromeController: UIViewController {
         tint: UIColor.bgSurfaceContainer
     )
     private let barView = DSTabBarView()
+    private let backdropView = DSTabBarBackdropView()
     private let floatingWidgetContainerView = MainTabBarFloatingWidgetStackView()
     private let tabsPanelView = DSTabBarTabsPanelView()
     private let contentPanelView = DSTabBarContentPanelView()
@@ -81,6 +82,7 @@ final class TabBarBottomChromeController: UIViewController {
         installGlassContainer()
         installBar()
         installFloatingWidgetContainer()
+        installBackdrop()
         installTabsPanel()
         installContentPanel()
         installWidgetsIfNeeded()
@@ -156,6 +158,7 @@ final class TabBarBottomChromeController: UIViewController {
         let previousPanel = openPanel
         let animator = animated ? makePanelAnimator() : nil
 
+        backdropView.setOpen(kind != nil, animator: animator)
         tabsPanelView.setOpen(kind == .spaTabs, animator: animator)
         contentPanelView.setOpen(kind?.contentAction != nil, animator: animator)
         (viewIfLoaded as? TabBarChromePassthroughView)?.isOutsideTapEnabled = kind != nil
@@ -633,6 +636,15 @@ private extension TabBarBottomChromeController {
         floatingWidgetContainerView.snp.makeConstraints { make in
             make.leading.trailing.equalToSuperview()
             floatingWidgetBottomConstraint = make.bottom.equalToSuperview().constraint
+        }
+    }
+
+    /// Inserted at the bottom so both the tab content and the floating widgets sit behind it.
+    func installBackdrop() {
+        view.insertSubview(backdropView, at: 0)
+
+        backdropView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
         }
     }
 
