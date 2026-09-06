@@ -4,8 +4,8 @@ import PolkadotUI
 
 enum ChainConnectionTarget: CaseIterable {
     case chat
-    case bulletin
     case assethub
+    case bulletin
 
     var chainId: ChainModel.Id {
         switch self {
