@@ -4,9 +4,8 @@ import ChainRegistry
 import StructuredConcurrency
 import SubstrateSdk
 
-@MainActor
-protocol ChainLatencyProviding: AnyObject {
-    func latencyStream() -> AnyAsyncSequence<[ChainConnectionTarget: Duration]>
+protocol ChainLatencyProviding: Actor {
+    nonisolated func latencyStream() -> AnyAsyncSequence<[ChainConnectionTarget: Duration]>
     func clearSamples(for target: ChainConnectionTarget)
     func setActive(_ isActive: Bool)
 }
@@ -42,8 +41,7 @@ private struct ChainLatencyWindow {
 ///
 /// Sibling to `ChainStatusProvider` rather than part of it: this owns probe timing only, so
 /// row composition stays in one place.
-@MainActor
-final class ChainLatencyProvider {
+actor ChainLatencyProvider {
     private static let probeInterval: Duration = .seconds(30)
     private static let probeTimeout: Duration = .seconds(10)
 
@@ -67,7 +65,7 @@ final class ChainLatencyProvider {
 }
 
 extension ChainLatencyProvider: ChainLatencyProviding {
-    func latencyStream() -> AnyAsyncSequence<[ChainConnectionTarget: Duration]> {
+    nonisolated func latencyStream() -> AnyAsyncSequence<[ChainConnectionTarget: Duration]> {
         latenciesSubject.eraseToAnyAsyncSequence()
     }
 

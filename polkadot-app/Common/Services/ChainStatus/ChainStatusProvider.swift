@@ -31,18 +31,15 @@ struct ChainHealthWindow {
     }
 }
 
-@MainActor
-protocol ChainStatusProviding: AnyObject {
-    func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]>
+protocol ChainStatusProviding: Actor {
+    nonisolated func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]>
+    func start()
 }
 
-/// Per-chain connection status. Emits rows rather than a hosted configuration, so a host
-/// wraps them however it presents them — the tab bar's top strip and its peek panel.
-///
+/// Per-chain connection status.
 /// One shared instance. The subject always holds a row set, so the first render carries a
 /// complete set and a host subscribing later sees live state rather than a re-seed.
-@MainActor
-final class ChainStatusProvider {
+actor ChainStatusProvider {
     private static let connectDebounce: Duration = .milliseconds(300)
 
     private let networkStatusService: NetworkStatusProviding
@@ -51,7 +48,7 @@ final class ChainStatusProvider {
     private let statementTracker: StatementDeliveryTracking
     private let logger: LoggerProtocol
 
-    private let rowsSubject: AsyncCurrentValueSubject<[ChainConnectionStatusViewModel]>
+    private nonisolated let rowsSubject: AsyncCurrentValueSubject<[ChainConnectionStatusViewModel]>
 
     private var statuses: [ChainConnectionTarget: NetworkStatus]
     private var latencies: [ChainConnectionTarget: Duration] = [:]
@@ -99,15 +96,11 @@ final class ChainStatusProvider {
 }
 
 extension ChainStatusProvider: ChainStatusProviding {
-    func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]> {
-        startObservingIfNeeded()
-
-        return rowsSubject.eraseToAnyAsyncSequence()
+    nonisolated func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]> {
+        rowsSubject.eraseToAnyAsyncSequence()
     }
-}
 
-private extension ChainStatusProvider {
-    func startObservingIfNeeded() {
+    func start() {
         guard !isObserving else {
             return
         }
@@ -116,8 +109,10 @@ private extension ChainStatusProvider {
 
         // Sampling runs for the app's lifetime because the top status strip is permanent.
         // A host closing its subscription does not pause sampling.
-        latencyProvider.setActive(true)
-        blockProvider.setActive(true)
+        Task { [latencyProvider, blockProvider] in
+            await latencyProvider.setActive(true)
+            await blockProvider.setActive(true)
+        }
 
         statusTasks = ChainConnectionTarget.allCases.map { target in
             observeStatus(for: target)
@@ -125,13 +120,15 @@ private extension ChainStatusProvider {
 
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.emitRows()
+                await self?.emitRows()
 
                 try? await Task.sleep(for: .seconds(1))
             }
         }
     }
+}
 
+private extension ChainStatusProvider {
     func observeStatus(for target: ChainConnectionTarget) -> Task<Void, Never> {
         Task { [weak self, networkStatusService, logger] in
             let statusStream = networkStatusService
@@ -140,7 +137,7 @@ private extension ChainStatusProvider {
 
             do {
                 for try await status in statusStream {
-                    self?.handleStatusUpdate(status, for: target)
+                    await self?.handleStatusUpdate(status, for: target)
                 }
             } catch {
                 logger.error("Chain status stream failed for \(target.chainId): \(error)")
@@ -152,7 +149,7 @@ private extension ChainStatusProvider {
         Task { [weak self, latencyProvider, logger] in
             do {
                 for try await latencies in latencyProvider.latencyStream() {
-                    self?.handleLatenciesUpdate(latencies)
+                    await self?.handleLatenciesUpdate(latencies)
                 }
             } catch {
                 logger.error("Chain latency stream failed: \(error)")
@@ -164,7 +161,7 @@ private extension ChainStatusProvider {
         Task { [weak self, blockProvider, logger] in
             do {
                 for try await blocks in blockProvider.blockStream() {
-                    self?.handleBlocksUpdate(blocks)
+                    await self?.handleBlocksUpdate(blocks)
                 }
             } catch {
                 logger.error("Chain block stream failed: \(error)")
@@ -176,7 +173,7 @@ private extension ChainStatusProvider {
         Task { [weak self, statementTracker, logger] in
             do {
                 for try await state in statementTracker.stateStream() {
-                    self?.handleStatementStateUpdate(state)
+                    await self?.handleStatementStateUpdate(state)
                 }
             } catch {
                 logger.error("Statement delivery state stream failed: \(error)")
@@ -184,7 +181,7 @@ private extension ChainStatusProvider {
         }
     }
 
-    func handleStatusUpdate(_ status: NetworkStatus, for target: ChainConnectionTarget) {
+    func handleStatusUpdate(_ status: NetworkStatus, for target: ChainConnectionTarget) async {
         let previousStatus = statuses[target]
 
         guard previousStatus != status else {
@@ -199,16 +196,16 @@ private extension ChainStatusProvider {
             connectedSince[target] = nil
             latencies[target] = nil
             blocks[target] = nil
-            latencyProvider.clearSamples(for: target)
+            await latencyProvider.clearSamples(for: target)
             // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
-            blockProvider.clear(for: target)
+            await blockProvider.clear(for: target)
             healthWindows[target.chainId]?.clear()
         }
 
         emitRows()
     }
 
-    func handleLatenciesUpdate(_ updatedLatencies: [ChainConnectionTarget: Duration]) {
+    func handleLatenciesUpdate(_ updatedLatencies: [ChainConnectionTarget: Duration]) async {
         guard updatedLatencies != latencies else {
             return
         }
@@ -217,7 +214,7 @@ private extension ChainStatusProvider {
         emitRows()
     }
 
-    func handleBlocksUpdate(_ updatedBlocks: [ChainConnectionTarget: ChainBlockInfo]) {
+    func handleBlocksUpdate(_ updatedBlocks: [ChainConnectionTarget: ChainBlockInfo]) async {
         guard updatedBlocks != blocks else {
             return
         }
@@ -226,7 +223,7 @@ private extension ChainStatusProvider {
         emitRows()
     }
 
-    func handleStatementStateUpdate(_ state: StatementDeliveryState) {
+    func handleStatementStateUpdate(_ state: StatementDeliveryState) async {
         guard state != statementState else {
             return
         }

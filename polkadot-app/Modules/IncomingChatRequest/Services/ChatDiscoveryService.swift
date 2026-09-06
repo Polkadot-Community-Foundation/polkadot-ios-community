@@ -96,7 +96,7 @@ private extension ChatDiscoveryService {
                 self?.logger.debug("Completed task")
             } catch {
                 if !Task.isCancelled {
-                    await self?.statementTracker.report(.failed)
+                    self?.statementTracker.report(.failed)
                 }
                 self?.logger.error("Discovery task failed: \(error)")
             }
@@ -204,12 +204,12 @@ private extension ChatDiscoveryService {
             currentDayPoller?.stop()
 
             guard !Task.isCancelled else {
-                await statementTracker.report(.noSubscriptions)
+                statementTracker.report(.noSubscriptions)
                 return
             }
 
             guard let pagination = ChatRequest.paginationDay(from: Date()) else {
-                await statementTracker.report(.failed)
+                statementTracker.report(.failed)
                 return
             }
 
@@ -244,9 +244,9 @@ private extension ChatDiscoveryService {
             } catch {
                 currentPollerObservation?.cancel()
                 if Task.isCancelled {
-                    await statementTracker.report(.noSubscriptions)
+                    statementTracker.report(.noSubscriptions)
                 } else {
-                    await statementTracker.report(.failed)
+                    statementTracker.report(.failed)
                 }
                 logger.error("Unexpected poller failure: \(error)")
                 return
@@ -261,9 +261,9 @@ private extension ChatDiscoveryService {
                 for try await state in poller.stateStream {
                     switch state {
                     case .active:
-                        await self?.statementTracker.report(.active)
+                        self?.statementTracker.report(.active)
                     case .failed:
-                        await self?.statementTracker.report(.failed)
+                        self?.statementTracker.report(.failed)
                     case .idle:
                         break
                     }
