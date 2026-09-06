@@ -14,6 +14,8 @@ final class EmbeddedQRScannerViewLayout: QRScannerViewLayout {
         heightAnchor.constraint(equalTo: widthAnchor).isActive = true
 
         addSubview(qrFrameView)
+        qrFrameView.layer.cornerRadius = DSRadii.extraLarge
+        qrFrameView.layer.masksToBounds = true
 
         qrFrameView.fillColor = .clear
         qrFrameView.snp.makeConstraints { make in
