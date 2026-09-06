@@ -28,6 +28,9 @@ enum Metrics {
     static let fastDragFade: Double = 0.14
     static let fastDragSpeed: CGFloat = 3
 
+    /// How much of the recess shadow a fully lit floor removes; a dark floor keeps nearly all of it.
+    static let lightSurfaceFalloff: CGFloat = 0.8
+
     /// Half the selected sphere, so the outer modes' centres sit that far from the track edges and the
     /// spheres rest fully inside — matching the design's ~20pt leading/trailing offsets.
     static var inset: CGFloat { selectedCircle / 2 }
@@ -42,7 +45,7 @@ enum Metrics {
 /// and — only once a mode is settled on — an accent glow. Selecting grows the sphere; dragging keeps it
 /// grown but unlit. A dragged sphere adopts each mode as it passes the midpoint towards it, so `mode`
 /// changes under it mid-gesture: the glyph is then cross-faded and the accent blended rather than swapped
-/// in a single frame. Mirrors Android's `ModeCircle`.
+/// in a single frame.
 struct ModeCircleView: View {
     let mode: RecyclingStrategyType
     let isSelected: Bool
@@ -186,8 +189,7 @@ private struct Triangle: Shape {
 
 /// Per-mode shades derived from the mode's flat accent token rather than hardcoded, so the lit sphere stays
 /// self-consistent: the fill is a vertical gradient, tinted towards static white at the top when selected
-/// and shaded towards onyx below; the rim and muted marker share the same derivation. Mirrors Android's
-/// `ModeAppearance`.
+/// and shaded towards onyx below; the rim and muted marker share the same derivation.
 private extension RecyclingStrategyType {
     func circleGradient(accent: Color, selected: Bool) -> LinearGradient {
         let top = selected
@@ -218,24 +220,62 @@ private extension RecyclingStrategyType {
 // MARK: - Colour blending
 
 extension Color {
-    /// Linear RGBA blend towards `other`, resolved in the app's enforced dark appearance. The privacy card's
-    /// shades are derived from a single accent token, which needs mixing the design system does not expose.
+    /// Linear RGBA blend towards `other`. The privacy card's shades are derived from a single accent token,
+    /// which needs mixing the design system does not expose. Kept **dynamic**: both inputs are re-resolved
+    /// against the render-time traits, so the blend follows the active design-system theme (the `appTheme`
+    /// trait each token reads) instead of being frozen to one appearance.
     func blended(with other: Color, fraction: CGFloat) -> Color {
         let clamped = min(max(fraction, 0), 1)
-        let dark = UITraitCollection(userInterfaceStyle: .dark)
-        let base = UIColor(self).resolvedColor(with: dark)
-        let target = UIColor(other).resolvedColor(with: dark)
+        let base = UIColor(self)
+        let target = UIColor(other)
 
-        var baseRed: CGFloat = 0, baseGreen: CGFloat = 0, baseBlue: CGFloat = 0, baseAlpha: CGFloat = 0
-        var tintRed: CGFloat = 0, tintGreen: CGFloat = 0, tintBlue: CGFloat = 0, tintAlpha: CGFloat = 0
-        base.getRed(&baseRed, green: &baseGreen, blue: &baseBlue, alpha: &baseAlpha)
-        target.getRed(&tintRed, green: &tintGreen, blue: &tintBlue, alpha: &tintAlpha)
+        return Color(uiColor: UIColor { traits in
+            let resolvedBase = base.resolvedColor(with: traits)
+            let resolvedTarget = target.resolvedColor(with: traits)
 
-        return Color(uiColor: UIColor(
-            red: baseRed + (tintRed - baseRed) * clamped,
-            green: baseGreen + (tintGreen - baseGreen) * clamped,
-            blue: baseBlue + (tintBlue - baseBlue) * clamped,
-            alpha: baseAlpha + (tintAlpha - baseAlpha) * clamped
-        ))
+            var baseRed: CGFloat = 0, baseGreen: CGFloat = 0, baseBlue: CGFloat = 0, baseAlpha: CGFloat = 0
+            var tintRed: CGFloat = 0, tintGreen: CGFloat = 0, tintBlue: CGFloat = 0, tintAlpha: CGFloat = 0
+            resolvedBase.getRed(&baseRed, green: &baseGreen, blue: &baseBlue, alpha: &baseAlpha)
+            resolvedTarget.getRed(&tintRed, green: &tintGreen, blue: &tintBlue, alpha: &tintAlpha)
+
+            return UIColor(
+                red: baseRed + (tintRed - baseRed) * clamped,
+                green: baseGreen + (tintGreen - baseGreen) * clamped,
+                blue: baseBlue + (tintBlue - baseBlue) * clamped,
+                alpha: baseAlpha + (tintAlpha - baseAlpha) * clamped
+            )
+        })
+    }
+
+    /// Scales a shadow's alpha down as the `surface` it lands on brightens, so a fixed black shadow (the
+    /// design system's `shadow.*` tokens are the same in every theme) does not read as a bruise on the light
+    /// themes. Dynamic: the surface luminance is read from the render-time traits.
+    func softened(on surface: Color, falloff: CGFloat = Metrics.lightSurfaceFalloff) -> Color {
+        let shadow = UIColor(self)
+        let base = UIColor(surface)
+
+        return Color(uiColor: UIColor { traits in
+            let resolvedShadow = shadow.resolvedColor(with: traits)
+            let luminance = base.resolvedColor(with: traits).relativeLuminance
+
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            resolvedShadow.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+
+            return UIColor(red: red, green: green, blue: blue, alpha: alpha * (1 - luminance * falloff))
+        })
+    }
+}
+
+private extension UIColor {
+    /// WCAG relative luminance (0 = black … 1 = white).
+    var relativeLuminance: CGFloat {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+
+        func linear(_ component: CGFloat) -> CGFloat {
+            component <= 0.03928 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+        }
+
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
     }
 }

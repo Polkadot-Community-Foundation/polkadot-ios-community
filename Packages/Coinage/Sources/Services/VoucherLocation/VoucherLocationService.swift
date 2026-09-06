@@ -20,7 +20,7 @@ import os
 /// Tracks every voucher the durability layer still cares about (`shouldTrackOnchain` — not spent, not
 /// mint-failed), not just those outside a recycler: a ring keeps filling after a voucher lands in it, and
 /// the member count is what the strategies read to decide when it may be spent. Two-phase per batch, held
-/// together entirely by stream operators (the port of Android's `flatMapLatest`) rather than in-memory
+/// together entirely by stream operators rather than in-memory
 /// reconciliation:
 /// 1. **Members**: subscribe `Members[collection][voucherPubKey]` for every voucher and `scan` the
 ///    per-key deltas into a complete positions snapshot.

@@ -175,7 +175,7 @@ private extension CoinageBalanceService {
 extension CoinageBalanceService {
     /// Pure bucketing: maps pre-classified assets and coin verdicts into the three-bucket balance.
     /// Extracted (internal, not private) so it can be unit-tested without the actor, streams, or chain
-    /// reads — mirrors Android's `calculateCoinageBalance`.
+    /// reads.
     static func calculateBalance(
         coinBuckets: CoinBuckets,
         voucherBuckets: VoucherBuckets,

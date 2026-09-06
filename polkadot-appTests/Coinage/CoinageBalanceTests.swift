@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Coinage
 
-/// Pure three-bucket balance calculation — the iOS port of Android's `RealTotalBalanceUseCaseTest`.
+/// Pure three-bucket balance calculation.
 ///
 /// Coins bucket by the recycling verdict passed in (as the evaluator supplies it); vouchers bucket by
 /// the strategy's own usability rule. Asserts `availablePrivate` / `gainingPrivacy` / `pending`

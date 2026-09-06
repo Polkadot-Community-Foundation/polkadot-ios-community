@@ -9,8 +9,7 @@ import Coinage
 /// to the nearest mode on release. A description card reflects the selection.
 ///
 /// A dumb view: it renders the ``selected`` mode supplied by the Settings view model and reports user
-/// input through ``onSelect``; the presenter/interactor own persistence and re-gating. Mirrors the Android
-/// `PaymentPrivacyModeSelector` redesign.
+/// input through ``onSelect``; the presenter/interactor own persistence and re-gating.
 struct PaymentPrivacyModeCard: View {
     let selected: RecyclingStrategyType
     let onSelect: (RecyclingStrategyType) -> Void
@@ -89,6 +88,9 @@ private extension PaymentPrivacyModeCard {
         // The floor is the card's own surface taken a shade down — a recess, not a darker token that would
         // read as a hole punched through the card. Depth comes from the two inner shadows below.
         let floor = Color.bgSurfaceContainer.blended(with: .bgSurfaceMain, fraction: 0.4)
+        // The shadow tokens are the same black in every theme, so on the light themes' near-white floor a
+        // fixed alpha reads as a bruise; soften it by the floor's luminance (untouched on the dark floor).
+        let recess = Color.shadowMedium.opacity(0.5).softened(on: floor)
         // Two copies of the groove a point above and below it, covered by the opaque floor: what stays
         // visible is the lit lip along the top and bottom edges only, never a full outline.
         return ZStack {
@@ -97,8 +99,8 @@ private extension PaymentPrivacyModeCard {
             Capsule()
                 .fill(
                     floor
-                        .shadow(.inner(color: .shadowMedium.opacity(0.5), radius: 6, y: 3))
-                        .shadow(.inner(color: .shadowMedium.opacity(0.5), radius: 5, y: 7))
+                        .shadow(.inner(color: recess, radius: 6, y: 3))
+                        .shadow(.inner(color: recess, radius: 5, y: 7))
                 )
         }
         .frame(width: width, height: Metrics.trackHeight)
@@ -229,15 +231,37 @@ private extension PaymentPrivacyModeCard {
                 markIndex = max(0, Int((centerX(fraction, width: width) - scaleStart) / Metrics.tickStep))
             }
             .onEnded { value in
-                let target = dragFraction.map { Int($0.rounded()) }
-                    ?? Int(fractionAt(value.location.x, width: width).rounded())
-                dragFraction = nil
                 lastDragX = nil
                 lastDragTime = nil
-                let mode = modes[target]
-                guard mode != selected else { return }
-                onSelect(mode)
+
+                if let fraction = dragFraction {
+                    // A drag: slide the sphere to its snapped mode, then hand off to the static one there.
+                    finishDrag(from: fraction)
+                } else {
+                    // A tap: select the mode under the finger in place.
+                    commit(target: Int(fractionAt(value.location.x, width: width).rounded()))
+                }
             }
+    }
+
+    /// Animates the dragged sphere the rest of the way to its nearest mode so the selection settles into
+    /// place instead of jumping, dropping the drag only once it has arrived — the point the static sphere
+    /// takes over.
+    func finishDrag(from fraction: CGFloat) {
+        let target = Int(fraction.rounded())
+        commit(target: target)
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            dragFraction = CGFloat(target)
+        } completion: {
+            dragFraction = nil
+        }
+    }
+
+    func commit(target: Int) {
+        let mode = modes[target]
+        guard mode != selected else { return }
+        onSelect(mode)
     }
 
     func beginDrag() {
@@ -247,7 +271,7 @@ private extension PaymentPrivacyModeCard {
     }
 
     /// Follows the finger's speed in mode-widths per second and eases the cross-fade duration towards its
-    /// fast end, smoothed so a single jittery sample does not swing it. Mirrors Android's `DragFade`.
+    /// fast end, smoothed so a single jittery sample does not swing it.
     func trackSpeed(locationX: CGFloat, time: Date, width: CGFloat) {
         defer {
             lastDragX = locationX

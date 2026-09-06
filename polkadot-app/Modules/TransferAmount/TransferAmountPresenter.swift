@@ -297,8 +297,7 @@ private extension TransferAmountPresenter {
         }
     }
 
-    /// The spend dips into gaining-privacy funds: confirm before submitting, matching Android's
-    /// "This payment might reduce your privacy" sheet.
+    /// The spend dips into gaining-privacy funds: confirm before submitting
     func presentPrivacyConfirmation(validation: TransferPreviewValidation, amount _: Decimal) {
         let amountText = formattedAmount(validation.fullAmount)
         wireframe.showGainingPrivacyConfirmation(
