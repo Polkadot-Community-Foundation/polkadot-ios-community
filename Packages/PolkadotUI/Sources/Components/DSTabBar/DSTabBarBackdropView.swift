@@ -36,12 +36,6 @@ public final class DSTabBarBackdropView: UIView {
         )
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            invalidateIntensityAnimator()
-        }
-    }
-
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -67,6 +61,9 @@ public final class DSTabBarBackdropView: UIView {
 
         guard let animator else {
             apply()
+            if !open {
+                invalidateIntensityAnimator()
+            }
             return
         }
 
