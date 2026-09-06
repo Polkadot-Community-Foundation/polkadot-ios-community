@@ -61,6 +61,8 @@ class QRScannerViewController: UIViewController, ViewHolder {
 
             rootView.qrFrameView.frameLayer = videoPreviewLayer
         }
+
+        rootView.didAttachPreview()
     }
 
     // MARK: Message Management
