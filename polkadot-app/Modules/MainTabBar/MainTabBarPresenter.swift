@@ -7,13 +7,16 @@ final class MainTabBarPresenter {
     let wireframe: MainTabBarWireframeProtocol
     let interactor: MainTabBarInteractorInputProtocol
 
+    /// `.spaTabs` is dropped by the chrome while no apps are open; it is declared here so its
+    /// position next to `.scan` is owned by the slot list rather than by insertion order.
     #if FEATURE_PRODUCTS
         let slots: [TabBarSlot] = [
-            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.browse), .tab(.settings)
+            .tab(.chat), .tab(.wallet), .action(.scan), .action(.spaTabs),
+            .tab(.browse), .tab(.settings)
         ]
     #else
         let slots: [TabBarSlot] = [
-            .tab(.chat), .tab(.wallet), .action(.scan), .tab(.settings)
+            .tab(.chat), .tab(.wallet), .action(.scan), .action(.spaTabs), .tab(.settings)
         ]
     #endif
 

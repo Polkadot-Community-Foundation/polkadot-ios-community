@@ -314,10 +314,10 @@ final class TabBarBottomChromeController: UIViewController {
 // MARK: - Bar items and panel content
 
 private extension TabBarBottomChromeController {
-    /// The SPA-tabs action exists only while there are open apps, so the item list is derived
+    /// The SPA-tabs action is only shown while there are open apps, so the item list is derived
     /// rather than stored — and with it the map every index conversion goes through.
     func rebuildItems() {
-        let effectiveSlots = spaTabCount > 0 ? slots + [.action(.spaTabs)] : slots
+        let effectiveSlots = spaTabCount > 0 ? slots : slots.filter { $0 != .action(.spaTabs) }
         slotMap = TabBarSlotMap(slots: effectiveSlots)
 
         barView.items = effectiveSlots.enumerated().map { itemIndex, slot in
