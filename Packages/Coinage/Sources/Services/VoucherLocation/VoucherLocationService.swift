@@ -1,5 +1,6 @@
 import Foundation
 import BandersnatchApi
+import Foundation_iOS
 import SubstrateSdk
 import SubstrateStorageSubscription
 import Individuality
@@ -63,7 +64,9 @@ public final class VoucherLocationService: BaseSyncService {
             guard let self else { return }
 
             let stream = databaseFactory.makeTrackedVoucherSnapshotStream()
-                .map { $0.filter(\.shouldTrackOnchain).map(\.voucher) }
+                .map { trackedVouchers in
+                    trackedVouchers.filter(\.shouldTrackOnchain).map(\.voucher)
+                }
                 // Resubscribe only when the tracked key-set changes; non-key voucher edits keep the
                 // existing subscription.
                 .removeDuplicates { previous, current in
@@ -79,7 +82,7 @@ public final class VoucherLocationService: BaseSyncService {
                 }
                 try Task.checkCancellation()
 
-                logger.debug("Voucher sync started")
+                logger.debug("Voucher sync started: \(vouchers.count)")
                 startLocationSync(for: vouchers)
             }
         }
@@ -94,13 +97,12 @@ public final class VoucherLocationService: BaseSyncService {
 extension VoucherLocationService {
     private func startLocationSync(for vouchers: [Voucher]) {
         voucherStatusSubscriptionTask = Task { [weak self] in
-            guard let self else { return }
             do {
-                try await runLocationPipeline(for: vouchers)
+                try await self?.runLocationPipeline(for: vouchers)
             } catch is CancellationError {
                 // Expected: superseded by a newer tracked-voucher set.
             } catch {
-                logger.error("Voucher sync failed during monitoring: \(error)")
+                self?.logger.error("Voucher sync failed during monitoring: \(error)")
             }
         }
     }
@@ -121,13 +123,17 @@ extension VoucherLocationService {
                 logger: logger
             )
 
-        let positionsStream = memberStream.scan([DerivationIndex: MembersPallet.RingPosition]()) { positions, result in
-            var positions = positions
-            for update in result.ringPositionUpdates {
-                positions[update.derivationIndex] = update.ringPosition
+        let positionsStream = memberStream
+            .scan([DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>]()) { positions, result in
+                var positions = positions
+                for update in result.ringPositionUpdates {
+                    // The update was delivered, so it is `.defined`; a delivered empty reading is
+                    // `.defined(nil)` (retraction) rather than a dropped key, so it can revert the voucher.
+                    // A key never delivered stays absent — that, not `.undefined`, is "not changed".
+                    positions[update.derivationIndex] = .defined(update.ringPosition)
+                }
+                return positions
             }
-            return positions
-        }
 
         let resolvedStream = positionsStream
             .flatMapLatest { [weak self] positions -> AnyAsyncSequence<[DerivationIndex: Voucher.OnChainState]> in
@@ -148,7 +154,7 @@ extension VoucherLocationService {
     /// a complete status snapshot, and resolves each voucher's location against it. When no voucher is yet
     /// placed in a ring, emits the onboarding-only resolution once so those writes still happen.
     private func resolvedLocationsStream(
-        positions: [DerivationIndex: MembersPallet.RingPosition],
+        positions: [DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>],
         vouchers: [Voucher]
     ) -> AnyAsyncSequence<[DerivationIndex: Voucher.OnChainState]> {
         let voucherByIndex = Dictionary(uniqueKeysWithValues: vouchers.map { ($0.derivationIndex, $0) })
@@ -168,10 +174,10 @@ extension VoucherLocationService {
             )
 
         return statusStream
-            .scan([DerivationIndex: MembersPallet.RingKeysStatus]()) { statuses, result in
+            .scan([DerivationIndex: UncertainStorage<MembersPallet.RingKeysStatus?>]()) { statuses, result in
                 var statuses = statuses
                 for update in result.ringStatusUpdates {
-                    statuses[update.derivationIndex] = update.ringKeysStatus
+                    statuses[update.derivationIndex] = .defined(update.ringKeysStatus)
                 }
                 return statuses
             }
@@ -182,7 +188,7 @@ extension VoucherLocationService {
 
 // MARK: - Requests
 
-extension VoucherLocationService {
+private extension VoucherLocationService {
     /// Subscribes to `Members[identifier][voucherPubKey]` for every tracked voucher — including those
     /// already in a recycler, so a ring that keeps filling refreshes the voucher's position and member
     /// count. Detects Onboarding -> Included transitions and in-ring member growth.
@@ -207,12 +213,13 @@ extension VoucherLocationService {
         }
     }
 
-    private func ringStatusRequests(
-        positions: [DerivationIndex: MembersPallet.RingPosition],
+    func ringStatusRequests(
+        positions: [DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>],
         voucherByIndex: [DerivationIndex: Voucher]
     ) -> [BatchStorageSubscriptionRequest] {
-        positions.compactMap { derivationIndex, position in
-            guard let ringIndex = position.ringIndex,
+        positions.compactMap { derivationIndex, entry -> BatchStorageSubscriptionRequest? in
+            guard case let .defined(.some(position)) = entry,
+                  let ringIndex = position.ringIndex,
                   let voucher = voucherByIndex[derivationIndex]
             else { return nil }
 
@@ -235,35 +242,68 @@ extension VoucherLocationService {
     }
 }
 
-// MARK: - Resolution & persistence
+// MARK: - Resolution
 
 extension VoucherLocationService {
-    /// Pure join of the two snapshots: an included voucher whose ring status confirms its key becomes
-    /// in-recycler with the real member count; an included-but-not-yet-confirmed voucher is deferred (no
-    /// write); anything else is still onboarding.
+    /// Pure join of the two snapshots into the location each voucher should be persisted with.
+    ///
+    /// The snapshots are read three ways: a key absent from the map (or ``UncertainStorage/undefined``) was
+    /// not delivered in the subscription and is left untouched; a ``UncertainStorage/defined(_:)`` with a
+    /// `nil` reading was delivered empty (absent on chain or retracted by a fork); and a `.defined` with a
+    /// value carries it.
+    ///
+    /// - A member row delivered empty (`.defined(nil)`, retracted) reverts the voucher to `.unlocated` — the
+    ///   fix for the case a fork drops a member and the stale in-recycler state would otherwise linger.
+    /// - An included voucher whose ring status confirms its key becomes in-recycler with the real member
+    ///   count; if that ring status is delivered empty (the ring was retracted) the voucher falls back to
+    ///   onboarding.
+    /// - A status not delivered yet leaves the voucher deferred (no entry emitted) rather than guessed at.
+    /// - Anything else (onboarding/suspended position) is onboarding.
     static func resolveLocations(
-        positions: [DerivationIndex: MembersPallet.RingPosition],
-        statuses: [DerivationIndex: MembersPallet.RingKeysStatus]
+        positions: [DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>],
+        statuses: [DerivationIndex: UncertainStorage<MembersPallet.RingKeysStatus?>]
     ) -> [DerivationIndex: Voucher.OnChainState] {
         positions.reduce(into: [:]) { resolved, entry in
-            let (derivationIndex, position) = entry
+            let (derivationIndex, positionEntry) = entry
+
+            // Not delivered — leave the voucher as it is.
+            guard case let .defined(deliveredPosition) = positionEntry else { return }
+
+            // Delivered empty — the member row was retracted; revert to unlocated.
+            guard let position = deliveredPosition else {
+                resolved[derivationIndex] = .unlocated
+                return
+            }
 
             guard let ringIndex = position.ringIndex else {
                 resolved[derivationIndex] = .onboarding
                 return
             }
 
-            guard let status = statuses[derivationIndex], status.includesKey(from: position) else {
+            switch statuses[derivationIndex] {
+            case .none,
+                 .undefined?:
+                // Ring status not delivered yet — defer rather than guess.
                 return
+            case .defined(.none)?:
+                // The ring status was delivered empty (ring retracted): fall back to onboarding.
+                resolved[derivationIndex] = .onboarding
+            case let .defined(.some(status))?:
+                guard status.includesKey(from: position) else { return }
+                resolved[derivationIndex] = .inRecycler(
+                    Voucher.Recycler(index: ringIndex, membersCount: status.included)
+                )
             }
-
-            resolved[derivationIndex] = .inRecycler(
-                Voucher.Recycler(index: ringIndex, membersCount: status.included)
-            )
         }
     }
+}
 
-    private func writeLocations(_ locations: [DerivationIndex: Voucher.OnChainState]) async throws {
+// MARK: - Persistence
+
+private extension VoucherLocationService {
+    func writeLocations(_ locations: [DerivationIndex: Voucher.OnChainState]) async throws {
+        logger.debug(locations.toDebugDescription)
+
         guard !locations.isEmpty else { return }
 
         // A dedicated write-only mapper touches only remoteState, so a concurrent change to any other
@@ -275,12 +315,5 @@ extension VoucherLocationService {
             .saveOperation({ updates }, { [] })
             .asyncExecute()
         logger.debug("Updated \(updates.count) voucher locations via subscription")
-    }
-}
-
-public extension Voucher.OnChainState {
-    var isInRecycler: Bool {
-        guard case .inRecycler = self else { return false }
-        return true
     }
 }

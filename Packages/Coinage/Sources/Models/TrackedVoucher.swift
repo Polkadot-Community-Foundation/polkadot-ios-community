@@ -45,7 +45,7 @@ extension TrackedVoucher {
     /// filling after a voucher lands in it, so an in-recycler voucher stays tracked to refresh its
     /// member count — until it is spent (`isConsumed`) or its mint provably failed.
     var shouldTrackOnchain: Bool {
-        !state.isConsumed && !state.isMintingFailed
+        !state.isConsumed && !state.isMintingFailed || voucher.remoteState != .unlocated
     }
 }
 
