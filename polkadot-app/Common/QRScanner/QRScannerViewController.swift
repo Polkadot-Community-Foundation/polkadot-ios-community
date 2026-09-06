@@ -64,6 +64,9 @@ class QRScannerViewController: UIViewController, ViewHolder {
     }
 
     func present(message: String, animated: Bool, autoDismiss: Bool) {
+        // A pending hide from an earlier message would otherwise dismiss this one.
+        invalidateMessageScheduling()
+
         rootView.messageLabel.text = message
 
         let block: () -> Void = { [weak self] in
