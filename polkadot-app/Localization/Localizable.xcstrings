@@ -4398,6 +4398,23 @@
         }
       }
     },
+    "tab.more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Más"
+          }
+        }
+      }
+    },
     "tab.scan": {
       "extractionState": "manual",
       "localizations": {

@@ -65,6 +65,14 @@ enum MainTabBarViewFactory {
         let chipViewModelFactory = SPATabChipViewModelFactory(
             flowStateProvider: flowStateProvider
         )
+        let tabFactory = TabFactory(
+            serviceCoordinator: serviceCoordinator,
+            flowState: flowState,
+            scanResultHandler: qrHandler,
+            flowStateProvider: flowStateProvider,
+            foregroundVisibilityReporter: foregroundVisibilityReporter
+        )
+
         let presenter = MainTabBarPresenter(
             interactor: interactor,
             wireframe: wireframe,
@@ -73,14 +81,6 @@ enum MainTabBarViewFactory {
 
         interactor.presenter = presenter
         polkadotSignInService.output = interactor
-
-        let tabFactory = TabFactory(
-            serviceCoordinator: serviceCoordinator,
-            flowState: flowState,
-            scanResultHandler: qrHandler,
-            flowStateProvider: flowStateProvider,
-            foregroundVisibilityReporter: foregroundVisibilityReporter
-        )
 
         let view = MainTabBarViewController(
             presenter: presenter,

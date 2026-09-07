@@ -7,13 +7,17 @@ final class MainTabBarPresenter {
     let wireframe: MainTabBarWireframeProtocol
     let interactor: MainTabBarInteractorInputProtocol
 
-    // `.scan` must stay the centre slot: DSTabBarRow derives it as `itemCount / 2`, which holds
-    // for both arms (index 2 of 5, index 2 of 4). The trailing slot in the non-products arm
-    // balances `.scan` optically even when there are only four tabs.
+    /// `.spaTabs` is dropped by the chrome while no apps are open; it is declared here so its
+    /// position next to `.scan` is owned by the slot list rather than by insertion order.
     #if FEATURE_PRODUCTS
-        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .browse, .settings]
+        let slots: [TabBarSlot] = [
+            .tab(.chat), .tab(.wallet), .action(.scan), .action(.spaTabs),
+            .tab(.browse), .tab(.settings)
+        ]
     #else
-        let tabItems: [TabBarItem] = [.chat, .wallet, .scan, .settings]
+        let slots: [TabBarSlot] = [
+            .tab(.chat), .tab(.wallet), .action(.scan), .action(.spaTabs), .tab(.settings)
+        ]
     #endif
 
     private let chipViewModelFactory: SPATabChipViewModelFactory
@@ -36,8 +40,17 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
     }
 
     func configureViews() {
-        view?.show(tabs: tabItems, selecting: .wallet)
+        view?.show(slots: slots, selecting: .wallet)
         view?.setBadge(settingsBadge, for: .settings)
+    }
+
+    func didRequestContentPanel(for action: TabBarAction) {
+        switch action {
+        case .scan:
+            view?.showScanPanel()
+        case .spaTabs:
+            break
+        }
     }
 }
 

@@ -1,19 +1,26 @@
 import UIKit
 import DesignSystem
 
-/// Content must be self-sizing.
+/// Hosts either a content configuration or a child controller's view; both size themselves and
+/// are measured the same way. A controller cannot be wrapped in a `UIContentView` without
+/// losing its appearance callbacks, so the two modes exist side by side and are exclusive.
 public final class DSTabBarContentPanelView: UIView {
     public private(set) var isOpen = false
 
     private let container = UIView()
     private var contentView: (UIView & UIContentView)?
     private var contentReuseIdentifier: String?
+    private var hostedView: UIView?
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
 
         container.clipsToBounds = true
         container.alpha = 0
+        // A closed panel keeps the open panel's frame and would otherwise
+        // hit-test as itself, swallowing touches meant for whatever sits
+        // behind it.
+        isUserInteractionEnabled = false
         addSubview(container)
     }
 
@@ -24,11 +31,11 @@ public final class DSTabBarContentPanelView: UIView {
 
     public func setConfiguration(_ configuration: (any HashableContentConfiguration)?) {
         guard let configuration else {
-            contentView?.removeFromSuperview()
-            contentView = nil
-            contentReuseIdentifier = nil
+            clearContentView()
             return
         }
+
+        clearHostedView()
 
         if let contentView,
            contentReuseIdentifier == configuration.defaultReuseIdentifier {
@@ -47,12 +54,47 @@ public final class DSTabBarContentPanelView: UIView {
         setNeedsLayout()
     }
 
+    /// The hosted view's own constraints decide the panel height. The bottom pin yields so a view
+    /// with a required aspect constraint keeps its shape while the container animates to fit it.
+    public func setHostedView(_ view: UIView?) {
+        guard let view else {
+            clearHostedView()
+            return
+        }
+
+        clearContentView()
+
+        guard hostedView !== view else {
+            setNeedsLayout()
+            return
+        }
+
+        hostedView?.removeFromSuperview()
+        hostedView = view
+        view.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+
+        let bottom = view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        bottom.priority = .defaultHigh
+
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: container.topAnchor),
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bottom
+        ])
+
+        // Settle the hosted view at its final size w/o animation
+        setNeedsLayout()
+        layoutIfNeeded()
+    }
+
     public func preferredHeight(availableHeight: CGFloat) -> CGFloat {
-        guard let contentView, bounds.width > 0 else {
+        guard let measuredView = hostedView ?? contentView, bounds.width > 0 else {
             return DSTabBarMetrics.capsuleHeight
         }
 
-        let measuredSize = contentView.systemLayoutSizeFitting(
+        let measuredSize = measuredView.systemLayoutSizeFitting(
             CGSize(width: bounds.width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
@@ -72,6 +114,10 @@ public final class DSTabBarContentPanelView: UIView {
         }
         isOpen = open
 
+        // Not `isHidden`: that cannot animate, so it would have to wait on the animator and
+        // then race a reopen during the fade. Interaction can flip immediately instead.
+        isUserInteractionEnabled = open
+
         let apply = { [self] in
             container.alpha = open ? 1 : 0
         }
@@ -89,5 +135,18 @@ public final class DSTabBarContentPanelView: UIView {
 
         container.frame = bounds
         contentView?.frame = container.bounds
+    }
+}
+
+private extension DSTabBarContentPanelView {
+    func clearContentView() {
+        contentView?.removeFromSuperview()
+        contentView = nil
+        contentReuseIdentifier = nil
+    }
+
+    func clearHostedView() {
+        hostedView?.removeFromSuperview()
+        hostedView = nil
     }
 }
