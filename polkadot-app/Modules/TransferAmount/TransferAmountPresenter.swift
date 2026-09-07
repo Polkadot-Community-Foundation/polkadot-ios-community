@@ -166,14 +166,16 @@ private extension TransferAmountPresenter {
         view?.didReceive(privacyHint: String(localized: .Transfer.privacyCostHint(formatted)))
     }
 
-    /// The input cap: everything reachable, so the field accepts amounts into the gaining-privacy range
-    /// (a spend there is then gated behind the confirmation sheet).
     func calculateMax() -> BigUInt? {
         spendableBreakdown.map { $0.availablePrivate + $0.gainingPrivacy }
     }
+    
+    func calculateAvailablePrivate() -> BigUInt? {
+        spendableBreakdown.map { $0.availablePrivate }
+    }
 
     func provideInputAmount() {
-        let maxAmount = calculateMax()
+        let maxAmount = calculateAvailablePrivate()
         let amount = inputAmount?.absoluteValue(
             from: maxAmount?.decimal(assetInfo: chainAsset.assetDisplayInfo) ?? 0
         )
@@ -188,7 +190,7 @@ private extension TransferAmountPresenter {
     func provideAmountViewModel() {
         let amountViewModel = amountInputStrategy.createInputViewModelFactory(
             for: inputAmount,
-            balance: calculateMax()
+            balance: calculateAvailablePrivate()
         )
 
         view?.didReceive(amountViewModel: amountViewModel)
@@ -271,7 +273,7 @@ private extension TransferAmountPresenter {
     }
 
     func calculateInputAmount() -> Decimal? {
-        guard let maxAmount = calculateMax() else {
+        guard let maxAmount = calculateAvailablePrivate() else {
             return nil
         }
 
