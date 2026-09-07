@@ -37,50 +37,50 @@ final class Logger {
 }
 
 extension Logger: LoggerProtocol {
-    func verbose(message: String, file: String, function: String, line: Int) {
+    func verbose(message: () -> String, file: String, function: String, line: Int) {
         log.custom(
             level: .verbose,
-            message: message,
+            message: message(),
             file: file,
             function: function,
             line: line
         )
     }
 
-    func debug(message: String, file: String, function: String, line: Int) {
+    func debug(message: () -> String, file: String, function: String, line: Int) {
         log.custom(
             level: .debug,
-            message: message,
+            message: message(),
             file: file,
             function: function,
             line: line
         )
     }
 
-    func info(message: String, file: String, function: String, line: Int) {
+    func info(message: () -> String, file: String, function: String, line: Int) {
         log.custom(
             level: .info,
-            message: message,
+            message: message(),
             file: file,
             function: function,
             line: line
         )
     }
 
-    func warning(message: String, file: String, function: String, line: Int) {
+    func warning(message: () -> String, file: String, function: String, line: Int) {
         log.custom(
             level: .warning,
-            message: message,
+            message: message(),
             file: file,
             function: function,
             line: line
         )
     }
 
-    func error(message: String, file: String, function: String, line: Int) {
+    func error(message: () -> String, file: String, function: String, line: Int) {
         log.custom(
             level: .error,
-            message: message,
+            message: message(),
             file: file,
             function: function,
             line: line
