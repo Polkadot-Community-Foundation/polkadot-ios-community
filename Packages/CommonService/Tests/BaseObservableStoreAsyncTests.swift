@@ -1,6 +1,5 @@
-@testable import polkadot_app
-import CommonService
 import Testing
+@testable import CommonService
 
 struct BaseObservableStoreAsyncTests {
     struct TestState: Equatable {
