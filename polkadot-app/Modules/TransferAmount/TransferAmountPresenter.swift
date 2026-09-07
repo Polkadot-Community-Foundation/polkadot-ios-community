@@ -169,9 +169,9 @@ private extension TransferAmountPresenter {
     func calculateMax() -> BigUInt? {
         spendableBreakdown.map { $0.availablePrivate + $0.gainingPrivacy }
     }
-    
+
     func calculateAvailablePrivate() -> BigUInt? {
-        spendableBreakdown.map { $0.availablePrivate }
+        spendableBreakdown.map(\.availablePrivate)
     }
 
     func provideInputAmount() {
