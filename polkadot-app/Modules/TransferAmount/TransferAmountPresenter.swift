@@ -288,7 +288,7 @@ private extension TransferAmountPresenter {
             do {
                 let validation = try await interactor.previewTransfer(for: amount)
                 if validation.requiresPrivacyConfirmation {
-                    presentPrivacyConfirmation(validation: validation, amount: amount)
+                    presentPrivacyConfirmation(validation: validation)
                 } else {
                     doSubmit(validation: validation)
                 }
@@ -300,7 +300,7 @@ private extension TransferAmountPresenter {
     }
 
     /// The spend dips into gaining-privacy funds: confirm before submitting
-    func presentPrivacyConfirmation(validation: TransferPreviewValidation, amount _: Decimal) {
+    func presentPrivacyConfirmation(validation: TransferPreviewValidation) {
         let amountText = formattedAmount(validation.fullAmount)
         wireframe.showGainingPrivacyConfirmation(
             from: view,
