@@ -1,8 +1,7 @@
 import Foundation
-import CommonService
 import AsyncExtensions
 
-extension BaseObservableStateStoreProtocol {
+public extension BaseObservableStateStoreProtocol {
     func observe() -> AnyAsyncSequence<RemoteState?> {
         let syncQueue = DispatchQueue(label: "io.observable.store.async.updates")
         let observer = NSObject()
