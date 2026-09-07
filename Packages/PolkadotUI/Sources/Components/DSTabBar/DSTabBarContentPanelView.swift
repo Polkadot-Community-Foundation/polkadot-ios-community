@@ -84,7 +84,9 @@ public final class DSTabBarContentPanelView: UIView {
             bottom
         ])
 
+        // Settle the hosted view at its final size w/o animation
         setNeedsLayout()
+        layoutIfNeeded()
     }
 
     public func preferredHeight(availableHeight: CGFloat) -> CGFloat {

@@ -40,6 +40,7 @@ final class EmbeddedQRScannerViewLayout: QRScannerViewLayout {
             make.edges.equalToSuperview().inset(DSSpacings.tiny)
         }
 
+        messageLabel.textColor = .fgPrimary
         addSubview(messageLabel)
         messageLabel.snp.makeConstraints { make in
             make.leading.trailing.equalTo(qrFrameView).inset(DSSpacings.mediumIncreased)
