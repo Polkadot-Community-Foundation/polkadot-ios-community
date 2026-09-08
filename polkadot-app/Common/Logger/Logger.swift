@@ -8,7 +8,7 @@ import SDKLogger
 
 typealias LoggerProtocol = SDKLoggerProtocol
 
-final class Logger {
+final class Logger: Sendable {
     static let shared = Logger()
 
     let log = SwiftyBeaver.self

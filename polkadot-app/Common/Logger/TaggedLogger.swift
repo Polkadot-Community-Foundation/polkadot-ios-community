@@ -1,6 +1,6 @@
 import Foundation
 
-final class TaggedLogger {
+final class TaggedLogger: Sendable {
     private let tag: String
     private let baseLogger: LoggerProtocol
 
