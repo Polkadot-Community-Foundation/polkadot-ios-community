@@ -99,7 +99,7 @@ extension ChainModelMapper: CoreDataMapperProtocol {
 
         try updateEntityNodes(for: entity, from: model, context: context)
 
-        updateExternalApis(for: entity, from: model, context: context)
+        try updateExternalApis(for: entity, from: model, context: context)
 
         updateExplorers(for: entity, from: model.explorers)
     }
