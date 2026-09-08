@@ -18,6 +18,21 @@ name: Release (Dev)
 # uploads of the same marketing version are accepted. The first build of each version sent
 # to the external group goes through Beta App Review before testers receive it.
 #
+# WEEKLY TRACK — a Thursday 18:00 UTC schedule ships a build to the same TestFlight group
+# without anyone tagging. Scheduled runs carry no tag, so they mint a dated
+# `ios-dev-weekly-YYYY-MM-DD` pre-release alongside the TestFlight upload; tagged
+# `ios-dev-v*` runs keep publishing under their own tag. Two consequences worth knowing:
+#   - Cron is UTC and does NOT follow DST: 18:00 UTC is 20:00 CEST in summer, 19:00 CET
+#     in winter. Change the hour, not the timezone, if the local slot must hold.
+#   - ⭐ The weekly build MUST NOT bump MARKETING_VERSION. Only CURRENT_PROJECT_VERSION
+#     (the build number) is stamped here, from the CI run number; MARKETING_VERSION stays
+#     wherever polkadot-app.xcodeproj/project.pbxproj has it and is bumped by hand, on
+#     purpose. That is what lets every weekly reuse an already-approved version and reach
+#     testers immediately — the first build of a NEW version goes through Beta App Review
+#     and can lag a day. Do not add a MARKETING_VERSION override to this workflow.
+# GitHub only runs schedules on the DEFAULT BRANCH, and suspends them after 60 days of
+# repository inactivity.
+#
 # Required repository secrets:
 #   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key; needs the
 #                                        App Manager role to manage TestFlight groups)
@@ -39,15 +54,26 @@ on:
   workflow_dispatch:
   push:
     tags: ['ios-dev-v*']
+  schedule:
+    # Weekly devnet build — Thursday 18:00 UTC (20:00 CEST / 19:00 CET; cron has no DST).
+    - cron: '0 18 * * 4'
 
 permissions:
   contents: write
+
+# One release run at a time. Don't cancel an in-progress run: a half-finished TestFlight
+# upload should complete rather than abort, and a manual tag must not lose to a cron.
+concurrency:
+  group: release-dev
+  cancel-in-progress: false
 
 jobs:
   testflight:
     runs-on: macos-15
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
+      IS_WEEKLY: ${{ github.event_name == 'schedule' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -137,10 +163,33 @@ jobs:
             -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
             -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
+      # Resolve which channel this run is, once, for the TestFlight changelog and the
+      # release tag/title below. A scheduled run carries no tag, so it is dated instead.
+      - name: Resolve release channel
+        id: channel
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          if [ "$IS_TAG" = "true" ]; then
+            CHANGELOG="Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${GITHUB_REF_NAME}."
+          elif [ "$IS_WEEKLY" = "true" ]; then
+            CHANGELOG="Weekly Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}) — ${DATE}."
+          else
+            CHANGELOG="Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
+          fi
+          {
+            echo "date=$DATE"
+            echo "changelog=$CHANGELOG"
+          } >> "$GITHUB_OUTPUT"
+          echo "channel: tag=$IS_TAG weekly=$IS_WEEKLY"
+
       - name: Distribute to TestFlight group "Products Devnet"
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          # Read from the environment, never interpolated into the script body: the
+          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
+          # break out of the quoting.
+          CHANGELOG: ${{ steps.channel.outputs.changelog }}
         run: |
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
           echo "Uploading $IPA"
@@ -157,7 +206,7 @@ jobs:
             --groups "Products Devnet" \
             --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
             --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
-            --changelog "Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
+            --changelog "$CHANGELOG"
 
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
@@ -178,6 +227,29 @@ jobs:
             Distribution is TestFlight-only:
 
             👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+
+      # ---------------------------------------------------------------- weekly track
+      # Scheduled runs carry no tag, so mint a dated pre-release. It exists to give the
+      # weekly build a citable landmark (date ↔ commit ↔ build number) — the binary still
+      # only ever reaches testers through TestFlight, so no assets are attached.
+      - name: Create weekly GitHub pre-release
+        if: env.IS_WEEKLY == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-dev-weekly-${{ steps.channel.outputs.date }}
+          name: Weekly devnet build ${{ steps.channel.outputs.date }} (iOS)
+          prerelease: true
+          body: |
+            Weekly iOS developer build for the products devnet — ${{ steps.channel.outputs.date }}.
+
+            Commit ${{ github.sha }} · build ${{ github.run_number }}
+
+            Distribution is TestFlight-only:
+
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+
+            This is a **devnet** build for testing only; state may be wiped. Found a
+            problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
 
       # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
       # (ExportOptions method=ad-hoc) and run
