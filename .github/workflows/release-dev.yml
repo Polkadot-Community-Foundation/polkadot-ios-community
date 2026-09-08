@@ -75,6 +75,7 @@ jobs:
     runs-on: macos-15
     outputs:
       changelog: ${{ steps.channel.outputs.changelog }}
+      date: ${{ steps.channel.outputs.date }}
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
@@ -194,42 +195,6 @@ jobs:
           path: build/*.ipa
           if-no-files-found: warn
 
-      - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/ios-dev-v')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          prerelease: true
-          body: |
-            iOS developer build for the products devnet.
-
-            Distribution is TestFlight-only:
-
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
-
-      # ---------------------------------------------------------------- weekly track
-      # Scheduled runs carry no tag, so mint a dated pre-release. It exists to give the
-      # weekly build a citable landmark (date ↔ commit ↔ build number) — the binary still
-      # only ever reaches testers through TestFlight, so no assets are attached.
-      - name: Create weekly GitHub pre-release
-        if: env.IS_WEEKLY == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ios-dev-weekly-${{ steps.channel.outputs.date }}
-          name: Weekly devnet build ${{ steps.channel.outputs.date }} (iOS)
-          prerelease: true
-          body: |
-            Weekly iOS developer build for the products devnet — ${{ steps.channel.outputs.date }}.
-
-            Commit ${{ github.sha }} · build ${{ github.run_number }}
-
-            Distribution is TestFlight-only:
-
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
-
-            This is a **devnet** build for testing only; state may be wiped. Found a
-            problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
-
       # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
       # (ExportOptions method=ad-hoc) and run
       #   firebase appdistribution:distribute build/polkadot-app.ipa \
@@ -255,6 +220,8 @@ jobs:
   distribute:
     needs: testflight
     runs-on: macos-15
+    permissions:
+      contents: write   # softprops/action-gh-release (release records) — the gate is the environment
     environment:
       name: tester-distribution
       url: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
@@ -275,6 +242,46 @@ jobs:
           cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
 
       - name: Distribute to TestFlight group "Products Devnet"
+
+      # ---- GitHub release records — behind the SAME approval as the TestFlight hand-off ----
+      # These carry no binary (TestFlight is the only channel) but they are public,
+      # citable release records; nothing is minted unattended by the Thursday cron.
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/ios-dev-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: true
+          body: |
+            iOS developer build for the products devnet.
+
+            Distribution is TestFlight-only:
+
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+
+      # ---------------------------------------------------------------- weekly track
+      # Scheduled runs carry no tag, so mint a dated pre-release (behind the same approval). It exists to give the
+      # weekly build a citable landmark (date ↔ commit ↔ build number) — the binary still
+      # only ever reaches testers through TestFlight, so no assets are attached.
+      - name: Create weekly GitHub pre-release
+        if: github.event_name == 'schedule'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-dev-weekly-${{ needs.testflight.outputs.date }}
+          name: Weekly devnet build ${{ needs.testflight.outputs.date }} (iOS)
+          prerelease: true
+          body: |
+            Weekly iOS developer build for the products devnet — ${{ needs.testflight.outputs.date }}.
+
+            Commit ${{ github.sha }} · build ${{ github.run_number }}
+
+            Distribution is TestFlight-only:
+
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+
+            This is a **devnet** build for testing only; state may be wiped. Found a
+            problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
+
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
