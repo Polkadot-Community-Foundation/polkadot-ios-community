@@ -9,6 +9,7 @@ import CommonService
 import KeyDerivation
 import SubstrateOperation
 import ChainRegistry
+import Products
 
 protocol PersonhoodRegistrationServicing: ApplicationServiceProtocol,
     PersonSelfIncludeBackgroundServiceDelegate,
@@ -49,6 +50,7 @@ final class PersonhoodRegistrationService: @unchecked Sendable {
     let candidateOriginFactory: CandidateOriginFactoryProtocol
     let personhoodOriginFactory: PersonhoodOriginFactoryProtocol
     let chainRegistry: ChainRegistryProtocol
+    let tldProvider: DotNsTldProviding
     let syncQueue: DispatchQueue
     let logger: LoggerProtocol
     let operationQueue: OperationQueue
@@ -89,6 +91,7 @@ final class PersonhoodRegistrationService: @unchecked Sendable {
         ),
         candidateOriginFactory: CandidateOriginFactoryProtocol,
         personhoodOriginFactory: PersonhoodOriginFactoryProtocol,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared,
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
         syncQueue: DispatchQueue = DispatchQueue(label: "io.polkadot.app.person.register.\(UUID().uuidString)"),
         logger: LoggerProtocol = Logger.shared,
@@ -107,6 +110,7 @@ final class PersonhoodRegistrationService: @unchecked Sendable {
         self.extrinsicSubmissionFacade = extrinsicSubmissionFacade
         self.candidateOriginFactory = candidateOriginFactory
         self.personhoodOriginFactory = personhoodOriginFactory
+        self.tldProvider = tldProvider
         self.operationQueue = operationQueue
         self.syncQueue = syncQueue
         self.logger = logger

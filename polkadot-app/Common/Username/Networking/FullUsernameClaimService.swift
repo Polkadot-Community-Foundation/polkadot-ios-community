@@ -6,6 +6,7 @@ import Keystore_iOS
 import Individuality
 import KeyDerivation
 import ChainRegistry
+import Products
 
 protocol FullUsernameClaimServicing {
     func claimUsername(
@@ -22,6 +23,7 @@ final class FullUsernameClaimService {
     private let litePersonOriginFactory: ExtrinsicOriginDefiningFactoryProtocol
     private let liteWallet: WalletManaging
     private let resourcesWallet: WalletManaging
+    private let tldProvider: DotNsTldProviding
     private let logger: LoggerProtocol
 
     init(
@@ -32,6 +34,7 @@ final class FullUsernameClaimService {
         litePersonOriginFactory: ExtrinsicOriginDefiningFactoryProtocol,
         liteWallet: WalletManaging,
         resourcesWallet: WalletManaging,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.chain = chain
@@ -41,6 +44,7 @@ final class FullUsernameClaimService {
         self.litePersonOriginFactory = litePersonOriginFactory
         self.liteWallet = liteWallet
         self.resourcesWallet = resourcesWallet
+        self.tldProvider = tldProvider
         self.logger = logger
     }
 }
@@ -138,11 +142,13 @@ private extension FullUsernameClaimService {
             throw ClaimError.missingAccountId
         }
 
+        let resourcesContext = try tldProvider.personhoodContext(for: .resources)
+
         let origin = try extrinsicOriginFactory.createAsPersonalAliasWithAccount(
             input: .init(
                 wallet: resourcesWallet,
                 chain: chain,
-                context: Data(PalletContext.resources.utf8),
+                context: resourcesContext,
                 blockHash: nil
             )
         )

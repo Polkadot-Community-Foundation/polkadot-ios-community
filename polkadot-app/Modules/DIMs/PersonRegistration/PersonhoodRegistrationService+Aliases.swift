@@ -4,20 +4,37 @@ import Operation_iOS
 import SubstrateSdk
 import Individuality
 import KeyDerivation
+import Products
 import SubstrateOperation
 
 extension PersonhoodRegistrationService {
     func checkAliasesCreation(with remoteState: PersonRegistration.RemoteState) {
+        // Mob rule still uses the padded pallet context: `MOB_CONTEXT` in the runtime's
+        // `pallets/mob-rule` is unchanged by RFC-0004, and Android left its own constant alone.
         checkAliasCreationState(
             remoteState.mobRuleAlias,
             input: .init(
                 wallet: mobRuleWallet,
                 creationState: .requiresMobRule,
                 progress: .submittingMobRuleAlias,
-                context: PalletContext.mobRule
+                context: Data(PalletContext.mobRule.utf8)
             ),
             remoteState: remoteState
         )
+
+        // Score and resources moved to product contexts derived from the runtime's network suffix.
+        // Both are resolved up front: without the suffix the contexts cannot be built at all, and
+        // submitting a guessed one would register an alias the chain rejects.
+        let scoreContext: Data
+        let resourcesContext: Data
+
+        do {
+            scoreContext = try tldProvider.personhoodContext(for: .score)
+            resourcesContext = try tldProvider.personhoodContext(for: .resources)
+        } catch {
+            logger.error("Can't build personhood product contexts: \(error)")
+            return
+        }
 
         checkAliasCreationState(
             remoteState.scoreAlias,
@@ -25,7 +42,7 @@ extension PersonhoodRegistrationService {
                 wallet: scoreWallet,
                 creationState: .requiresScore,
                 progress: .submittingScoreAlias,
-                context: PalletContext.score
+                context: scoreContext
             ),
             remoteState: remoteState
         )
@@ -36,7 +53,7 @@ extension PersonhoodRegistrationService {
                 wallet: resourcesWallet,
                 creationState: .requiresResources,
                 progress: .submittingResourcesAlias,
-                context: PalletContext.resources
+                context: resourcesContext
             ),
             remoteState: remoteState
         )
@@ -50,7 +67,9 @@ private extension PersonhoodRegistrationService {
         let wallet: WalletManaging
         let creationState: PersonRegistration.RemoteState.AliasCreationState
         let progress: PersonRegistration.Progress
-        let context: String
+        /// The 32-byte ring-VRF context, already built. Was a padded pallet string before
+        /// RFC-0004; product contexts are hashed bytes with no string form.
+        let context: Data
     }
 
     func checkAliasCreationState(
@@ -95,7 +114,7 @@ private extension PersonhoodRegistrationService {
         submitAliasCreation(
             remoteState: remoteState,
             accountId: accountId,
-            context: Data(input.context.utf8),
+            context: input.context,
             progress: input.progress
         )
     }

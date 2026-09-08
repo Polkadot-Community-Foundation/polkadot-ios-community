@@ -6,6 +6,7 @@ import ExtrinsicService
 import KeyDerivation
 import Individuality
 import ChainRegistry
+import Products
 
 protocol GameRegisterServicing {
     func registerForGame(
@@ -34,6 +35,7 @@ final class GameRegisterService {
     private let encryptionIdentifier: Chat.OnChainEncryptionIdentifier
     private let personhoodOriginFactory: PersonhoodOriginFactoryProtocol
     private let candidateOriginFactory: CandidateOriginFactoryProtocol
+    private let tldProvider: DotNsTldProviding
 
     init(
         chain: ChainModel,
@@ -42,7 +44,8 @@ final class GameRegisterService {
         encryptionIdentifier: Chat.OnChainEncryptionIdentifier,
         extrinsicSubmitMonitor: ExtrinsicSubmitMonitorFactoryProtocol,
         candidateOriginFactory: CandidateOriginFactoryProtocol,
-        personhoodOriginFactory: PersonhoodOriginFactoryProtocol
+        personhoodOriginFactory: PersonhoodOriginFactoryProtocol,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
     ) {
         self.chain = chain
         self.candidateWallet = candidateWallet
@@ -51,6 +54,7 @@ final class GameRegisterService {
         self.encryptionIdentifier = encryptionIdentifier
         self.candidateOriginFactory = candidateOriginFactory
         self.personhoodOriginFactory = personhoodOriginFactory
+        self.tldProvider = tldProvider
     }
 }
 
@@ -168,11 +172,12 @@ private extension GameRegisterService {
                 + "airdrop=\(airdropVariantDescription(airdrop))"
         )
         do {
+            let context = try tldProvider.personhoodContext(for: .score)
             let origin = try personhoodOriginFactory.createAsPersonalAliasWithAccount(
                 input: .init(
                     wallet: scoreWallet,
                     chain: chain,
-                    context: Data(PalletContext.score.utf8),
+                    context: context,
                     blockHash: nil
                 )
             )
