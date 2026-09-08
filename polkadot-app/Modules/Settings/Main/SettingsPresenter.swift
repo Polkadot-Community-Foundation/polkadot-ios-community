@@ -97,7 +97,6 @@ extension SettingsPresenter: SettingsPresenterProtocol {
         interactor.savePrivacyStrategy(strategy)
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     func didTapCell(_ cell: SettingsViewModel.CellType) {
         switch cell {
         case .termsOfUse,
