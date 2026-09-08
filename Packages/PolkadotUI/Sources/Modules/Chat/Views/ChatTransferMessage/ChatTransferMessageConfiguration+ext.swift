@@ -77,13 +77,13 @@ public extension ChatTransferMessageConfiguration {
 private extension ChatTransferMessageConfiguration.State {
     func inboxTitle(username: String) -> String {
         switch self {
-        case .finished:
-            String(localized: .chatTransferInbox(username: username))
-        case .processing,
+        case .finished,
              .sent,
-             .claiming,
              .partiallyClaimed,
              .error:
+            String(localized: .chatTransferInbox(username: username))
+        case .processing,
+             .claiming:
             String(localized: .chatTransferInboxSending(username: username))
         }
     }
