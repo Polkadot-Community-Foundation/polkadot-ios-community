@@ -24,25 +24,38 @@ struct CoinSelectorTests {
     private func makeCoin(
         exponent: Int16,
         age: Int16 = 0,
-        derivationIndex: UInt32 = 0,
-        state: Coin.State = .available
-    ) -> Coin {
-        Coin(exponent: exponent, derivationIndex: derivationIndex, age: age, state: state)
+        derivationIndex: UInt64 = 0,
+        selectable: Bool = true
+    ) -> TrackedCoin {
+        let coin = Coin(
+            exponent: exponent,
+            derivationIndex: derivationIndex,
+            age: age,
+            isOnchain: true,
+            publicKey: Data(repeating: UInt8(truncatingIfNeeded: derivationIndex), count: 32)
+        )
+        let state = selectable
+            ? CoinageAssetState(handedOff: false, consumerStatus: nil, minterStatus: nil)
+            : CoinageAssetState(handedOff: false, consumerStatus: .finalizedSuccess, minterStatus: nil)
+        return TrackedCoin(coin: coin, state: state)
     }
 
     private func makeVoucher(
         exponent: Int16,
-        derivationIndex: UInt32 = 0,
-        readyAt: Date = Date.distantPast,
-        readinessState: VoucherPrivacyLevel = .full
-    ) -> Voucher {
-        Voucher(
+        derivationIndex: UInt64 = 0,
+        readyAt: Date = Date.distantPast
+    ) -> TrackedVoucher {
+        let voucher = Voucher(
             exponent: exponent,
             derivationIndex: derivationIndex,
             allocatedAt: Date.distantPast,
             readyAt: readyAt,
-            remoteState: .inRecycler(.init(index: 0)),
-            privacy: readinessState
+            remoteState: .inRecycler(.init(index: 0, membersCount: 0)),
+            publicKey: Data(repeating: UInt8(truncatingIfNeeded: derivationIndex), count: 32)
+        )
+        return TrackedVoucher(
+            voucher: voucher,
+            state: CoinageAssetState(handedOff: false, consumerStatus: nil, minterStatus: nil)
         )
     }
 
@@ -323,26 +336,6 @@ struct CoinSelectorTests {
         }
     }
 
-    @Test("Insufficient degraded vouchers return noReadyVouchers error")
-    func insufficientDegradedVouchersReturnNoReadyVouchersError() async throws {
-        let vouchers = [
-            makeVoucher(exponent: 1, derivationIndex: 0, readinessState: .degraded) // $2, degraded
-        ]
-
-        do {
-            _ = try await makeSelector().selectCoins(SelectCoinsInput(
-                amount: planks(Decimal(8)), // need $8, only have $2 (degraded)
-                coins: [],
-                vouchers: vouchers,
-                breakdownContext: testContext,
-                maxVouchersPerGroup: maxVouchers
-            ))
-            Issue.record("Expected noReadyVouchers error")
-        } catch let error as CoinSelectionError {
-            #expect(error == .noReadyVouchers)
-        }
-    }
-
     // MARK: - Strategy 3: Coins Plus Unload (now unified in unloadIntoCoins)
 
     @Test("Combines coins and voucher when beneficial")
@@ -530,27 +523,6 @@ struct CoinSelectorTests {
         }
     }
 
-    @Test("All degraded vouchers insufficient to cover amount return noReadyVouchers error")
-    func allDegradedVouchersInsufficientReturnsNoReadyVouchersError() async throws {
-        let vouchers = [
-            makeVoucher(exponent: 2, derivationIndex: 0, readinessState: .degraded), // $4, degraded
-            makeVoucher(exponent: 1, derivationIndex: 1, readinessState: .degraded) // $2, degraded — total $6
-        ]
-
-        do {
-            _ = try await makeSelector().selectCoins(SelectCoinsInput(
-                amount: planks(Decimal(8)), // need $8, only have $6 (degraded)
-                coins: [],
-                vouchers: vouchers,
-                breakdownContext: testContext,
-                maxVouchersPerGroup: maxVouchers
-            ))
-            Issue.record("Expected noReadyVouchers error")
-        } catch let error as CoinSelectionError {
-            #expect(error == .noReadyVouchers)
-        }
-    }
-
     // MARK: - Strategy Priority Order
 
     @Test("Prefers exact match over split")
@@ -605,8 +577,8 @@ struct CoinSelectorTests {
     @Test("Ignores spent coins")
     func ignoresSpentCoins() async throws {
         let coins = [
-            makeCoin(exponent: 3, derivationIndex: 1, state: .spent), // $8, spent
-            makeCoin(exponent: 4, derivationIndex: 2, state: .available) // $16, available
+            makeCoin(exponent: 3, derivationIndex: 1, selectable: false), // $8, spent
+            makeCoin(exponent: 4, derivationIndex: 2, selectable: true) // $16, available
         ]
 
         let result = try await makeSelector().selectCoins(SelectCoinsInput(
@@ -684,12 +656,12 @@ struct CoinSelectorTests {
         }
     }
 
-    // MARK: - Degraded Voucher Handling
+    // MARK: - Voucher Unload
 
-    @Test("Degraded vouchers used as fallback when no full-privacy vouchers available")
-    func degradedVouchersUsedAsFallback() async throws {
+    @Test("A selectable in-recycler voucher is unloaded to cover the amount")
+    func selectableVoucherUnloaded() async throws {
         let vouchers = [
-            makeVoucher(exponent: 3, derivationIndex: 0, readinessState: .degraded) // $8, degraded
+            makeVoucher(exponent: 3, derivationIndex: 0) // $8
         ]
 
         let result = try await makeSelector().selectCoins(SelectCoinsInput(
@@ -700,10 +672,8 @@ struct CoinSelectorTests {
             maxVouchersPerGroup: maxVouchers
         ))
 
-        // Degraded vouchers are used in strategy 3b; result has degraded privacy
         if case let .unloadIntoCoins(_, perGroupAllocations) = result {
-            #expect(result.privacyLevel == VoucherPrivacyLevel.degraded)
-            #expect(perGroupAllocations.flatMap(\.vouchers).allSatisfy { $0.privacy == VoucherPrivacyLevel.degraded })
+            #expect(perGroupAllocations.flatMap(\.vouchers).map(\.derivationIndex) == [0])
         } else {
             Issue.record("Expected unloadIntoCoins, got \(result)")
         }

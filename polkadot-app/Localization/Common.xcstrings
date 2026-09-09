@@ -9,6 +9,12 @@
             "state" : "translated",
             "value" : "It looks like the app environment was updated and your account no longer exists on-chain. You'll need to start fresh."
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parece que el entorno de la app se actualizó y tu cuenta ya no existe en la red. Tendrás que empezar de nuevo."
+          }
         }
       }
     },
@@ -19,6 +25,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dismiss"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descartar"
           }
         }
       }
@@ -31,6 +43,12 @@
             "state" : "translated",
             "value" : "Start Over"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar de nuevo"
+          }
         }
       }
     },
@@ -41,6 +59,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Environment has been reset"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El entorno se restableció"
           }
         }
       }
@@ -53,6 +77,12 @@
             "state" : "translated",
             "value" : "Approve"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aprobar"
+          }
         }
       }
     },
@@ -63,6 +93,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Back"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atrás"
           }
         }
       }
@@ -75,6 +111,45 @@
             "state" : "translated",
             "value" : "Cancel"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelar"
+          }
+        }
+      }
+    },
+    "chainConnectionStatusConnected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "connected"
+          }
+        }
+      }
+    },
+    "chainConnectionStatusConnecting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "connecting"
+          }
+        }
+      }
+    },
+    "chainConnectionStatusOffline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no network"
+          }
         }
       }
     },
@@ -85,6 +160,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Clear"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Borrar"
           }
         }
       }
@@ -97,6 +178,12 @@
             "state" : "translated",
             "value" : "Close"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrar"
+          }
         }
       }
     },
@@ -107,6 +194,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Completed"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completado"
           }
         }
       }
@@ -119,6 +212,12 @@
             "state" : "translated",
             "value" : "Confirm"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmar"
+          }
         }
       }
     },
@@ -129,6 +228,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Continue"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar"
           }
         }
       }
@@ -141,6 +246,12 @@
             "state" : "translated",
             "value" : "Copied"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiado"
+          }
         }
       }
     },
@@ -151,6 +262,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copy address"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar dirección"
           }
         }
       }
@@ -163,6 +280,12 @@
             "state" : "translated",
             "value" : "Copy email"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar correo"
+          }
         }
       }
     },
@@ -174,6 +297,12 @@
             "state" : "translated",
             "value" : "Done"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Listo"
+          }
         }
       }
     },
@@ -181,6 +310,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        },
+        "es-ES" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Error"
@@ -196,16 +331,11 @@
             "state" : "translated",
             "value" : "Internal error"
           }
-        }
-      }
-    },
-    "error.mail.not.available" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
+        },
+        "es-ES" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Email account is not available."
+            "value" : "Error interno"
           }
         }
       }
@@ -218,6 +348,29 @@
             "state" : "translated",
             "value" : "Mail app is not available."
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La aplicación de correo no está disponible."
+          }
+        }
+      }
+    },
+    "error.mail.not.available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email account is not available."
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La cuenta de correo no está disponible."
+          }
         }
       }
     },
@@ -228,6 +381,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Please try again later"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inténtalo de nuevo más tarde"
           }
         }
       }
@@ -240,6 +399,12 @@
             "state" : "translated",
             "value" : "Internal error"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error interno"
+          }
         }
       }
     },
@@ -250,6 +415,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "URL error"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de URL"
           }
         }
       }
@@ -262,6 +433,12 @@
             "state" : "translated",
             "value" : "Transaction failed"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La transacción falló"
+          }
         }
       }
     },
@@ -272,6 +449,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transaction not executed for reason: %1$(reason)@"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La transacción no se ejecutó por: %1$(reason)@"
           }
         }
       }
@@ -284,6 +467,12 @@
             "state" : "translated",
             "value" : "Fee loading failed. Would you like to retry?"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar la comisión. ¿Quieres reintentar?"
+          }
         }
       }
     },
@@ -294,6 +483,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Go back"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regresar"
           }
         }
       }
@@ -306,6 +501,12 @@
             "state" : "translated",
             "value" : "Got it"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entendido"
+          }
         }
       }
     },
@@ -316,6 +517,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hide"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar"
           }
         }
       }
@@ -328,6 +535,12 @@
             "state" : "translated",
             "value" : "In progress"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso"
+          }
         }
       }
     },
@@ -338,6 +551,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Media file"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivo multimedia"
           }
         }
       }
@@ -350,6 +569,12 @@
             "state" : "translated",
             "value" : "Next"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Siguiente"
+          }
         }
       }
     },
@@ -360,6 +585,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Not now"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ahora no"
           }
         }
       }
@@ -372,6 +603,12 @@
             "state" : "translated",
             "value" : "Open settings"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir configuración"
+          }
         }
       }
     },
@@ -382,6 +619,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Paste"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pegar"
           }
         }
       }
@@ -394,6 +637,12 @@
             "state" : "translated",
             "value" : "Proceed"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proceder"
+          }
         }
       }
     },
@@ -404,6 +653,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Product widget"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widget de producto"
           }
         }
       }
@@ -416,6 +671,12 @@
             "state" : "translated",
             "value" : "Reject"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechazar"
+          }
         }
       }
     },
@@ -426,6 +687,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Data loading failed. Would you like to retry?"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron cargar los datos. ¿Quieres reintentar?"
           }
         }
       }
@@ -438,6 +705,12 @@
             "state" : "translated",
             "value" : "Reset"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restablecer"
+          }
         }
       }
     },
@@ -448,6 +721,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retry"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentar"
           }
         }
       }
@@ -460,6 +739,12 @@
             "state" : "translated",
             "value" : "Share"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir"
+          }
         }
       }
     },
@@ -470,6 +755,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skip"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Omitir"
           }
         }
       }
@@ -482,6 +773,12 @@
             "state" : "translated",
             "value" : "Transaction failed"
           }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La transacción falló"
+          }
         }
       }
     },
@@ -492,6 +789,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Update"
+          }
+        },
+        "es-ES" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizar"
           }
         }
       }

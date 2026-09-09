@@ -3,26 +3,20 @@ import SubstrateSdk
 import Operation_iOS
 
 /// A coin currently residing in the Recycler, waiting for anonymity.
-public struct Voucher: Equatable, CoinageDerivable {
+public struct Voucher: Equatable, CoinageDerivable, Sendable {
     public let exponent: Int16 // 2^n
-    public let derivationIndex: UInt32
+    public let derivationIndex: DerivationIndex
     public let allocatedAt: Date
     public let readyAt: Date
     public let remoteState: OnChainState
-    public var localState: State = .available
-    public let privacy: VoucherPrivacyLevel
+
+    /// On-chain public key (member key) derived from `derivationIndex`, cached so the durability
+    /// layer never re-derives it on the fly.
+    public let publicKey: PublicKey
 
     public var recycler: Recycler? { remoteState.recycler }
 
-    /// Local operational state of the voucher - independent of on-chain state.
-    public enum State: Equatable {
-        case available
-        case pendingTransfer
-        /// Surplus voucher allocated but not yet confirmed on-chain.
-        case pendingOnboarding
-    }
-
-    public enum OnChainState: Equatable {
+    public enum OnChainState: Equatable, Sendable {
         case unlocated
         case onboarding
         case inRecycler(Recycler)
@@ -44,30 +38,30 @@ public struct Voucher: Equatable, CoinageDerivable {
         }
     }
 
-    public struct Recycler: Equatable {
+    public struct Recycler: Equatable, Sendable {
         public let index: UInt32
+        public let membersCount: UInt32
 
-        public init(index: UInt32) {
+        public init(index: UInt32, membersCount: UInt32) {
             self.index = index
+            self.membersCount = membersCount
         }
     }
 
     public init(
         exponent: Int16,
-        derivationIndex: UInt32,
+        derivationIndex: DerivationIndex,
         allocatedAt: Date,
         readyAt: Date,
         remoteState: OnChainState = .unlocated,
-        localState: State = .available,
-        privacy: VoucherPrivacyLevel = .degraded
+        publicKey: PublicKey
     ) {
         self.exponent = exponent
         self.derivationIndex = derivationIndex
         self.allocatedAt = allocatedAt
         self.readyAt = readyAt
         self.remoteState = remoteState
-        self.localState = localState
-        self.privacy = privacy
+        self.publicKey = publicKey
     }
 
     public func adjusting(state: OnChainState) -> Voucher {
@@ -77,42 +71,25 @@ public struct Voucher: Equatable, CoinageDerivable {
             allocatedAt: allocatedAt,
             readyAt: readyAt,
             remoteState: state,
-            localState: localState,
-            privacy: privacy
+            publicKey: publicKey
         )
     }
 
-    public func withLocalState(_ localState: State) -> Voucher {
-        Voucher(
-            exponent: exponent,
-            derivationIndex: derivationIndex,
-            allocatedAt: allocatedAt,
-            readyAt: readyAt,
-            remoteState: remoteState,
-            localState: localState,
-            privacy: privacy
-        )
-    }
-
-    public func withReadinessState(_ state: VoucherPrivacyLevel) -> Voucher {
-        Voucher(
-            exponent: exponent,
-            derivationIndex: derivationIndex,
-            allocatedAt: allocatedAt,
-            readyAt: readyAt,
-            remoteState: remoteState,
-            localState: localState,
-            privacy: state
-        )
-    }
-
-    public func effectivePrivacy(at date: Date = .now) -> VoucherPrivacyLevel {
-        privacy == .full && date >= readyAt ? .full : .degraded
+    public var isInRecycler: Bool {
+        if case .inRecycler = remoteState { true } else { false }
     }
 }
 
 extension Voucher: Operation_iOS.Identifiable {
     public var identifier: String {
+        Self.identifier(for: derivationIndex)
+    }
+}
+
+public extension Voucher {
+    /// The storage identifier for a voucher at `derivationIndex`. Single source of truth so no
+    /// call site hand-writes the string form.
+    static func identifier(for derivationIndex: DerivationIndex) -> String {
         "\(derivationIndex)"
     }
 }

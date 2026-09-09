@@ -6,6 +6,7 @@ import FoundationExt
 import SubstrateOperation
 import ChainRegistry
 import BackgroundExecution
+import ExtrinsicService
 
 extension ServiceCoordinator {
     struct CoinageServices {
@@ -18,7 +19,6 @@ extension ServiceCoordinator {
 
     static func createCoinageServices() -> CoinageServices? {
         let databaseFactory = CoinageDatabaseDependencyFactory(storageFacade: UserDataStorageFacade.shared)
-        let claimPlanStore = ClaimPlanCoreDataStore(storageFacade: UserDataStorageFacade.shared)
         let claimStatusStore = ClaimStatusStore()
 
         let externalPaymentStore = ExternalPaymentCoreDataStore(
@@ -27,17 +27,13 @@ extension ServiceCoordinator {
 
         guard let coinageService = createCoinageService(
             databaseFactory: databaseFactory,
-            claimPlanStore: claimPlanStore,
             externalPaymentStore: externalPaymentStore
         ) else {
             return nil
         }
 
-        CoinageRecyclingTaskRegistrator.shared.service = coinageService.recyclingService
-
         let transferMonitor = CoinageTransferMonitor(
             coinageService: coinageService,
-            planStore: claimPlanStore,
             storageFacade: UserDataStorageFacade.shared,
             claimStatusStore: claimStatusStore
         )
@@ -55,19 +51,6 @@ extension ServiceCoordinator {
             backupSyncService: backupSyncService,
             claimStatusStore: claimStatusStore
         )
-    }
-
-    static func makeBackgroundRecyclingService() -> (any CoinageRecyclingServicing)? {
-        let storageFacade = UserDataStorageFacade.shared
-        let databaseFactory = CoinageDatabaseDependencyFactory(storageFacade: storageFacade)
-        let claimPlanStore = ClaimPlanCoreDataStore(storageFacade: storageFacade)
-        let externalPaymentStore = ExternalPaymentCoreDataStore(storageFacade: storageFacade)
-
-        return createCoinageService(
-            databaseFactory: databaseFactory,
-            claimPlanStore: claimPlanStore,
-            externalPaymentStore: externalPaymentStore
-        )?.recyclingService
     }
 
     private static func createW3sPaymentTracking(coinageService: CoinageServicing) -> W3sPaymentTracking {
@@ -90,7 +73,6 @@ extension ServiceCoordinator {
 private extension ServiceCoordinator {
     static func createCoinageService(
         databaseFactory: DatabaseDependencyFactoring,
-        claimPlanStore: ClaimPlanCoreDataStore,
         externalPaymentStore: ExternalPaymentStoring
     ) -> CoinageService? {
         let logger = Logger.shared
@@ -124,8 +106,16 @@ private extension ServiceCoordinator {
             connection: connection,
             runtimeCodingService: runtimeProvider
         )
+        let viewFunctionFetcher = ViewFunctionFetcher(
+            executor: ViewFunctionExecutor(
+                chainRegistry: chainRegistry,
+                operationQueue: operationQueue
+            ),
+            chainId: coinageChainId
+        )
         let unloadTokenResolver = UnloadTokenResolver(
             runtimeCodingService: runtimeProvider,
+            viewFunctionFetcher: viewFunctionFetcher,
             consumedTokenChecker: consumedTokenChecker
         )
 
@@ -154,9 +144,22 @@ private extension ServiceCoordinator {
             return nil
         }
 
-        let schedulerFactory = CoinRecycleSchedulerFactory(logger: logger)
+        guard
+            let extrinsicOperationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: chain),
+            // Durability must observe the finalized outcome, not just inclusion, so the watch
+            // follows each extrinsic until its block is finalized.
+            let extrinsicSubmitter = try? extrinsicMonitorFacade.makeForkProtectedSubmitter(
+                chain: chain,
+                trackingTill: .finalized
+            )
+        else {
+            logger.error("Failed to create extrinsic operation factory / submitter for coinage")
+            return nil
+        }
 
-        let walStore = TransferWALCoreDataStore(storageFacade: UserDataStorageFacade.shared)
+        let coinageTxStore = CoinageTxCoreDataRepository(
+            storageFacade: UserDataStorageFacade.shared
+        )
 
         return CoinageService.make(
             chainResource: chainRegistry,
@@ -165,14 +168,17 @@ private extension ServiceCoordinator {
             databaseFactory: databaseFactory,
             originFactory: coinageOriginFactory,
             extrinsicMonitorFactory: monitorFactory,
+            extrinsicOperationFactory: extrinsicOperationFactory,
+            extrinsicSubmitter: extrinsicSubmitter,
             rootEntropyManager: RootEntropyManager.shared,
             keystore: Keychain(),
-            planStore: claimPlanStore,
-            walStore: walStore,
-            schedulerFactory: schedulerFactory,
+            txStore: coinageTxStore,
             applicationStateStreamFactory: ApplicationStateStreamFactory(),
             externalPaymentStore: externalPaymentStore,
             backgroundExecutor: ConnectionRetainingExecutor(provider: chainRegistry),
+            recyclingStrategySettings: CoinageRecyclingStrategyStore.shared,
+            personOriginProvider: coinageOriginFactory.personOriginProvider,
+            viewFunctionFetcher: viewFunctionFetcher,
             logger: logger
         )
     }

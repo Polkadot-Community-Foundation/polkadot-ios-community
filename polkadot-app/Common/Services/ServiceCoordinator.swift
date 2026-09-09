@@ -31,11 +31,11 @@ protocol ServiceCoordinatorProtocol: ApplicationServiceProtocol {
     var personDataStore: DetermineStatePersonDataStore { get }
     var coinageService: CoinageServicing { get }
     var coinageBackupSyncService: CoinageBackupSyncServicing { get }
-    var spentCoinsRecoveryService: SpentCoinsRecoveryServicing { get }
     var accountManager: ProductsAccountManaging { get }
     var allowanceManagerFacade: AllowanceManagerFacade { get }
     var turnService: TURNCredentialsProviding { get }
     var networkStatusService: NetworkStatusProviding { get }
+    var chainStatusProvider: ChainStatusProviding { get }
     var truapiRuntimeProvider: TrUAPIHostRuntimeProviding { get }
 }
 
@@ -48,6 +48,9 @@ final class ServiceCoordinator {
     let polkadotHandshakeService: PolkadotHandshakeServicing
     let signInHostCoordinator: MessageExchangeSignInHostCoordinating
     let chatExtensionsRegistry: ChatExtensionsRegistering
+    /// Held so the product-worker ref counter and its operations stay alive while
+    /// the main tab bar is, rather than living in a process-wide singleton.
+    let productWorkerFacade: ProductWorkerFacade
     let callCoordinator: CallCoordinating
     let chatRequestCoordinator: ChatRequestCoordinatorServicing
     let attachmentUploadService: AttachmentUploadingServicing
@@ -60,7 +63,6 @@ final class ServiceCoordinator {
     let personDataStore: DetermineStatePersonDataStore
     let coinageBackupSyncService: CoinageBackupSyncServicing
     let messageExpansionService: CompactedMessageExpansionServicing
-    let spentCoinsRecoveryService: SpentCoinsRecoveryServicing
     let notificationBadgeSyncService: NotificationBadgeSyncService
     let accountManager: ProductsAccountManaging
     let allowanceManagerFacade: AllowanceManagerFacade
@@ -68,6 +70,7 @@ final class ServiceCoordinator {
     let turnService: TURNCredentialsProviding
     let deviceSyncService: DeviceSyncServicing
     let networkStatusService: NetworkStatusProviding
+    let chainStatusProvider: ChainStatusProviding
     let truapiRuntimeProvider: TrUAPIHostRuntimeProviding
     let tldProvider: DotNsTldProviding
     let logger: LoggerProtocol
@@ -88,6 +91,7 @@ final class ServiceCoordinator {
         polkadotHandshakeService: PolkadotHandshakeServicing,
         signInHostCoordinator: MessageExchangeSignInHostCoordinating,
         chatExtensionsRegistry: ChatExtensionsRegistering,
+        productWorkerFacade: ProductWorkerFacade,
         callCoordinator: CallCoordinating,
         chatRequestCoordinator: ChatRequestCoordinatorServicing,
         attachmentUploadService: AttachmentUploadingServicing,
@@ -100,7 +104,6 @@ final class ServiceCoordinator {
         personDataStore: DetermineStatePersonDataStore,
         coinageBackupSyncService: CoinageBackupSyncServicing,
         messageExpansionService: CompactedMessageExpansionServicing,
-        spentCoinsRecoveryService: SpentCoinsRecoveryServicing,
         notificationBadgeSyncService: NotificationBadgeSyncService,
         accountManager: ProductsAccountManaging,
         allowanceManagerFacade: AllowanceManagerFacade,
@@ -109,6 +112,7 @@ final class ServiceCoordinator {
         turnService: TURNCredentialsProviding,
         deviceSyncService: DeviceSyncServicing,
         networkStatusService: NetworkStatusProviding,
+        chainStatusProvider: ChainStatusProviding,
         truapiRuntimeProvider: TrUAPIHostRuntimeProviding,
         tldProvider: DotNsTldProviding,
         logger: LoggerProtocol
@@ -121,6 +125,7 @@ final class ServiceCoordinator {
         self.polkadotHandshakeService = polkadotHandshakeService
         self.signInHostCoordinator = signInHostCoordinator
         self.chatExtensionsRegistry = chatExtensionsRegistry
+        self.productWorkerFacade = productWorkerFacade
         self.callCoordinator = callCoordinator
         self.chatRequestCoordinator = chatRequestCoordinator
         self.attachmentUploadService = attachmentUploadService
@@ -133,13 +138,13 @@ final class ServiceCoordinator {
         self.personDataStore = personDataStore
         self.coinageBackupSyncService = coinageBackupSyncService
         self.messageExpansionService = messageExpansionService
-        self.spentCoinsRecoveryService = spentCoinsRecoveryService
         self.notificationBadgeSyncService = notificationBadgeSyncService
         self.accountManager = accountManager
         self.allowanceManagerFacade = allowanceManagerFacade
         self.allowanceRenewalService = allowanceRenewalService
         self.deviceSyncService = deviceSyncService
         self.networkStatusService = networkStatusService
+        self.chainStatusProvider = chainStatusProvider
         self.truapiRuntimeProvider = truapiRuntimeProvider
         self.tldProvider = tldProvider
         self.logger = logger
@@ -159,6 +164,7 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         #endif
 
         chatCoordinator.setup()
+        productWorkerFacade.setup()
         chatExtensionsRegistry.discover()
         chatRequestCoordinator.setup()
         fiatOnrampTrackingService.setup()
@@ -169,6 +175,7 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         allowanceRenewalService.setup()
 
         Task {
+            await chainStatusProvider.start()
             await signInHostCoordinator.setup()
             await setupDeviceSyncService()
 
@@ -191,11 +198,9 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
             }
             // Recovering backup 1st
             await coinageBackupSyncService.setup()
-            await spentCoinsRecoveryService.setup()
             await coinageTransferMonitor.setup()
             await w3sPaymentTracking.setup()
             await depositService.setup()
-            await coinageService.transferRecoveryService.recover()
         }
     }
 
@@ -218,7 +223,6 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         Task {
             await deviceSyncService.throttle()
             await coinageBackupSyncService.throttle()
-            await spentCoinsRecoveryService.throttle()
             await coinageTransferMonitor.throttle()
             await w3sPaymentTracking.throttle()
             await signInHostCoordinator.throttle()
@@ -333,17 +337,14 @@ extension ServiceCoordinator {
             return nil
         }
 
-        let spentCoinsRecoveryService = SpentCoinsRecoveryService(
-            coinageService: coinageServices.coinageService
-        )
-
         guard let personhoodServices = createPersonhoodServices(
             syncStateStore: syncServiceResult.syncStore
         ) else {
             return nil
         }
 
-        let chatRequestCoordinator = createChatRequestCoordinator()
+        let statementDeliveryTracker = StatementDeliveryTracker()
+        let chatRequestCoordinator = createChatRequestCoordinator(statementTracker: statementDeliveryTracker)
         let audioSessionManager = AudioSessionManager()
 
         let paymentsSupport = PaymentsSupport(coinageService: coinageServices.coinageService)
@@ -353,7 +354,7 @@ extension ServiceCoordinator {
         truApiDependencies.setDependency(paymentsSupport)
         RootDependencyLocator.setDependency(truApiDependencies)
 
-        let chatExtensionsRegistry = createChatExtensionsRegistry(
+        let (chatExtensionsRegistry, productWorkerFacade) = createChatExtensionsRegistry(
             accountManager: accountManager,
             truapiRuntimeProvider: truapiRuntimeProvider,
             syncStore: syncServiceResult.syncStore,
@@ -364,6 +365,9 @@ extension ServiceCoordinator {
             audioSessionManager: audioSessionManager,
             spaFlowState: spaFlowState
         )
+        // Registered so the SPA screen, opened outside this assembly, resolves the
+        // same facade.
+        RootDependencyLocator.setDependency(productWorkerFacade)
 
         let fiatOnrampConfiguration = MeldFiatOnrampConfiguration.prod
         let fiatOnrampStorage = FiatOnrampStorage()
@@ -399,6 +403,25 @@ extension ServiceCoordinator {
             pathMonitor: NetworkPathMonitor()
         )
 
+        let chainLatencyProvider = ChainLatencyProvider(
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            logger: logger
+        )
+
+        let chainBlockProvider = ChainBlockProvider(
+            chainRegistry: ChainRegistryFacade.sharedRegistry,
+            operationQueue: OperationManagerFacade.sharedDefaultQueue,
+            logger: logger
+        )
+
+        let chainStatusProvider = ChainStatusProvider(
+            networkStatusService: networkStatusService,
+            latencyProvider: chainLatencyProvider,
+            blockProvider: chainBlockProvider,
+            statementTracker: statementDeliveryTracker,
+            logger: logger
+        )
+
         return ServiceCoordinator(
             chatCoordinator: chatCoordinator,
             depositService: depositService,
@@ -414,6 +437,7 @@ extension ServiceCoordinator {
             ),
             signInHostCoordinator: signInHostCoordinator,
             chatExtensionsRegistry: chatExtensionsRegistry,
+            productWorkerFacade: productWorkerFacade,
             callCoordinator: callCoordinator,
             chatRequestCoordinator: chatRequestCoordinator,
             attachmentUploadService: attachmentUploadService,
@@ -426,7 +450,6 @@ extension ServiceCoordinator {
             personDataStore: syncServiceResult.personDataStore,
             coinageBackupSyncService: coinageServices.backupSyncService,
             messageExpansionService: messageExpansionService,
-            spentCoinsRecoveryService: spentCoinsRecoveryService,
             notificationBadgeSyncService: notificationBadgeSyncService,
             accountManager: accountManager,
             allowanceManagerFacade: allowanceManagerFacade,
@@ -435,6 +458,7 @@ extension ServiceCoordinator {
             turnService: turnService,
             deviceSyncService: deviceSyncService,
             networkStatusService: networkStatusService,
+            chainStatusProvider: chainStatusProvider,
             truapiRuntimeProvider: truapiRuntimeProvider,
             tldProvider: DotNsTldProviderFacade.shared,
             logger: logger
@@ -481,7 +505,9 @@ private extension ServiceCoordinator {
 }
 
 private extension ServiceCoordinator {
-    static func createChatRequestCoordinator() -> ChatRequestCoordinatorServicing {
+    static func createChatRequestCoordinator(
+        statementTracker: StatementDeliveryTracking
+    ) -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let logger = Logger.shared
@@ -504,7 +530,8 @@ private extension ServiceCoordinator {
                         remoteAccountOperation(chatChainId: AppConfig.Chains.usernameChain)
                     ],
                     logger: Logger.shared
-                )
+                ),
+                statementTracker: statementTracker
             ),
             logger: Logger.shared
         )

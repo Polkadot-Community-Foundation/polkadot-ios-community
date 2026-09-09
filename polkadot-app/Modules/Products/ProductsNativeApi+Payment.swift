@@ -5,6 +5,7 @@ import KeyDerivation
 import Products
 import SubstrateSdk
 import AsyncExtensions
+import StructuredConcurrency
 
 enum PaymentTopUpError: Error, LocalizedError {
     case coinsNotOnChain
@@ -37,9 +38,9 @@ extension ProductsNativeApi {
 
         let coinageService = try requirePaymentsSupport().coinageService
         let balanceService = try await coinageService.coinageBalanceService()
-        return balanceService.spendableBalanceStream
+        return balanceService.balanceStream
             .map { balance in
-                PaymentBalance(available: balance.totalInPlanks())
+                PaymentBalance(available: balance.availablePrivate)
             }
             .eraseToAnyAsyncSequence()
     }
@@ -85,25 +86,29 @@ extension ProductsNativeApi {
             source: contextSource
         )
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            context.setContinuation(continuation)
+        try await markStallActivity("Topup") {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                context.setContinuation(continuation)
 
-            switch contextSource {
-            case .wallet:
-                Task { @MainActor [productsRouter, coinageService] in
-                    productsRouter.showTopUpRequest(
-                        context: context,
-                        coinageService: coinageService
-                    )
-                }
-            case let .coins(secretKeys):
-                Task { [coinageService] in
-                    await self.runCoinsTopUp(
-                        context: context,
-                        secretKeys: secretKeys,
-                        amount: amount,
-                        coinageService: coinageService
-                    )
+                switch contextSource {
+                case let .wallet(wallet):
+                    Task { [coinageService] in
+                        await self.runWalletTopUp(
+                            context: context,
+                            wallet: wallet,
+                            amount: amount,
+                            coinageService: coinageService
+                        )
+                    }
+                case let .coins(secretKeys):
+                    Task { [coinageService] in
+                        await self.runCoinsTopUp(
+                            context: context,
+                            secretKeys: secretKeys,
+                            amount: amount,
+                            coinageService: coinageService
+                        )
+                    }
                 }
             }
         }
@@ -140,8 +145,8 @@ private extension ProductsNativeApi {
         let balanceService = try await coinageService.coinageBalanceService()
 
         var spendable = Balance(0)
-        for try await value in balanceService.spendableBalanceStream.prefix(1) {
-            spendable = value.totalInPlanks()
+        for try await value in balanceService.balanceStream.prefix(1) {
+            spendable = value.availablePrivate
         }
 
         if spendable < amount {
@@ -169,6 +174,49 @@ private extension ProductsNativeApi {
 // MARK: - Top-Up Helpers
 
 private extension ProductsNativeApi {
+    func claimWalletTopUp(
+        wallet: any WalletManaging,
+        amount: Balance,
+        coinageService: any CoinageServicing
+    ) async throws {
+        let loaded = try await coinageService.loadVouchers(
+            amount: amount,
+            externalAssetHolder: wallet
+        )
+
+        if loaded < amount {
+            throw PaymentTopUpError.partialPayment(amount: loaded)
+        }
+    }
+
+    func runWalletTopUp(
+        context: TopUpRequestContext,
+        wallet: any WalletManaging,
+        amount: Balance,
+        coinageService: any CoinageServicing
+    ) async {
+        do {
+            try await claimWalletTopUp(
+                wallet: wallet,
+                amount: amount,
+                coinageService: coinageService
+            )
+            context.deliverClaimed()
+        } catch let PaymentTopUpError.partialPayment(loaded) {
+            await productsRouter.showTopUpMismatch(
+                context: context,
+                claimedAmount: loaded,
+                requestedAmount: amount
+            )
+        } catch {
+            logger.error("Wallet topup claim failed: \(error)")
+            await productsRouter.showTopUpError(
+                context: context,
+                error: error
+            )
+        }
+    }
+
     func claimCoinsTopUp(
         secretKeys: [Data],
         amount: Balance,

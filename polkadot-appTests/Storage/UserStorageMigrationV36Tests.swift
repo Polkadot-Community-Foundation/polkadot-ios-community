@@ -3,7 +3,7 @@ import CoreData
 import XCTest
 
 /// Executes the upgrade path that every existing PCF install has to survive: a store written by
-/// `UserDataModel36` opening against the current `UserDataModel42`.
+/// `UserDataModel36` opening against the current model (`UserStorageParams.modelVersion`).
 ///
 /// Upstream's 0.10.0 squash (`a6ce195`) deleted models 1...36 and restarted the version enum at 41,
 /// but every PCF build shipped before that squash wrote a **v36** store. Without
@@ -73,12 +73,24 @@ final class UserStorageMigrationV36Tests: XCTestCase {
     /// Ascending declaration order is load-bearing: `checkIfMigrationNeeded` takes the *first*
     /// hash-compatible match out of `allCases`.
     func testVersionsAreDeclaredAscending() {
+        // The destination moves with every upstream model bump (v42 -> v45 so far), so derive it
+        // from the app's own declaration instead of pinning a literal. What must hold: the shipped
+        // v36 model is matched FIRST, the declared order is strictly ascending by model number, and
+        // the last declared version is the one the app opens stores with.
+        let cases = UserStorageVersion.allCases
+        let numbers = cases.map { Int($0.rawValue.replacingOccurrences(of: "UserDataModel", with: "")) ?? -1 }
+        XCTAssertEqual(cases.first, .version36, "the v36 case must be matched before any newer model")
         XCTAssertEqual(
-            UserStorageVersion.allCases,
-            [.version36, .version41, .version42],
-            "allCases order decides which model a store is matched against"
+            numbers,
+            numbers.sorted(),
+            "allCases order decides which model a store is matched against, so it must stay ascending"
         )
-        XCTAssertEqual(UserStorageParams.modelVersion, .version42)
+        XCTAssertFalse(numbers.contains(-1), "every case must be named UserDataModel<n>")
+        XCTAssertEqual(
+            UserStorageParams.modelVersion,
+            cases.last,
+            "the app must open stores with the newest declared model"
+        )
     }
 
     // MARK: - The migration
@@ -88,33 +100,34 @@ final class UserStorageMigrationV36Tests: XCTestCase {
 
         XCTAssertTrue(
             makeMigrator().requiresMigration(),
-            "a v36 store must be recognised as behind the v42 destination"
+            "a v36 store must be recognised as behind the current destination"
         )
     }
 
     /// The load-bearing test. Writes a row under the real v36 model, migrates, and reads it back
     /// under v42.
     ///
-    /// `CDKeystoreIntegrity` is the fixture on purpose: its definition is byte-identical in
-    /// `UserDataModel36` and `UserDataModel42`, so a value that fails to survive indicates the
+    /// `CDProduct` is the fixture on purpose (`CDKeystoreIntegrity`, the previous one, was removed
+    /// upstream in v44): its definition is byte-identical in
+    /// `UserDataModel36` and the current model, so a value that fails to survive indicates the
     /// migration itself went wrong rather than an intentional schema change to that entity.
     func testVersion36StoreMigratesPreservingData() throws {
-        let keyTag = "v36-survivor-\(UUID().uuidString)"
-        let integrityKey = Data([0x01, 0x02, 0x03, 0x04])
+        let identifier = "v36-survivor-\(UUID().uuidString)"
+        let name = "survivor-name"
 
-        try makeVersion36Store(keyTag: keyTag, integrityKey: integrityKey)
+        try makeVersion36Store(identifier: identifier, name: name)
 
         // Reaching the next line at all is part of the assertion: performMigration() calls
         // fatalError on failure, which takes the whole test runner down rather than failing a test.
         makeMigrator().performMigration()
 
-        let coordinator = try openStore(with: .version42)
+        let coordinator = try openStore(with: UserStorageParams.modelVersion)
         let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
 
         try context.performAndWait {
-            let request = NSFetchRequest<NSManagedObject>(entityName: "CDKeystoreIntegrity")
-            request.predicate = NSPredicate(format: "keyTag == %@", keyTag)
+            let request = NSFetchRequest<NSManagedObject>(entityName: "CDProduct")
+            request.predicate = NSPredicate(format: "identifier == %@", identifier)
 
             let results = try context.fetch(request)
 
@@ -123,7 +136,7 @@ final class UserStorageMigrationV36Tests: XCTestCase {
                 1,
                 "the row written under v36 must survive the migration to v42"
             )
-            XCTAssertEqual(results.first?.value(forKey: "integrityKey") as? Data, integrityKey)
+            XCTAssertEqual(results.first?.value(forKey: "name") as? String, name)
         }
     }
 
@@ -141,20 +154,20 @@ final class UserStorageMigrationV36Tests: XCTestCase {
 
     /// Running the migrator twice must be a no-op, not a second migration attempt.
     func testMigrationIsIdempotent() throws {
-        let keyTag = "idempotent-\(UUID().uuidString)"
+        let identifier = "idempotent-\(UUID().uuidString)"
 
-        try makeVersion36Store(keyTag: keyTag)
+        try makeVersion36Store(identifier: identifier)
 
         makeMigrator().performMigration()
         makeMigrator().performMigration()
 
-        let coordinator = try openStore(with: .version42)
+        let coordinator = try openStore(with: UserStorageParams.modelVersion)
         let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
 
         try context.performAndWait {
-            let request = NSFetchRequest<NSManagedObject>(entityName: "CDKeystoreIntegrity")
-            request.predicate = NSPredicate(format: "keyTag == %@", keyTag)
+            let request = NSFetchRequest<NSManagedObject>(entityName: "CDProduct")
+            request.predicate = NSPredicate(format: "identifier == %@", identifier)
 
             XCTAssertEqual(try context.fetch(request).count, 1)
         }
@@ -213,8 +226,8 @@ private extension UserStorageMigrationV36Tests {
     /// Writes a store using the **real** shipped `UserDataModel36`, which is what an install from
     /// any pre-squash PCF build looks like on disk.
     func makeVersion36Store(
-        keyTag: String = "seed",
-        integrityKey: Data = Data([0xAA])
+        identifier: String = "seed",
+        name: String = "seed-name"
     ) throws {
         let coordinator = try openStore(with: .version36)
 
@@ -223,11 +236,11 @@ private extension UserStorageMigrationV36Tests {
 
         try context.performAndWait {
             let object = NSEntityDescription.insertNewObject(
-                forEntityName: "CDKeystoreIntegrity",
+                forEntityName: "CDProduct",
                 into: context
             )
-            object.setValue(keyTag, forKey: "keyTag")
-            object.setValue(integrityKey, forKey: "integrityKey")
+            object.setValue(identifier, forKey: "identifier")
+            object.setValue(name, forKey: "name")
 
             try context.save()
         }
