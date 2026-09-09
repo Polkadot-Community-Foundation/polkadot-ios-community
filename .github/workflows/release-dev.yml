@@ -243,6 +243,32 @@ jobs:
 
       - name: Distribute to TestFlight group "Products Devnet"
 
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          # Read from the environment, never interpolated into the script body: the
+          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
+          # break out of the quoting.
+          CHANGELOG: ${{ needs.testflight.outputs.changelog }}
+        run: |
+          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "::error::no .ipa in the build artifact"; exit 1; }
+          echo "Uploading $IPA"
+          jq -n \
+            --arg key_id "$KEY_ID" \
+            --arg issuer_id "$ISSUER_ID" \
+            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > asc_api_key.json
+          fastlane pilot upload \
+            --api_key_path asc_api_key.json \
+            --ipa "$IPA" \
+            --distribute_external true \
+            --groups "Products Devnet" \
+            --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
+            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
+            --changelog "$CHANGELOG"
+
       # ---- GitHub release records — behind the SAME approval as the TestFlight hand-off ----
       # These carry no binary (TestFlight is the only channel) but they are public,
       # citable release records; nothing is minted unattended by the Thursday cron.
@@ -281,29 +307,3 @@ jobs:
 
             This is a **devnet** build for testing only; state may be wiped. Found a
             problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
-
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          # Read from the environment, never interpolated into the script body: the
-          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
-          # break out of the quoting.
-          CHANGELOG: ${{ needs.testflight.outputs.changelog }}
-        run: |
-          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
-          [ -n "$IPA" ] || { echo "::error::no .ipa in the build artifact"; exit 1; }
-          echo "Uploading $IPA"
-          jq -n \
-            --arg key_id "$KEY_ID" \
-            --arg issuer_id "$ISSUER_ID" \
-            --arg key "$(cat "./private_keys/AuthKey_${KEY_ID}.p8")" \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
-            > asc_api_key.json
-          fastlane pilot upload \
-            --api_key_path asc_api_key.json \
-            --ipa "$IPA" \
-            --distribute_external true \
-            --groups "Products Devnet" \
-            --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
-            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
-            --changelog "$CHANGELOG"
