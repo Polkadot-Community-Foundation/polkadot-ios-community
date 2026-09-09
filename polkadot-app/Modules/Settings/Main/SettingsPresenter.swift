@@ -2,6 +2,7 @@ import DesignSystem
 import UIKit
 import UIKitExt
 import SafariServices
+import Coinage
 
 @MainActor
 final class SettingsPresenter {
@@ -16,6 +17,7 @@ final class SettingsPresenter {
     private var hasBlockedUsers = false
     private var appVersion: String?
     private var selectedCurrencyCode: String?
+    private var selectedPrivacyStrategy: RecyclingStrategyType?
 
     init(
         interactor: SettingsInteractorInputProtocol,
@@ -49,8 +51,6 @@ private extension SettingsPresenter {
         case .backup,
              .theme,
              .currency,
-             .revoke,
-             .paymentHistory,
              .linkedDevices,
              .apps,
              .contactUs,
@@ -66,17 +66,21 @@ private extension SettingsPresenter {
     }
 
     func refreshContent() {
-        let content = viewModelFactory.makeContent(
+        let input = SettingsContentInput(
             visibleCells: visibleCells(),
             attentionItems: attentionItems,
             selectedCurrencyCode: selectedCurrencyCode,
             selectedThemeName: selectedThemeName,
+            selectedPrivacyStrategy: selectedPrivacyStrategy,
             appVersion: appVersion,
             onSelect: { [weak self] cellType in
                 self?.didTapCell(cellType)
+            },
+            onSelectPrivacyStrategy: { [weak self] strategy in
+                self?.didSelectPrivacyStrategy(strategy)
             }
         )
-        view?.applyContent(content)
+        view?.applyContent(viewModelFactory.makeContent(input))
     }
 }
 
@@ -86,7 +90,13 @@ extension SettingsPresenter: SettingsPresenterProtocol {
         interactor.setup()
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
+    func didSelectPrivacyStrategy(_ strategy: RecyclingStrategyType) {
+        guard strategy != selectedPrivacyStrategy else { return }
+        selectedPrivacyStrategy = strategy
+        refreshContent()
+        interactor.savePrivacyStrategy(strategy)
+    }
+
     func didTapCell(_ cell: SettingsViewModel.CellType) {
         switch cell {
         case .termsOfUse,
@@ -106,10 +116,6 @@ extension SettingsPresenter: SettingsPresenterProtocol {
             }
         case .currency:
             wireframe.showCurrencyPicker(from: view)
-        case .revoke:
-            wireframe.showRecoverPendingTransactions(from: view)
-        case .paymentHistory:
-            wireframe.showPaymentHistory(from: view)
         case .linkedDevices:
             wireframe.showLinkedDevices(from: view)
         case .apps:
@@ -152,6 +158,12 @@ extension SettingsPresenter: SettingsInteractorOutputProtocol {
 
     func didReceiveHasBlockedUsers(_ hasBlockedUsers: Bool) {
         self.hasBlockedUsers = hasBlockedUsers
+        refreshContent()
+    }
+
+    func didReceivePrivacyStrategy(_ strategy: RecyclingStrategyType) {
+        guard strategy != selectedPrivacyStrategy else { return }
+        selectedPrivacyStrategy = strategy
         refreshContent()
     }
 }

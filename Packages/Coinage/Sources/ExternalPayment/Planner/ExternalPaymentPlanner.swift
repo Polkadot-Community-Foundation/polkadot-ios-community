@@ -30,26 +30,24 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
         amount: Balance,
         context: DenominationBreakdownContext
     ) async throws -> ExternalPaymentPreview {
-        let vouchers = try await voucherService.fetchAll().filter { $0.localState == .available }
+        let trackedVouchers = try await voucherService.fetchAllTracked()
 
-        let readyVouchers = vouchers.filter(\.remoteState.isInRecycler)
-        let waitingVouchers = vouchers.filter { !$0.remoteState.isInRecycler }
+        let readyVouchers = trackedVouchers.filter(\.isSelectable).map(\.voucher)
+        let waitingVouchers = trackedVouchers
+            .filter { $0.isOnboarding || $0.isMinting }
+            .map(\.voucher)
 
         // Try ready vouchers first
         let readyTotal = totalValue(of: readyVouchers, context: context)
         if readyTotal >= amount {
             let selected = selectVouchers(from: readyVouchers, target: amount, context: context)
-            let nonDegraded = nonDegradedAmount(from: selected, context: context)
             let selection = ExternalPaymentPreview.Selection(
                 vouchers: selected,
                 coins: [],
-                fullAmount: amount,
-                nonDegradedAmount: nonDegraded
+                fullAmount: amount
             )
             return .ready(selection)
         }
-
-        let fullPrivacyNonDegraded = nonDegradedAmount(from: readyVouchers, context: context)
 
         // Check if total vouchers (ready + waiting) would be enough
         let totalVoucherValue = readyTotal + totalValue(of: waitingVouchers, context: context)
@@ -57,8 +55,7 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
             let selection = ExternalPaymentPreview.Selection(
                 vouchers: readyVouchers,
                 coins: [],
-                fullAmount: amount,
-                nonDegradedAmount: fullPrivacyNonDegraded
+                fullAmount: amount
             )
             return .needsReschedule(
                 after: Date(timeIntervalSinceNow: rescheduleDelay),
@@ -69,9 +66,8 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
         // Calculate deficit and check coins
         let deficit = amount - totalVoucherValue
 
-        let allCoins = try await coinService.fetchAllCoins()
-        let spendableCoins = allCoins.filter { $0.state == .available }
-        let nonSpentCoins = allCoins.filter(\.state.isAvailableOrRecycling)
+        let trackedCoins = try await coinService.fetchAllTrackedCoins()
+        let spendableCoins = trackedCoins.filter(\.isSelectable).map(\.coin)
         let spendableTotal = totalValue(of: spendableCoins, context: context)
 
         if spendableTotal >= deficit {
@@ -79,20 +75,23 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
             let selection = ExternalPaymentPreview.Selection(
                 vouchers: readyVouchers,
                 coins: selectedCoins,
-                fullAmount: amount,
-                nonDegradedAmount: fullPrivacyNonDegraded
+                fullAmount: amount
             )
             return .loadCoins(selection)
         }
 
-        // Check if non-spent coins (available + recycling + pendingTransfer) would cover it
-        let nonSpentTotal = totalValue(of: nonSpentCoins, context: context)
-        if nonSpentTotal >= deficit {
+        // Coins not spendable yet but on their way — minting (will land) or aged past recycling
+        // (will be recycled into fresh spendable coins). If they would cover the deficit, wait for
+        // them rather than declaring insufficient funds.
+        let maturingCoins = trackedCoins
+            .filter { $0.isMinting || $0.isAwaitingRecycling() }
+            .map(\.coin)
+        let reachableTotal = spendableTotal + totalValue(of: maturingCoins, context: context)
+        if reachableTotal >= deficit {
             let selection = ExternalPaymentPreview.Selection(
                 vouchers: readyVouchers,
-                coins: nonSpentCoins,
-                fullAmount: amount,
-                nonDegradedAmount: fullPrivacyNonDegraded
+                coins: spendableCoins + maturingCoins,
+                fullAmount: amount
             )
             return .needsReschedule(
                 after: Date(timeIntervalSinceNow: rescheduleDelay),
@@ -113,12 +112,6 @@ private extension ExternalPaymentPlanner {
 
     func totalValue(of coins: [Coin], context: DenominationBreakdownContext) -> Balance {
         coins.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.exponent) }
-    }
-
-    func nonDegradedAmount(from vouchers: [Voucher], context: DenominationBreakdownContext) -> BigUInt {
-        vouchers
-            .filter { $0.effectivePrivacy() == .full }
-            .reduce(BigUInt.zero) { $0 + context.valueInPlanks(for: $1.exponent) }
     }
 
     /// Greedy voucher selection: sort by value descending, accumulate until >= target.

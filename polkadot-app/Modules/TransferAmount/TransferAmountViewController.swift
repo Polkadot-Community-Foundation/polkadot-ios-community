@@ -161,7 +161,8 @@ private extension ClaimStatus {
         switch self {
         case .detecting:
             String(localized: .transferStatusSending)
-        case .claiming:
+        case .claiming,
+             .partiallyClaimed:
             String(localized: .transferStatusClaiming)
         case .sent:
             String(localized: .transferStatusSent)
@@ -191,6 +192,10 @@ extension TransferAmountViewController: TransferAmountViewProtocol {
 
     func didReceive(availableBalance: String) {
         rootView.balanceView.bind(amount: availableBalance)
+    }
+
+    func didReceive(privacyHint: String?) {
+        rootView.bind(privacyHint: privacyHint)
     }
 
     func didReceive(amountViewModel: AmountInputViewModelProtocol) {

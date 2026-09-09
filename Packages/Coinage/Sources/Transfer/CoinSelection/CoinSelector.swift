@@ -4,8 +4,8 @@ import BigInt
 /// Consolidates all parameters for coin selection.
 struct SelectCoinsInput {
     let amount: BigUInt
-    let coins: [Coin]
-    let vouchers: [Voucher]
+    let coins: [TrackedCoin]
+    let vouchers: [TrackedVoucher]
     let breakdownContext: DenominationBreakdownContext
     let maxVouchersPerGroup: Int
 }
@@ -36,9 +36,11 @@ extension CoinSelector: CoinSelecting {
             throw CoinSelectionError.zeroAmount
         }
 
-        let availableCoins = input.coins.filter { $0.state == .available && !$0.isExpiringSoon }
+        // Consume the durability overlay here: past this point strategies work on raw assets.
+        let availableCoins = input.coins.filter(\.isSelectable).map(\.coin)
+        let availableVouchers = input.vouchers.filter(\.isSelectable).map(\.voucher)
 
-        guard !availableCoins.isEmpty || !input.vouchers.isEmpty else {
+        guard !availableCoins.isEmpty || !availableVouchers.isEmpty else {
             throw CoinSelectionError.emptyWallet
         }
 
@@ -59,37 +61,17 @@ extension CoinSelector: CoinSelecting {
             return splitResult
         }
 
-        let fullPrivacyVouchers = input.vouchers.filter { $0.privacy == .full }
-
-        // Strategy 3a: Unload with full privacy (ready vouchers only)
-        if let fullPrivacy = try tryUnloadIntoCoins(
+        // Strategy 3: Unload the selectable vouchers into coins. Per-voucher privacy quality is no
+        // longer a selection axis — the strategy-driven balance decides usability, and this draws on
+        // whatever the durability overlay marks selectable.
+        if let unloaded = try tryUnloadIntoCoins(
             amount: input.amount,
             coins: availableCoins,
-            vouchers: fullPrivacyVouchers,
+            vouchers: availableVouchers,
             maxVouchersPerGroup: input.maxVouchersPerGroup,
             breakdownContext: input.breakdownContext
         ) {
-            return fullPrivacy
-        }
-
-        let allVouchers = input.vouchers
-
-        // Strategy 3b: Unload with degraded privacy fallback
-        if allVouchers.count > fullPrivacyVouchers.count {
-            if let degradedPrivacy = try tryUnloadIntoCoins(
-                amount: input.amount,
-                coins: availableCoins,
-                vouchers: allVouchers,
-                maxVouchersPerGroup: input.maxVouchersPerGroup,
-                breakdownContext: input.breakdownContext
-            ) {
-                return degradedPrivacy
-            }
-        }
-
-        // If we have vouchers but none are ready, and they could cover the amount
-        if !input.vouchers.isEmpty, fullPrivacyVouchers.isEmpty {
-            throw CoinSelectionError.noReadyVouchers
+            return unloaded
         }
 
         // Otherwise, insufficient funds

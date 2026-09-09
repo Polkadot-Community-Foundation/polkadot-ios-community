@@ -45,7 +45,6 @@ final class TransferAmountInteractor {
     let lifecycleReporter: TransferLifecycleReporting
 
     private var coinageBalanceTask: Task<Void, Never>?
-    private var lockedBalanceTask: Task<Void, Never>?
     /// Coalesces concurrent confirmations (e.g. double-tap): late callers join
     /// the in-flight submission and receive its real outcome.
     private let confirmCall = CoalescingTask<Void>()
@@ -102,20 +101,15 @@ extension TransferAmountInteractor: TransferAmountInteractorInputProtocol {
         }
     }
 
-    func confirmTransfer(
-        validation: TransferPreviewValidation,
-        sendFullAmount: Bool
-    ) async throws {
+    func confirmTransfer(validation: TransferPreviewValidation) async throws {
         coinageBalanceTask?.cancel()
         coinageBalanceTask = nil
-        lockedBalanceTask?.cancel()
-        lockedBalanceTask = nil
 
         try await confirmCall.run { [self] in
             do {
                 switch validation {
                 case let .coinage(preview):
-                    try await confirmCoinageTransfer(preview: preview, sendFullAmount: sendFullAmount)
+                    try await confirmCoinageTransfer(preview: preview)
                 case let .externalPayment(preview):
                     try await confirmExternalPayment(preview: preview)
                 }
@@ -156,18 +150,25 @@ extension TransferAmountInteractor: TransferAmountInteractorInputProtocol {
 // MARK: - Coinage Transfer
 
 private extension TransferAmountInteractor {
-    func confirmCoinageTransfer(preview: TransferPreview, sendFullAmount: Bool) async throws {
-        let result = sendFullAmount ? preview.selectionResult : preview.nonDegradedResult
-        let memo = try await coinageService.executeTransfer(result: result)
+    func confirmCoinageTransfer(preview: TransferPreview) async throws {
+        let result = preview.selectionResult
+        // One id shared by the coinage transactions (their groupId) and the chat message that
+        // carries the memo, so the transfer's on-chain work and its message correlate.
+        let messageId: Chat.MessageId = UUID().uuidString
+        let prepared = try await coinageService.executeTransfer(result: result, groupId: messageId)
         do {
-            try await transferSubmitter.sendTransfer(memo, to: recipient.accountId)
+            try await transferSubmitter.sendTransfer(prepared.memo, to: recipient.accountId, messageId: messageId)
         } catch {
             if transferSubmitter.isFailureFatal {
+                // Fatal send failure: leave the handoff provisional so a relaunch returns the coins.
                 throw error
             }
             logger?.error("Non-fatal chat submitter failure: \(error)")
         }
-        lifecycleReporter.start(with: .coinageMemo(memo))
+        // The memo has left toward the recipient — make the handoff final so the coins can't be
+        // reselected on this device.
+        try await prepared.handoffCommit.commit()
+        lifecycleReporter.start(with: .coinageMemo(prepared.memo))
     }
 }
 
@@ -194,31 +195,26 @@ private extension TransferAmountInteractor {
 private extension TransferAmountInteractor {
     func startCoinageBalanceObservation() {
         coinageBalanceTask?.cancel()
-        lockedBalanceTask?.cancel()
         let service = coinageService
         coinageBalanceTask = Task { [weak self] in
             do {
                 let balanceService = try await service.coinageBalanceService()
-                for try await balance in balanceService.spendableBalanceStream.removeDuplicates() {
+                for try await balance in balanceService.balanceStream {
+                    // `availablePrivate` is spendable at no privacy cost; `gainingPrivacy` is the
+                    // funds this strategy would still release behind a confirmation (none under max
+                    // privacy). Together they form the reachable amount.
+                    let gainingPrivacy = balance.gainingPrivacy.canSpendWithConfirmation
+                        ? balance.gainingPrivacy.amount
+                        : 0
                     let breakdown = TransferSpendableBreakdown(
-                        secured: balance.fullPrivacy.planks,
-                        lowPrivacy: balance.degraded.planks
+                        availablePrivate: balance.availablePrivate,
+                        gainingPrivacy: gainingPrivacy
                     )
                     await self?.presenter?.didReceive(spendableBreakdown: breakdown)
+                    await self?.presenter?.didReceive(lockedBalance: balance.pending)
                 }
             } catch {
                 self?.logger?.error("Failed to observe coinage balance: \(error)")
-            }
-        }
-
-        lockedBalanceTask = Task { [weak self] in
-            do {
-                let balanceService = try await service.coinageBalanceService()
-                for try await locked in balanceService.lockedBalanceStream.removeDuplicates() {
-                    await self?.presenter?.didReceive(lockedBalance: locked.planks)
-                }
-            } catch {
-                self?.logger?.error("Failed to observe locked balance: \(error)")
             }
         }
     }

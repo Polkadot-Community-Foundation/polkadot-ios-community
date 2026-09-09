@@ -43,8 +43,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
 
     #if TESTNET_FEATURE
         private var coinageSubscriptionTask: Task<Void, Never>?
-        private let coinProvider: StreamableProvider<Coin>
-        private let voucherProvider: StreamableProvider<Voucher>
+        private let databaseFactory: any DatabaseDependencyFactoring
         private let backgroundExecutor: BackgroundExecuting
 
         let voucherRepository: AnyDataProviderRepository<Voucher>
@@ -60,8 +59,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         coinageService: CoinageServicing,
         coinageBackupSyncService: any CoinageBackupSyncServicing,
         balanceSyncStateStorage: BalanceSyncStateStoring,
-        coinProvider: StreamableProvider<Coin>,
-        voucherProvider: StreamableProvider<Voucher>,
+        databaseFactory: any DatabaseDependencyFactoring,
         voucherRepository: AnyDataProviderRepository<Voucher>,
         backgroundExecutor: BackgroundExecuting,
         hostProvider: ProductHostProviding,
@@ -77,8 +75,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         self.hostProvider = hostProvider
         #if TESTNET_FEATURE
             self.backgroundExecutor = backgroundExecutor
-            self.coinProvider = coinProvider
-            self.voucherProvider = voucherProvider
+            self.databaseFactory = databaseFactory
 
             self.voucherRepository = voucherRepository
         #endif
@@ -193,7 +190,8 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
                             derivationIndex: voucher.derivationIndex,
                             allocatedAt: voucher.allocatedAt,
                             readyAt: .now,
-                            remoteState: voucher.remoteState
+                            remoteState: voucher.remoteState,
+                            publicKey: voucher.publicKey
                         )
                     }
 
@@ -208,16 +206,12 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
 
         private func subscribeToCoinage() {
             coinageSubscriptionTask?.cancel()
-            coinageSubscriptionTask = Task { [weak self, coinProvider, voucherProvider] in
-                let coinsStream = coinProvider.asyncStream()
-                    .scan([String: Coin]()) { dict, changes in changes.mergeToDict(dict) }
-                let vouchersStream = voucherProvider.asyncStream()
-                    .scan([String: Voucher]()) { dict, changes in changes.mergeToDict(dict) }
+            coinageSubscriptionTask = Task { [weak self, databaseFactory] in
+                let coinsStream = databaseFactory.makeTrackedCoinSnapshotStream()
+                let vouchersStream = databaseFactory.makeTrackedVoucherSnapshotStream()
 
                 do {
-                    for try await (coinsDict, vouchersDict) in combineLatest(coinsStream, vouchersStream) {
-                        let coins = Array(coinsDict.values)
-                        let vouchers = Array(vouchersDict.values)
+                    for try await (coins, vouchers) in combineLatest(coinsStream, vouchersStream) {
                         await self?.presenter?.didReceive(coins: coins, vouchers: vouchers)
                     }
                 } catch {
@@ -230,32 +224,20 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
     private func subscribeToBalances() {
         balanceSubscriptionTask?.cancel()
         balanceSubscriptionTask = Task { [weak self] in
-            await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask { [weak self] in
-                    guard let stream = try await self?.coinageService.coinageBalanceService().totalBalanceStream
-                    else { return }
-                    do {
-                        for try await total in stream {
-                            try Task.checkCancellation()
-                            await self?.presenter?.didReceive(balance: total.balanceInDecimal())
-                        }
-                    } catch {
-                        Logger.shared.error("Total balance stream failed: \(error)")
-                    }
+            guard let self else { return }
+            do {
+                let balanceService = try await coinageService.coinageBalanceService()
+                let context = balanceService.denominationContext
+                for try await balance in balanceService.balanceStream {
+                    try Task.checkCancellation()
+                    // Locked is everything the strategy will not part with: pending plus any
+                    // gaining-privacy funds the strategy won't release on confirmation.
+                    let locked = balance.total - balance.available
+                    await presenter?.didReceive(balance: context.decimal(fromPlanks: balance.total))
+                    await presenter?.didReceive(lockedAmount: context.decimal(fromPlanks: locked))
                 }
-
-                group.addTask { [weak self] in
-                    guard let stream = try await self?.coinageService.coinageBalanceService().lockedBalanceStream
-                    else { return }
-                    do {
-                        for try await locked in stream {
-                            try Task.checkCancellation()
-                            await self?.presenter?.didReceive(lockedAmount: locked.balanceInDecimal())
-                        }
-                    } catch {
-                        Logger.shared.error("Locked balance stream failed: \(error)")
-                    }
-                }
+            } catch {
+                Logger.shared.error("Balance stream failed: \(error)")
             }
         }
     }
@@ -344,7 +326,7 @@ extension AssetDetailsInteractor.TopUpProductError: ErrorContentConvertible {
     func toErrorContent() -> ErrorContent {
         ErrorContent(
             title: String(localized: .Common.error),
-            message: String(localized: .Products.topUpResolveError)
+            message: String(localized: .Products.topUpErrorMessage)
         )
     }
 }
