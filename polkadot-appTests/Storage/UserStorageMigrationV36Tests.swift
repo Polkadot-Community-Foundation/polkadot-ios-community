@@ -107,14 +107,15 @@ final class UserStorageMigrationV36Tests: XCTestCase {
     /// The load-bearing test. Writes a row under the real v36 model, migrates, and reads it back
     /// under v42.
     ///
-    /// `CDKeystoreIntegrity` is the fixture on purpose: its definition is byte-identical in
+    /// `CDProduct` is the fixture on purpose (`CDKeystoreIntegrity`, the previous one, was removed
+    /// upstream in v44): its definition is byte-identical in
     /// `UserDataModel36` and the current model, so a value that fails to survive indicates the
     /// migration itself went wrong rather than an intentional schema change to that entity.
     func testVersion36StoreMigratesPreservingData() throws {
-        let keyTag = "v36-survivor-\(UUID().uuidString)"
-        let integrityKey = Data([0x01, 0x02, 0x03, 0x04])
+        let identifier = "v36-survivor-\(UUID().uuidString)"
+        let name = "survivor-name"
 
-        try makeVersion36Store(keyTag: keyTag, integrityKey: integrityKey)
+        try makeVersion36Store(identifier: identifier, name: name)
 
         // Reaching the next line at all is part of the assertion: performMigration() calls
         // fatalError on failure, which takes the whole test runner down rather than failing a test.
@@ -125,8 +126,8 @@ final class UserStorageMigrationV36Tests: XCTestCase {
         context.persistentStoreCoordinator = coordinator
 
         try context.performAndWait {
-            let request = NSFetchRequest<NSManagedObject>(entityName: "CDKeystoreIntegrity")
-            request.predicate = NSPredicate(format: "keyTag == %@", keyTag)
+            let request = NSFetchRequest<NSManagedObject>(entityName: "CDProduct")
+            request.predicate = NSPredicate(format: "identifier == %@", identifier)
 
             let results = try context.fetch(request)
 
@@ -135,7 +136,7 @@ final class UserStorageMigrationV36Tests: XCTestCase {
                 1,
                 "the row written under v36 must survive the migration to v42"
             )
-            XCTAssertEqual(results.first?.value(forKey: "integrityKey") as? Data, integrityKey)
+            XCTAssertEqual(results.first?.value(forKey: "name") as? String, name)
         }
     }
 
@@ -153,9 +154,9 @@ final class UserStorageMigrationV36Tests: XCTestCase {
 
     /// Running the migrator twice must be a no-op, not a second migration attempt.
     func testMigrationIsIdempotent() throws {
-        let keyTag = "idempotent-\(UUID().uuidString)"
+        let identifier = "idempotent-\(UUID().uuidString)"
 
-        try makeVersion36Store(keyTag: keyTag)
+        try makeVersion36Store(identifier: identifier)
 
         makeMigrator().performMigration()
         makeMigrator().performMigration()
@@ -165,8 +166,8 @@ final class UserStorageMigrationV36Tests: XCTestCase {
         context.persistentStoreCoordinator = coordinator
 
         try context.performAndWait {
-            let request = NSFetchRequest<NSManagedObject>(entityName: "CDKeystoreIntegrity")
-            request.predicate = NSPredicate(format: "keyTag == %@", keyTag)
+            let request = NSFetchRequest<NSManagedObject>(entityName: "CDProduct")
+            request.predicate = NSPredicate(format: "identifier == %@", identifier)
 
             XCTAssertEqual(try context.fetch(request).count, 1)
         }
@@ -225,8 +226,8 @@ private extension UserStorageMigrationV36Tests {
     /// Writes a store using the **real** shipped `UserDataModel36`, which is what an install from
     /// any pre-squash PCF build looks like on disk.
     func makeVersion36Store(
-        keyTag: String = "seed",
-        integrityKey: Data = Data([0xAA])
+        identifier: String = "seed",
+        name: String = "seed-name"
     ) throws {
         let coordinator = try openStore(with: .version36)
 
@@ -235,11 +236,11 @@ private extension UserStorageMigrationV36Tests {
 
         try context.performAndWait {
             let object = NSEntityDescription.insertNewObject(
-                forEntityName: "CDKeystoreIntegrity",
+                forEntityName: "CDProduct",
                 into: context
             )
-            object.setValue(keyTag, forKey: "keyTag")
-            object.setValue(integrityKey, forKey: "integrityKey")
+            object.setValue(identifier, forKey: "identifier")
+            object.setValue(name, forKey: "name")
 
             try context.save()
         }
