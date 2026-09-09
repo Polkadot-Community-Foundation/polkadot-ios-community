@@ -1,27 +1,38 @@
 import SwiftUI
 import DesignSystem
 
-/// Maps a health score to the ring's appearance. Scoring lives in `ChainHealth`;
-/// this is only how that number is drawn. A fully healthy chain is monochrome (filled + `.fgPrimary`),
-/// so any colour on the ring indicates a degradation.
+/// The single place that says how an indication is drawn. A normal chain is monochrome — a filled
+/// `.fgPrimary` disc with the icon knocked out — so anything muted on the strip reads as a chain
+/// the app cannot reach.
 enum ChainStatusRingStyle {
-    static let fullyHealthyThreshold: Double = 0.75
-    static let healthyThreshold: Double = 0.5
-    static let warningThreshold: Double = 0.25
-
-    static func isFilled(for health: Double) -> Bool {
-        health > fullyHealthyThreshold
+    static func isFilled(for indication: ChainStatusIndication) -> Bool {
+        indication == .normal
     }
 
-    static func arcColor(for health: Double) -> Color {
-        if health > fullyHealthyThreshold {
+    static func arcColor(for indication: ChainStatusIndication) -> Color {
+        switch indication {
+        case .normal:
             .fgPrimary
-        } else if health > healthyThreshold {
-            .bgStatusSuccess
-        } else if health > warningThreshold {
-            .bgStatusWarning
-        } else {
-            .bgStatusError
+        case .dead:
+            .fgTertiary
+        }
+    }
+
+    static func trackColor(for indication: ChainStatusIndication) -> Color {
+        switch indication {
+        case .normal:
+            .fgPrimary.opacity(0.2)
+        case .dead:
+            .fgTertiary
+        }
+    }
+
+    static func iconColor(for indication: ChainStatusIndication) -> Color {
+        switch indication {
+        case .normal:
+            .bgSurfaceMain
+        case .dead:
+            .fgTertiary
         }
     }
 }

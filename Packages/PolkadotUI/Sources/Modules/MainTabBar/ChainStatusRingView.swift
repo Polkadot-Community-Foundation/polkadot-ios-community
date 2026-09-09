@@ -1,9 +1,8 @@
 import SwiftUI
 import DesignSystem
 
-/// Per-chain status indicator. The arc length carries health (block age and finality stall
-/// combined worst-of) and is colored by health score; the centre icon identifies the chain and is
-/// tinted by connection state, inverting against the disc once a fully healthy ring fills in.
+/// Per-chain status indicator: one ring per chain, coloured by `ChainStatusRingStyle` and pulsing
+/// its icon while the socket is connecting.
 struct ChainStatusRingView: View, Hashable {
     let viewModel: ChainConnectionStatusViewModel
 
@@ -12,31 +11,30 @@ struct ChainStatusRingView: View, Hashable {
     var diameter: CGFloat = 16
 
     var body: some View {
-        let health = viewModel.health
-        let arcColor = ChainStatusRingStyle.arcColor(for: health)
-        let isFilled = ChainStatusRingStyle.isFilled(for: health)
-
         ZStack {
             Circle()
                 .fill(arcColor)
                 .opacity(isFilled ? 1 : 0)
-                .animation(healthAnimation, value: health)
+                .animation(indicationAnimation, value: indication)
 
             Circle()
-                .stroke(Color.fgPrimary.opacity(0.2), lineWidth: lineWidth)
+                .stroke(trackColor, lineWidth: lineWidth)
 
-            Circle()
-                .trim(from: 1 - health, to: 1)
-                .stroke(
-                    arcColor,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(healthAnimation, value: health)
+            if showsArc {
+                // Ticket 02 will key arc visibility on liveness probe data.
+                Circle()
+                    .trim(from: 0, to: 1)
+                    .stroke(
+                        arcColor,
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(indicationAnimation, value: indication)
+            }
 
             ChainStatusIconView(
                 icon: viewModel.icon,
-                color: isFilled ? .bgSurfaceMain : dotColor,
+                color: iconColor,
                 diameter: dotDiameter,
                 isPulsing: viewModel.state == .connecting
             )
@@ -50,22 +48,23 @@ struct ChainStatusRingView: View, Hashable {
 }
 
 private extension ChainStatusRingView {
-    var healthAnimation: Animation { .easeOut(duration: 0.3) }
+    var indication: ChainStatusIndication { viewModel.indication }
+
+    var isFilled: Bool { ChainStatusRingStyle.isFilled(for: indication) }
+
+    var showsArc: Bool { indication == .normal }
+
+    var arcColor: Color { ChainStatusRingStyle.arcColor(for: indication) }
+
+    var trackColor: Color { ChainStatusRingStyle.trackColor(for: indication) }
+
+    var iconColor: Color { ChainStatusRingStyle.iconColor(for: indication) }
+
+    var indicationAnimation: Animation { .easeOut(duration: 0.3) }
 
     var lineWidth: CGFloat { diameter / 8 }
 
     var dotDiameter: CGFloat { diameter * 0.625 }
-
-    var dotColor: Color {
-        switch viewModel.state {
-        case .connected:
-            .fgPrimary
-        case .connecting:
-            .fgTertiary
-        case .offline:
-            .bgStatusError
-        }
-    }
 }
 
 /// Owns the repeating animation's `@State` so `ChainStatusRingView` keeps the synthesized

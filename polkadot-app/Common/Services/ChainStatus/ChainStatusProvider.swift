@@ -3,34 +3,6 @@ import AsyncExtensions
 import PolkadotUI
 import StructuredConcurrency
 
-/// Rolling window of the most recent health scores for a single row. Median rather than
-/// mean so one bad sample cannot move the ring.
-struct ChainHealthWindow {
-    static let capacity = 10
-
-    private var samples: [Double] = []
-
-    var median: Double? {
-        guard !samples.isEmpty else {
-            return nil
-        }
-
-        return samples.sorted()[samples.count / 2]
-    }
-
-    mutating func record(_ sample: Double) {
-        samples.append(sample)
-
-        if samples.count > Self.capacity {
-            samples.removeFirst(samples.count - Self.capacity)
-        }
-    }
-
-    mutating func clear() {
-        samples.removeAll()
-    }
-}
-
 protocol ChainStatusProviding: Actor {
     nonisolated func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]>
     func start()
@@ -41,6 +13,7 @@ protocol ChainStatusProviding: Actor {
 /// complete set and a host subscribing later sees live state rather than a re-seed.
 actor ChainStatusProvider {
     private static let connectDebounce: Duration = .milliseconds(300)
+    private static let deadDwell: TimeInterval = 3
 
     private let networkStatusService: NetworkStatusProviding
     private let blockProvider: ChainBlockProviding
@@ -51,10 +24,10 @@ actor ChainStatusProvider {
 
     private var statuses: [ChainConnectionTarget: NetworkStatus]
     private var blocks: [ChainConnectionTarget: ChainBlockInfo] = [:]
-    private var connectedSince: [ChainConnectionTarget: Date] = [:]
     private var statementState: StatementDeliveryState = .noSubscriptions
     private var statusTasks: [Task<Void, Never>] = []
-    private var healthWindows: [String: ChainHealthWindow] = [:]
+    private var previousIndications: [String: ChainStatusIndication] = [:]
+    private var deadSince: [String: Date] = [:]
     private var tickTask: Task<Void, Never>?
     private var isObserving = false
     private var lastEmittedRows: [ChainConnectionStatusViewModel] = []
@@ -75,12 +48,7 @@ actor ChainStatusProvider {
 
         statuses = seededStatuses
         rowsSubject = AsyncCurrentValueSubject(
-            Self.makeRows(
-                statuses: seededStatuses,
-                blocks: [:],
-                connectedSince: [:],
-                statementState: .noSubscriptions
-            )
+            Self.makeRows(statuses: seededStatuses, statementState: .noSubscriptions)
         )
     }
 
@@ -172,14 +140,10 @@ private extension ChainStatusProvider {
 
         statuses[target] = status
 
-        if status == .connected {
-            connectedSince[target] = Date()
-        } else {
-            connectedSince[target] = nil
+        if status != .connected {
             blocks[target] = nil
             // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
             await blockProvider.clear(for: target)
-            healthWindows[target.chainId]?.clear()
         }
 
         emitRows()
@@ -204,91 +168,86 @@ private extension ChainStatusProvider {
     }
 
     func emitRows() {
-        let rawRows = Self.makeRows(
-            statuses: statuses,
-            blocks: blocks,
-            connectedSince: connectedSince,
-            statementState: statementState
-        )
-        let now = Date()
+        let rawRows = Self.makeRows(statuses: statuses, statementState: statementState)
+        let indicatedRows = indicateRows(rawRows, at: Date())
 
-        let scoredRows = scoreRows(rawRows, at: now)
+        guard indicatedRows != lastEmittedRows else { return }
 
-        guard scoredRows != lastEmittedRows else { return }
-
-        lastEmittedRows = scoredRows
-        rowsSubject.send(scoredRows)
+        lastEmittedRows = indicatedRows
+        rowsSubject.send(indicatedRows)
     }
 
-    private func scoreRows(_ rows: [ChainConnectionStatusViewModel], at date: Date)
+    private func indicateRows(_ rows: [ChainConnectionStatusViewModel], at date: Date)
         -> [ChainConnectionStatusViewModel] {
         rows.map { row in
-            let rawScore = ChainHealth.score(for: row, at: date)
-            healthWindows[row.id, default: ChainHealthWindow()].record(rawScore)
-            let smoothed = healthWindows[row.id]?.median ?? rawScore
+            let rawIndication = ChainStatusIndication.resolve(state: row.state)
+            let indication = applyDwell(to: rawIndication, rowId: row.id, at: date)
+            previousIndications[row.id] = indication
 
-            // Quantised so float noise does not push a new row set every tick.
-            return row.withHealth((smoothed * 100).rounded() / 100)
+            return row.withIndication(indication)
+        }
+    }
+
+    /// Entering dead is held for `deadDwell` so a flap shorter than that never darkens the strip;
+    /// leaving dead is immediate. A row that has never been emitted skips the hold, so a cold
+    /// launch with no connectivity reads dead at once instead of normal for three seconds.
+    private func applyDwell(
+        to indication: ChainStatusIndication,
+        rowId: String,
+        at date: Date
+    ) -> ChainStatusIndication {
+        guard let previous = previousIndications[rowId] else {
+            return indication
+        }
+
+        switch (previous, indication) {
+        case (.normal, .dead):
+            let deadAt = deadSince[rowId] ?? date
+            deadSince[rowId] = deadAt
+
+            return date.timeIntervalSince(deadAt) < Self.deadDwell ? previous : indication
+        case (.dead, .normal):
+            deadSince[rowId] = nil
+
+            return indication
+        case (.normal, .normal):
+            deadSince[rowId] = nil
+            return indication
+        case (.dead, .dead):
+            return indication
         }
     }
 
     static func makeRows(
         statuses: [ChainConnectionTarget: NetworkStatus],
-        blocks: [ChainConnectionTarget: ChainBlockInfo],
-        connectedSince: [ChainConnectionTarget: Date],
         statementState: StatementDeliveryState
     ) -> [ChainConnectionStatusViewModel] {
         let targetRows = ChainConnectionTarget.allCases.map { target in
             let state = (statuses[target] ?? .connecting).connectionState
-            let block = state == .connected ? blocks[target] : nil
-            let finalityLag = computeFinalityLag(from: block)
 
             return ChainConnectionStatusViewModel(
                 id: target.chainId,
                 title: target.title,
                 state: state,
                 stateTitle: state.localizedTitle,
-                lastBlockDate: block?.receivedAt,
-                finalityLag: finalityLag,
-                connectedSince: connectedSince[target],
-                thresholds: target.healthThresholds,
-                icon: target.statusIcon
+                icon: target.statusIcon,
+                indication: ChainStatusIndication.resolve(state: state)
             )
         }
 
-        let statementStoreRow = makeStatementStoreRow(
-            state: statementState.connectionState,
-            blocks: blocks,
-            connectedSince: connectedSince
-        )
+        let statementStoreRow = makeStatementStoreRow(state: statementState.connectionState)
 
         return targetRows + [statementStoreRow]
     }
 
-    private static func computeFinalityLag(from block: ChainBlockInfo?) -> Int? {
-        block.flatMap { info in
-            info.finalizedNumber.map { max(Int(info.number) - Int($0), 0) }
-        }
-    }
-
-    private static func makeStatementStoreRow(
-        state: ChainConnectionState,
-        blocks: [ChainConnectionTarget: ChainBlockInfo],
-        connectedSince: [ChainConnectionTarget: Date]
-    ) -> ChainConnectionStatusViewModel {
-        let block = state == .connected ? blocks[.chat] : nil
-        let finalityLag = computeFinalityLag(from: block)
-
-        return ChainConnectionStatusViewModel(
+    private static func makeStatementStoreRow(state: ChainConnectionState) -> ChainConnectionStatusViewModel {
+        ChainConnectionStatusViewModel(
             id: "statement-store",
             title: "Statement Store",
             state: state,
             stateTitle: state.localizedTitle,
-            lastBlockDate: block?.receivedAt,
-            finalityLag: finalityLag,
-            connectedSince: connectedSince[.chat],
-            thresholds: ChainConnectionTarget.chat.healthThresholds,
-            icon: .statementStore
+            icon: .statementStore,
+            indication: ChainStatusIndication.resolve(state: state)
         )
     }
 }
