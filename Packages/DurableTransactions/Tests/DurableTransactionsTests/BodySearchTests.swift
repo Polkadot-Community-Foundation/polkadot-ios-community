@@ -1,4 +1,5 @@
-@testable import Coinage
+import DurableTransactions
+import DurableTransactionsTestSupport
 import Foundation
 import SubstrateSdk
 import Testing

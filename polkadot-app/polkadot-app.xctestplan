@@ -86,6 +86,13 @@
     },
     {
       "target" : {
+        "containerPath" : "container:Packages\/DurableTransactions",
+        "identifier" : "DurableTransactionsTests",
+        "name" : "DurableTransactionsTests"
+      }
+    },
+    {
+      "target" : {
         "containerPath" : "container:Packages\/FoundationExt",
         "identifier" : "FoundationExtTests",
         "name" : "FoundationExtTests"
