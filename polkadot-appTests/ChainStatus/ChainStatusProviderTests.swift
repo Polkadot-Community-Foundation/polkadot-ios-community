@@ -1,0 +1,157 @@
+import Foundation
+import Testing
+import AsyncExtensions
+import SubstrateSdk
+import PolkadotUI
+@testable import polkadot_app
+
+struct ChainStatusProviderTests {
+    @Test("A row with no prior emission emits its raw indication")
+    func firstEmissionRaw() async {
+        let provider = makeProvider()
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat)
+        await provider.emitRows(at: t0)
+
+        let chatRow = await currentChatRow(from: provider)
+
+        #expect(chatRow?.indication == .dead, "first emission with offline state is raw dead")
+    }
+
+    @Test("A stalling chain produces outage")
+    func stallingChainOutage() async {
+        // Chat is a 2s chain: 30s window, 15 slots. Blocks arrive on time up to t0+30, then stop.
+        let provider = makeProvider()
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "15 blocks over the 15-slot window is liveness 1")
+
+        // 10s into the stall the window start is t0+10, so the anchor is height 5 and 10 of the
+        // 15 slots carry a block. The exact value pins the sample timestamps: if they collapsed
+        // onto one instant, the anchor would be the head and this would read 0.
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 10.0 / 15.0))
+
+        // Window start is t0+31, past every sample: the anchor collapses onto the head and
+        // liveness reads 0.
+        await provider.emitRows(at: t0.addingTimeInterval(61))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 0))
+    }
+
+    @Test("Disconnect clears liveness so reconnect does not inherit pre-drop history")
+    func disconnectClearsLiveness() async {
+        let provider = makeProvider()
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat)
+
+        for index in 0 ... 10 {
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: t0.addingTimeInterval(Double(index) * 2),
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo])
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(20))
+
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat)
+        await provider.emitRows(at: t0.addingTimeInterval(30))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .dead)
+
+        await provider.handleStatusUpdate(.connected, for: .chat)
+        await provider.emitRows(at: t0.addingTimeInterval(31))
+
+        chatRow = await currentChatRow(from: provider) ?? chatRow
+
+        #expect(
+            chatRow?.indication == .normal,
+            "after reconnect, liveness was cleared so history does not persist"
+        )
+    }
+
+    @Test("Recovery within dwell window clears deadSince so fresh dwell can start")
+    func recoveryWithinDwellClearsDeadSince() async {
+        // Fails if deadSince[rowId] = nil is removed from the (.normal, .normal) arm of applyDwell.
+        // A fresh dwell must start when entering dead again, not reuse an old deadSince timestamp.
+        let provider = makeProvider()
+        let t0 = Date()
+
+        // Step 1: Connect at t0, row is normal
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+        await provider.emitRows(at: t0)
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal)
+
+        // Step 2: Go offline at t0+1, dwell holds so row stays normal
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0 + 1)
+        await provider.emitRows(at: t0 + 1)
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "dwell holds dead within 3s window")
+
+        // Step 3: Reconnect at t0+2 (within dwell), recovery clears deadSince
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0 + 2)
+        await provider.emitRows(at: t0 + 2)
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal)
+
+        // Step 4: Go offline again at t0+10, a fresh dwell begins (not reusing old t0+1)
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0 + 10)
+        await provider.emitRows(at: t0 + 10)
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(
+            chatRow?.indication == .normal,
+            "fresh dwell starts at t0+10, so nothing has elapsed yet and the dwell still holds"
+        )
+
+        // Step 5: At t0+13.1, the fresh dwell (3s from t0+10) expires and row goes dead
+        await provider.emitRows(at: t0.addingTimeInterval(13.1))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(
+            chatRow?.indication == .dead,
+            "fresh dwell expired at t0+13: (t0+13.1 - t0+10 = 3.1s > 3s dwell)"
+        )
+    }
+}
+
+private extension ChainStatusProviderTests {
+    func makeProvider() -> ChainStatusProvider {
+        ChainStatusProvider(
+            networkStatusService: MockNetworkStatusService(),
+            blockProvider: MockChainBlockProvider(),
+            statementTracker: MockStatementDeliveryTracker(),
+            logger: StubLogger()
+        )
+    }
+
+    func currentChatRow(from provider: ChainStatusProvider) async -> ChainConnectionStatusViewModel? {
+        let rows = try? await provider.statusStream().first { _ in true }
+        return rows?.first { $0.id == ChainConnectionTarget.chat.chainId }
+    }
+}

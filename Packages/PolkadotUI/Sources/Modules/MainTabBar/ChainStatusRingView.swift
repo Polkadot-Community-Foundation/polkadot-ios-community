@@ -21,9 +21,8 @@ struct ChainStatusRingView: View, Hashable {
                 .stroke(trackColor, lineWidth: lineWidth)
 
             if showsArc {
-                // Ticket 02 will key arc visibility on liveness probe data.
                 Circle()
-                    .trim(from: 0, to: 1)
+                    .trim(from: 0, to: arcEnd)
                     .stroke(
                         arcColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
@@ -52,7 +51,26 @@ private extension ChainStatusRingView {
 
     var isFilled: Bool { ChainStatusRingStyle.isFilled(for: indication) }
 
-    var showsArc: Bool { indication == .normal }
+    var showsArc: Bool {
+        switch indication {
+        case .normal,
+             .outage:
+            true
+        case .dead:
+            false
+        }
+    }
+
+    var arcEnd: CGFloat {
+        switch indication {
+        case .normal:
+            1
+        case let .outage(liveness):
+            liveness
+        case .dead:
+            0
+        }
+    }
 
     var arcColor: Color { ChainStatusRingStyle.arcColor(for: indication) }
 

@@ -13,6 +13,8 @@ enum ChainStatusRingStyle {
         switch indication {
         case .normal:
             .fgPrimary
+        case .outage:
+            .bgStatusError
         case .dead:
             .fgTertiary
         }
@@ -21,6 +23,8 @@ enum ChainStatusRingStyle {
     static func trackColor(for indication: ChainStatusIndication) -> Color {
         switch indication {
         case .normal:
+            .fgPrimary.opacity(0.2)
+        case .outage:
             .fgPrimary.opacity(0.2)
         case .dead:
             .fgTertiary
@@ -31,6 +35,8 @@ enum ChainStatusRingStyle {
         switch indication {
         case .normal:
             .bgSurfaceMain
+        case .outage:
+            .fgTertiary
         case .dead:
             .fgTertiary
         }

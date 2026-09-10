@@ -24,6 +24,7 @@ actor ChainStatusProvider {
 
     private var statuses: [ChainConnectionTarget: NetworkStatus]
     private var blocks: [ChainConnectionTarget: ChainBlockInfo] = [:]
+    private var liveness: [ChainConnectionTarget: ChainLiveness] = [:]
     private var statementState: StatementDeliveryState = .noSubscriptions
     private var statusTasks: [Task<Void, Never>] = []
     private var previousIndications: [String: ChainStatusIndication] = [:]
@@ -47,6 +48,9 @@ actor ChainStatusProvider {
             .reduce(into: [ChainConnectionTarget: NetworkStatus]()) { $0[$1] = .connecting }
 
         statuses = seededStatuses
+        liveness = ChainConnectionTarget.allCases.reduce(into: [:]) { dict, target in
+            dict[target] = ChainLiveness(blockPeriod: target.expectedBlockTime)
+        }
         rowsSubject = AsyncCurrentValueSubject(
             Self.makeRows(statuses: seededStatuses, statementState: .noSubscriptions)
         )
@@ -90,6 +94,160 @@ extension ChainStatusProvider: ChainStatusProviding {
     }
 }
 
+extension ChainStatusProvider {
+    func handleStatusUpdate(
+        _ status: NetworkStatus,
+        for target: ChainConnectionTarget,
+        at date: Date = Date()
+    ) async {
+        let previousStatus = statuses[target]
+
+        guard previousStatus != status else {
+            return
+        }
+
+        statuses[target] = status
+
+        if status != .connected {
+            blocks[target] = nil
+            liveness[target]?.clear()
+            // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
+            await blockProvider.clear(for: target)
+        }
+
+        emitRows(at: date)
+    }
+
+    func handleBlocksUpdate(
+        _ updatedBlocks: [ChainConnectionTarget: ChainBlockInfo],
+        at date: Date = Date()
+    ) {
+        guard updatedBlocks != blocks else {
+            return
+        }
+
+        blocks = updatedBlocks
+
+        for (target, blockInfo) in updatedBlocks {
+            liveness[target]?.record(height: blockInfo.number, at: date)
+        }
+
+        emitRows(at: date)
+    }
+
+    func handleStatementStateUpdate(_ state: StatementDeliveryState, at date: Date = Date()) {
+        guard state != statementState else {
+            return
+        }
+
+        statementState = state
+        emitRows(at: date)
+    }
+
+    func emitRows(at date: Date = Date()) {
+        let rawRows = Self.makeRows(statuses: statuses, statementState: statementState)
+        let indicatedRows = indicateRows(rawRows, at: date)
+
+        guard indicatedRows != lastEmittedRows else { return }
+
+        lastEmittedRows = indicatedRows
+        rowsSubject.send(indicatedRows)
+    }
+
+    private func indicateRows(
+        _ rows: [ChainConnectionStatusViewModel],
+        at date: Date
+    ) -> [ChainConnectionStatusViewModel] {
+        rows.map { row in
+            let targetLiveness = ChainConnectionTarget.allCases.first { $0.chainId == row.id }
+                .flatMap { liveness[$0]?.liveness(at: date) }
+
+            let rawIndication = ChainStatusIndication.resolve(state: row.state, liveness: targetLiveness)
+            let indication = applyDwell(to: rawIndication, rowId: row.id, at: date)
+            previousIndications[row.id] = indication
+
+            return row.withIndication(indication)
+        }
+    }
+
+    /// Entering dead is held for `deadDwell` so a flap shorter than that never darkens the strip;
+    /// leaving dead is immediate. A row that has never been emitted skips the hold, so a cold
+    /// launch with no connectivity reads dead at once instead of normal for three seconds.
+    private func applyDwell(
+        to indication: ChainStatusIndication,
+        rowId: String,
+        at date: Date
+    ) -> ChainStatusIndication {
+        guard let previous = previousIndications[rowId] else {
+            return indication
+        }
+
+        switch (previous, indication) {
+        case (.normal, .normal):
+            deadSince[rowId] = nil
+            return indication
+        case (.normal, .outage):
+            deadSince[rowId] = nil
+            return indication
+        case (.normal, .dead):
+            let deadAt = deadSince[rowId] ?? date
+            deadSince[rowId] = deadAt
+            return date.timeIntervalSince(deadAt) < Self.deadDwell ? previous : indication
+        case (.outage, .normal):
+            deadSince[rowId] = nil
+            return indication
+        case (.outage, .outage):
+            deadSince[rowId] = nil
+            return indication
+        case (.outage, .dead):
+            let deadAt = deadSince[rowId] ?? date
+            deadSince[rowId] = deadAt
+            return date.timeIntervalSince(deadAt) < Self.deadDwell ? previous : indication
+        case (.dead, .normal):
+            deadSince[rowId] = nil
+            return indication
+        case (.dead, .outage):
+            deadSince[rowId] = nil
+            return indication
+        case (.dead, .dead):
+            return indication
+        }
+    }
+
+    static func makeRows(
+        statuses: [ChainConnectionTarget: NetworkStatus],
+        statementState: StatementDeliveryState
+    ) -> [ChainConnectionStatusViewModel] {
+        let targetRows = ChainConnectionTarget.allCases.map { target in
+            let state = (statuses[target] ?? .connecting).connectionState
+
+            return ChainConnectionStatusViewModel(
+                id: target.chainId,
+                title: target.title,
+                state: state,
+                stateTitle: state.localizedTitle,
+                icon: target.statusIcon,
+                indication: ChainStatusIndication.resolve(state: state, liveness: nil)
+            )
+        }
+
+        let statementStoreRow = makeStatementStoreRow(state: statementState.connectionState)
+
+        return targetRows + [statementStoreRow]
+    }
+
+    private static func makeStatementStoreRow(state: ChainConnectionState) -> ChainConnectionStatusViewModel {
+        ChainConnectionStatusViewModel(
+            id: "statement-store",
+            title: "Statement Store",
+            state: state,
+            stateTitle: state.localizedTitle,
+            icon: .statementStore,
+            indication: ChainStatusIndication.resolve(state: state, liveness: nil)
+        )
+    }
+}
+
 private extension ChainStatusProvider {
     func observeStatus(for target: ChainConnectionTarget) -> Task<Void, Never> {
         Task { [weak self, networkStatusService, logger] in
@@ -129,125 +287,5 @@ private extension ChainStatusProvider {
                 logger.error("Statement delivery state stream failed: \(error)")
             }
         }
-    }
-
-    func handleStatusUpdate(_ status: NetworkStatus, for target: ChainConnectionTarget) async {
-        let previousStatus = statuses[target]
-
-        guard previousStatus != status else {
-            return
-        }
-
-        statuses[target] = status
-
-        if status != .connected {
-            blocks[target] = nil
-            // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
-            await blockProvider.clear(for: target)
-        }
-
-        emitRows()
-    }
-
-    func handleBlocksUpdate(_ updatedBlocks: [ChainConnectionTarget: ChainBlockInfo]) async {
-        guard updatedBlocks != blocks else {
-            return
-        }
-
-        blocks = updatedBlocks
-        emitRows()
-    }
-
-    func handleStatementStateUpdate(_ state: StatementDeliveryState) async {
-        guard state != statementState else {
-            return
-        }
-
-        statementState = state
-        emitRows()
-    }
-
-    func emitRows() {
-        let rawRows = Self.makeRows(statuses: statuses, statementState: statementState)
-        let indicatedRows = indicateRows(rawRows, at: Date())
-
-        guard indicatedRows != lastEmittedRows else { return }
-
-        lastEmittedRows = indicatedRows
-        rowsSubject.send(indicatedRows)
-    }
-
-    private func indicateRows(_ rows: [ChainConnectionStatusViewModel], at date: Date)
-        -> [ChainConnectionStatusViewModel] {
-        rows.map { row in
-            let rawIndication = ChainStatusIndication.resolve(state: row.state)
-            let indication = applyDwell(to: rawIndication, rowId: row.id, at: date)
-            previousIndications[row.id] = indication
-
-            return row.withIndication(indication)
-        }
-    }
-
-    /// Entering dead is held for `deadDwell` so a flap shorter than that never darkens the strip;
-    /// leaving dead is immediate. A row that has never been emitted skips the hold, so a cold
-    /// launch with no connectivity reads dead at once instead of normal for three seconds.
-    private func applyDwell(
-        to indication: ChainStatusIndication,
-        rowId: String,
-        at date: Date
-    ) -> ChainStatusIndication {
-        guard let previous = previousIndications[rowId] else {
-            return indication
-        }
-
-        switch (previous, indication) {
-        case (.normal, .dead):
-            let deadAt = deadSince[rowId] ?? date
-            deadSince[rowId] = deadAt
-
-            return date.timeIntervalSince(deadAt) < Self.deadDwell ? previous : indication
-        case (.dead, .normal):
-            deadSince[rowId] = nil
-
-            return indication
-        case (.normal, .normal):
-            deadSince[rowId] = nil
-            return indication
-        case (.dead, .dead):
-            return indication
-        }
-    }
-
-    static func makeRows(
-        statuses: [ChainConnectionTarget: NetworkStatus],
-        statementState: StatementDeliveryState
-    ) -> [ChainConnectionStatusViewModel] {
-        let targetRows = ChainConnectionTarget.allCases.map { target in
-            let state = (statuses[target] ?? .connecting).connectionState
-
-            return ChainConnectionStatusViewModel(
-                id: target.chainId,
-                title: target.title,
-                state: state,
-                stateTitle: state.localizedTitle,
-                icon: target.statusIcon,
-                indication: ChainStatusIndication.resolve(state: state)
-            )
-        }
-
-        let statementStoreRow = makeStatementStoreRow(state: statementState.connectionState)
-
-        return targetRows + [statementStoreRow]
-    }
-
-    private static func makeStatementStoreRow(state: ChainConnectionState) -> ChainConnectionStatusViewModel {
-        ChainConnectionStatusViewModel(
-            id: "statement-store",
-            title: "Statement Store",
-            state: state,
-            stateTitle: state.localizedTitle,
-            icon: .statementStore,
-            indication: ChainStatusIndication.resolve(state: state)
-        )
     }
 }
