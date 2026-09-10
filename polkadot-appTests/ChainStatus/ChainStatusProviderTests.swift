@@ -138,6 +138,138 @@ struct ChainStatusProviderTests {
             "fresh dwell expired at t0+13: (t0+13.1 - t0+10 = 3.1s > 3s dwell)"
         )
     }
+
+    @Test("Statement store row state follows chat chain and delivery failure forces it offline")
+    func statementStoreRowStateTracking() async {
+        let testCases: [(
+            status: NetworkStatus,
+            trackerState: StatementDeliveryState,
+            expectedState: ChainConnectionState,
+            expectedIndication: ChainStatusIndication
+        )] = [
+            (.connected, .active, .connected, .normal),
+            (.connected, .failed, .offline, .dead),
+            (.connected, .noSubscriptions, .connected, .normal),
+            (.waitingForNetwork, .active, .offline, .dead),
+            (.connecting, .active, .connecting, .dead)
+        ]
+
+        // The tracker state is set before the chain status so that the row's first emission
+        // already carries it. Driving it the other way round emits a normal row first, and the
+        // dead dwell then holds that normal for 3s — which is the dwell's job, covered below.
+        for testCase in testCases {
+            let provider = makeProvider()
+            let t0 = Date()
+
+            await provider.handleStatementStateUpdate(testCase.trackerState, at: t0)
+            await provider.handleStatusUpdate(testCase.status, for: .chat, at: t0)
+            await provider.emitRows(at: t0)
+
+            let storeRow = await currentStoreRow(from: provider)
+            let inputs = "chat \(testCase.status), tracker \(testCase.trackerState)"
+
+            #expect(storeRow?.state == testCase.expectedState, "\(inputs): state")
+            #expect(storeRow?.indication == testCase.expectedIndication, "\(inputs): indication")
+        }
+    }
+
+    @Test("Delivery failure on an already-normal store row goes dead after the dwell")
+    func statementStoreRowFailureDarkensAfterDwell() async {
+        // The realistic path: the store row is live, then delivery fails while Individuality
+        // stays connected. The row's state turns offline at once; the ring darkens after the 3s
+        // dwell, like every other row entering dead.
+        let provider = makeProvider()
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+        await provider.handleStatementStateUpdate(.active, at: t0)
+        await provider.emitRows(at: t0)
+
+        var storeRow = await currentStoreRow(from: provider)
+        #expect(storeRow?.state == .connected)
+        #expect(storeRow?.indication == .normal)
+
+        await provider.handleStatementStateUpdate(.failed, at: t0 + 1)
+
+        storeRow = await currentStoreRow(from: provider)
+        #expect(storeRow?.state == .offline, "state turns offline immediately")
+        #expect(storeRow?.indication == .normal, "dwell holds the ring for 3s")
+
+        await provider.emitRows(at: t0.addingTimeInterval(4.1))
+
+        storeRow = await currentStoreRow(from: provider)
+        let chatRow = await currentChatRow(from: provider)
+        #expect(storeRow?.indication == .dead, "dwell expired, ring goes dead")
+        #expect(chatRow?.indication == .normal, "Individuality is unaffected by a store failure")
+    }
+
+    @Test("Store row state matches chat row state for all non-failed tracker states")
+    func statementStoreRowMatchesChatRowState() async {
+        let statuses: [NetworkStatus] = [.connected, .connecting, .waitingForNetwork]
+        let trackerStates: [StatementDeliveryState] = [.active, .noSubscriptions]
+
+        for status in statuses {
+            for trackerState in trackerStates {
+                let provider = makeProvider()
+                let t0 = Date()
+
+                await provider.handleStatusUpdate(status, for: .chat, at: t0)
+                await provider.handleStatementStateUpdate(trackerState, at: t0)
+                await provider.emitRows(at: t0)
+
+                let chatRow = await currentChatRow(from: provider)
+                let storeRow = await currentStoreRow(from: provider)
+
+                #expect(
+                    storeRow?.state == chatRow?.state,
+                    "chat \(status), tracker \(trackerState)"
+                )
+            }
+        }
+    }
+
+    @Test("Store row arc equals chat row arc with full liveness window")
+    func statementStoreRowArcEqualsChatRowArc() async {
+        // Chat is a 2s chain: 30s window, 15 slots. The blocks have to span a full window:
+        // liveness reads nil until one has elapsed, and both rows would then compare equal at
+        // .normal while asserting nothing.
+        let provider = makeProvider()
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+        await provider.handleStatementStateUpdate(.active, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        // Window start is t0+10, so anchor is height 5, and 10 of 15 slots carry a block.
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        let chatRow = await currentChatRow(from: provider)
+        let storeRow = await currentStoreRow(from: provider)
+
+        #expect(
+            chatRow?.indication == .outage(liveness: 10.0 / 15.0),
+            "Chat row should show outage with liveness 10/15"
+        )
+
+        #expect(
+            storeRow?.indication == .outage(liveness: 10.0 / 15.0),
+            "Store row should show same outage as chat row"
+        )
+
+        #expect(
+            storeRow?.indication == chatRow?.indication,
+            "Store row indication must equal chat row indication exactly"
+        )
+    }
 }
 
 private extension ChainStatusProviderTests {
@@ -153,5 +285,10 @@ private extension ChainStatusProviderTests {
     func currentChatRow(from provider: ChainStatusProvider) async -> ChainConnectionStatusViewModel? {
         let rows = try? await provider.statusStream().first { _ in true }
         return rows?.first { $0.id == ChainConnectionTarget.chat.chainId }
+    }
+
+    func currentStoreRow(from provider: ChainStatusProvider) async -> ChainConnectionStatusViewModel? {
+        let rows = try? await provider.statusStream().first { _ in true }
+        return rows?.first { $0.id == ChainConnectionTarget.statementStoreRowId }
     }
 }

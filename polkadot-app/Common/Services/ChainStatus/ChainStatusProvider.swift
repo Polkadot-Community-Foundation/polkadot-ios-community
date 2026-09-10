@@ -159,7 +159,7 @@ extension ChainStatusProvider {
         at date: Date
     ) -> [ChainConnectionStatusViewModel] {
         rows.map { row in
-            let targetLiveness = ChainConnectionTarget.allCases.first { $0.chainId == row.id }
+            let targetLiveness = ChainConnectionTarget.livenessOwner(forRowId: row.id)
                 .flatMap { liveness[$0]?.liveness(at: date) }
 
             let rawIndication = ChainStatusIndication.resolve(state: row.state, liveness: targetLiveness)
@@ -231,14 +231,24 @@ extension ChainStatusProvider {
             )
         }
 
-        let statementStoreRow = makeStatementStoreRow(state: statementState.connectionState)
+        let statementStoreRow = makeStatementStoreRow(
+            chatStatus: statuses[.chat] ?? .connecting,
+            statementState: statementState
+        )
 
         return targetRows + [statementStoreRow]
     }
 
-    private static func makeStatementStoreRow(state: ChainConnectionState) -> ChainConnectionStatusViewModel {
-        ChainConnectionStatusViewModel(
-            id: "statement-store",
+    private static func makeStatementStoreRow(
+        chatStatus: NetworkStatus,
+        statementState: StatementDeliveryState
+    ) -> ChainConnectionStatusViewModel {
+        // The Statement Store is reached over Individuality's connection, so its state follows
+        // that chain. A delivery failure is the only store-specific signal, forcing it offline.
+        let state: ChainConnectionState = statementState == .failed ? .offline : chatStatus.connectionState
+
+        return ChainConnectionStatusViewModel(
+            id: ChainConnectionTarget.statementStoreRowId,
             title: "Statement Store",
             state: state,
             stateTitle: state.localizedTitle,
