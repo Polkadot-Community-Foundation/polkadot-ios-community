@@ -6,6 +6,7 @@ import FoundationExt
 import SubstrateOperation
 import ChainRegistry
 import BackgroundExecution
+import DurableTransactions
 import ExtrinsicService
 
 extension ServiceCoordinator {
@@ -154,22 +155,15 @@ private extension ServiceCoordinator {
             return nil
         }
 
-        guard
-            let extrinsicOperationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: chain),
-            // Durability must observe the finalized outcome, not just inclusion, so the watch
-            // follows each extrinsic until its block is finalized.
-            let extrinsicSubmitter = try? extrinsicMonitorFacade.makeForkProtectedSubmitter(
-                chain: chain,
-                trackingTill: .finalized
-            )
-        else {
-            logger.error("Failed to create extrinsic operation factory / submitter for coinage")
-            return nil
-        }
-
-        let coinageTxStore = CoinageTxCoreDataRepository(
-            storageFacade: UserDataStorageFacade.shared
+        // The engine is shared by every durable domain; coinage registers its oracle with it inside
+        // `CoinageService.make` and drives its recovery through `CoinageService.setup`.
+        let chainViewFactory = PinnedChainViewFactory(
+            chainResource: chainRegistry,
+            operationQueue: operationQueue,
+            logger: logger
         )
+        let durableEngine = createDurableTransactionEngine(chainViewFactory: chainViewFactory)
+        let assetLedger = CoinageAssetLedgerCoreData(storageFacade: UserDataStorageFacade.shared)
 
         let incomingPaymentSecretStore = IncomingPaymentKeychainSecretStore()
         let incomingPaymentAcknowledger = TopUpAcknowledgementPresenter()
@@ -181,11 +175,11 @@ private extension ServiceCoordinator {
             databaseFactory: databaseFactory,
             originFactory: coinageOriginFactory,
             extrinsicMonitorFactory: monitorFactory,
-            extrinsicOperationFactory: extrinsicOperationFactory,
-            extrinsicSubmitter: extrinsicSubmitter,
+            durableEngine: durableEngine,
+            chainViewFactory: chainViewFactory,
+            assetLedger: assetLedger,
             rootEntropyManager: RootEntropyManager.shared,
             keystore: Keychain(),
-            txStore: coinageTxStore,
             applicationStateStreamFactory: ApplicationStateStreamFactory(),
             externalPaymentStore: externalPaymentStore,
             incomingPaymentStore: incomingPaymentStore,

@@ -1,6 +1,7 @@
 import AsyncExtensions
 import DurableTransactions
 import Foundation
+import os
 
 /// The scope the in-memory ledger opens for the registration hook. A domain's in-memory store recognises
 /// it and writes its own rows inside; nothing needs a transaction here, so it carries no state.
@@ -11,36 +12,53 @@ public final class InMemoryRegistrationScope: DurableTxRegistrationScope {
 /// An in-memory ``DurableTxRepositoryProtocol`` with the store's guarantees: atomic batch registration
 /// (a throwing hook rolls the whole batch back), monotonic sequences, the compare-and-set status write,
 /// and status / group streams.
-public actor InMemoryDurableTxRepository: DurableTxRepositoryProtocol {
-    private var entries: [DurableTxId: DurableTxEntry] = [:]
-    private var nextSequence: Int64 = 1
-    private var statusObservers: [DurableTxId: [AsyncStream<DurableTxStatus>.Continuation]] = [:]
-    private var groupObservers: [GroupKey: [AsyncStream<[DurableTxEntry]>.Continuation]] = [:]
+///
+/// Lock-based rather than an actor so a domain's in-memory store can read statuses synchronously from
+/// inside the registration hook, the way a CoreData store reads its own context.
+public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @unchecked Sendable {
+    struct State {
+        var entries: [DurableTxId: DurableTxEntry] = [:]
+        var nextSequence: Int64 = 1
+        var statusObservers: [DurableTxId: [AsyncStream<DurableTxStatus>.Continuation]] = [:]
+        var groupObservers: [GroupKey: [AsyncStream<[DurableTxEntry]>.Continuation]] = [:]
+    }
 
     struct GroupKey: Hashable {
         let domain: TxDomainId
         let groupId: DurableTxGroupId
     }
 
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
     public init() {}
 
+    /// Every entry, ordered by sequence — a synchronous read for domain stores and assertions.
     public var allEntries: [DurableTxEntry] {
-        sortedEntries
+        state.withLock { Self.sorted($0.entries) }
+    }
+
+    /// The entry's current status, read synchronously — for a domain store validating inside the hook.
+    public func statusSnapshot(of id: DurableTxId) -> DurableTxStatus? {
+        state.withLock { $0.entries[id]?.status }
     }
 
     /// Test convenience: records a prepared entry keeping its id and status, assigning the next sequence.
     public func insert(_ entry: DurableTxEntry) {
-        entries[entry.id] = entry.withSequence(nextSequence)
-        nextSequence += 1
-        notifyGroupObservers()
+        state.withLock { current in
+            current.entries[entry.id] = entry.withSequence(current.nextSequence)
+            current.nextSequence += 1
+            Self.notifyGroupObservers(&current)
+        }
     }
 
     /// Test convenience (the production protocol has only the compare-and-set `updateTxStatus`): forces a
     /// status and notifies observers, for setting up scenarios.
     public func forceStatus(_ id: DurableTxId, to status: DurableTxStatus) throws {
-        try mutate(id) { $0.withStatus(status) }
-        for observer in statusObservers[id] ?? [] {
-            observer.yield(status)
+        try state.withLock { current in
+            try Self.mutate(&current, id) { $0.withStatus(status) }
+            for observer in current.statusObservers[id] ?? [] {
+                observer.yield(status)
+            }
         }
     }
 
@@ -48,24 +66,32 @@ public actor InMemoryDurableTxRepository: DurableTxRepositoryProtocol {
         _ registrations: [DurableTxRegistration],
         onRegister: @escaping DurableTxRegistrationHook
     ) async throws -> [DurableTxId] {
-        let entriesSnapshot = entries
-        let sequenceSnapshot = nextSequence
-        do {
+        let (snapshot, ids) = state.withLock { current -> (State, [DurableTxId]) in
+            let snapshot = current
             var ids: [DurableTxId] = []
             for registration in registrations {
                 let id = DurableTxId()
-                entries[id] = registration.makeEntry(id: id, sequence: nextSequence)
-                nextSequence += 1
+                current.entries[id] = registration.makeEntry(id: id, sequence: current.nextSequence)
+                current.nextSequence += 1
                 ids.append(id)
             }
+            return (snapshot, ids)
+        }
+
+        // The hook runs outside the lock so a domain store can read this ledger while writing its rows;
+        // a throw restores the snapshot, which is the rollback.
+        do {
             try onRegister(InMemoryRegistrationScope(), ids)
-            notifyGroupObservers()
-            return ids
         } catch {
-            entries = entriesSnapshot
-            nextSequence = sequenceSnapshot
+            state.withLock { current in
+                current.entries = snapshot.entries
+                current.nextSequence = snapshot.nextSequence
+            }
             throw error
         }
+
+        state.withLock { Self.notifyGroupObservers(&$0) }
+        return ids
     }
 
     @discardableResult
@@ -74,85 +100,92 @@ public actor InMemoryDurableTxRepository: DurableTxRepositoryProtocol {
         expectedCurrentStatus: DurableTxStatus,
         verdict: Verdict
     ) async throws -> Bool {
-        guard let current = entries[id], current.status.isLive, current.status == expectedCurrentStatus else {
-            return false
-        }
-
-        let statusChanged = current.status != verdict.status
-        guard statusChanged || current.successDetectedAt != verdict.successDetectedAt else { return false }
-
-        try mutate(id) {
-            $0.withStatus(verdict.status).withSuccessDetectedAt(verdict.successDetectedAt)
-        }
-        if statusChanged {
-            for observer in statusObservers[id] ?? [] {
-                observer.yield(verdict.status)
+        try state.withLock { current in
+            guard let entry = current.entries[id], entry.status.isLive, entry.status == expectedCurrentStatus else {
+                return false
             }
+
+            let statusChanged = entry.status != verdict.status
+            guard statusChanged || entry.successDetectedAt != verdict.successDetectedAt else { return false }
+
+            try Self.mutate(&current, id) {
+                $0.withStatus(verdict.status).withSuccessDetectedAt(verdict.successDetectedAt)
+            }
+            if statusChanged {
+                for observer in current.statusObservers[id] ?? [] {
+                    observer.yield(verdict.status)
+                }
+            }
+            return true
         }
-        return true
     }
 
     public func getAllEntries() async throws -> [DurableTxEntry] {
-        sortedEntries
+        allEntries
     }
 
     public func getEntry(id: DurableTxId) async throws -> DurableTxEntry? {
-        entries[id]
+        state.withLock { $0.entries[id] }
     }
 
-    public nonisolated func subscribeStatus(id: DurableTxId) -> AnyAsyncSequence<DurableTxStatus> {
+    public func subscribeStatus(id: DurableTxId) -> AnyAsyncSequence<DurableTxStatus> {
         AsyncStream<DurableTxStatus> { continuation in
-            Task { await self.attach(continuation, to: id) }
+            state.withLock { current in
+                if let entry = current.entries[id] {
+                    continuation.yield(entry.status)
+                }
+                current.statusObservers[id, default: []].append(continuation)
+            }
         }
         .eraseToAnyAsyncSequence()
     }
 
     public func getGroupEntries(domain: TxDomainId, groupId: DurableTxGroupId) async throws -> [DurableTxEntry] {
-        sortedEntries.filter { $0.domainId == domain && $0.groupId == groupId }
+        allEntries.filter { $0.domainId == domain && $0.groupId == groupId }
     }
 
-    public nonisolated func subscribeGroupEntries(
+    public func subscribeGroupEntries(
         domain: TxDomainId,
         groupId: DurableTxGroupId
     ) -> AnyAsyncSequence<[DurableTxEntry]> {
-        AsyncStream<[DurableTxEntry]> { continuation in
-            Task { await self.attachGroup(continuation, to: GroupKey(domain: domain, groupId: groupId)) }
+        let key = GroupKey(domain: domain, groupId: groupId)
+        return AsyncStream<[DurableTxEntry]> { continuation in
+            state.withLock { current in
+                continuation.yield(Self.group(key, in: current))
+                current.groupObservers[key, default: []].append(continuation)
+            }
         }
         .eraseToAnyAsyncSequence()
     }
 }
 
 private extension InMemoryDurableTxRepository {
-    var sortedEntries: [DurableTxEntry] {
+    static func sorted(_ entries: [DurableTxId: DurableTxEntry]) -> [DurableTxEntry] {
         entries.values.sorted { $0.sequence < $1.sequence }
     }
 
-    func attach(_ continuation: AsyncStream<DurableTxStatus>.Continuation, to id: DurableTxId) {
-        if let entry = entries[id] {
-            continuation.yield(entry.status)
-        }
-        statusObservers[id, default: []].append(continuation)
+    static func group(_ key: GroupKey, in state: State) -> [DurableTxEntry] {
+        sorted(state.entries).filter { $0.domainId == key.domain && $0.groupId == key.groupId }
     }
 
-    func attachGroup(_ continuation: AsyncStream<[DurableTxEntry]>.Continuation, to key: GroupKey) {
-        continuation.yield(sortedEntries.filter { $0.domainId == key.domain && $0.groupId == key.groupId })
-        groupObservers[key, default: []].append(continuation)
-    }
-
-    func notifyGroupObservers() {
-        for (key, observers) in groupObservers {
-            let snapshot = sortedEntries.filter { $0.domainId == key.domain && $0.groupId == key.groupId }
+    static func notifyGroupObservers(_ state: inout State) {
+        for (key, observers) in state.groupObservers {
+            let snapshot = group(key, in: state)
             for observer in observers {
                 observer.yield(snapshot)
             }
         }
     }
 
-    func mutate(_ id: DurableTxId, _ transform: (DurableTxEntry) -> DurableTxEntry) throws {
-        guard let entry = entries[id] else {
+    static func mutate(
+        _ state: inout State,
+        _ id: DurableTxId,
+        _ transform: (DurableTxEntry) -> DurableTxEntry
+    ) throws {
+        guard let entry = state.entries[id] else {
             throw DurableTxError.entryNotFound(id)
         }
-        entries[id] = transform(entry)
-        notifyGroupObservers()
+        state.entries[id] = transform(entry)
+        notifyGroupObservers(&state)
     }
 }

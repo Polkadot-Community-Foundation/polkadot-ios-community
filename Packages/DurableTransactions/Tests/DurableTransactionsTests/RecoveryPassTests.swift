@@ -15,7 +15,7 @@ struct RecoveryPassTests {
 
     @Test("A settled ledger does not pin a chain view")
     func settledLedgerDoesNotPin() async throws {
-        await store.insert(.fixture(status: .finalizedSuccess))
+        store.insert(.fixture(status: .finalizedSuccess))
         oracles.register(StubCompletionOracle(), for: .test)
 
         await pass().run()
@@ -26,7 +26,7 @@ struct RecoveryPassTests {
     @Test("A domain with no registered oracle is left alone")
     func unregisteredDomainSkipped() async throws {
         let tx = DurableTxEntry.fixture(domainId: TxDomainId("orphan"))
-        await store.insert(tx)
+        store.insert(tx)
         view.setBodySearchResponse(tx.txHash, to: .foundSucceeded(.fixture(120)))
 
         await pass().run()
@@ -39,7 +39,7 @@ struct RecoveryPassTests {
     @Test("A submission-owned transaction gets no verdict")
     func submissionOwnedSkipped() async throws {
         let tx = DurableTxEntry.fixture()
-        await store.insert(tx)
+        store.insert(tx)
         owned.take(tx.id)
         oracles.register(
             StubCompletionOracle { txs, _ in StubPassScope(completedAtFinalized: Set(txs.map(\.id))) },
@@ -55,7 +55,7 @@ struct RecoveryPassTests {
     @Test("A decided transaction is written through the oracle's answer")
     func oracleAnswerIsWritten() async throws {
         let tx = DurableTxEntry.fixture()
-        await store.insert(tx)
+        store.insert(tx)
         oracles.register(
             StubCompletionOracle { txs, _ in StubPassScope(completedAtFinalized: Set(txs.map(\.id))) },
             for: .test
@@ -73,8 +73,8 @@ struct RecoveryPassTests {
         // coinage "a finalized consumer proves the minter ran" case, modelled generically.
         let predecessor = DurableTxEntry.fixture()
         let successor = DurableTxEntry.fixture()
-        await store.insert(predecessor)
-        await store.insert(successor)
+        store.insert(predecessor)
+        store.insert(successor)
 
         oracles.register(StubCompletionOracle { _, ledger in
             var completed: Set<DurableTxId> = [successor.id]
@@ -92,8 +92,8 @@ struct RecoveryPassTests {
 
     @Test("Two domains on one chain share a single pinned view")
     func onePinPerChain() async throws {
-        await store.insert(.fixture(domainId: TxDomainId("a")))
-        await store.insert(.fixture(domainId: TxDomainId("b")))
+        store.insert(.fixture(domainId: TxDomainId("a")))
+        store.insert(.fixture(domainId: TxDomainId("b")))
         oracles.register(StubCompletionOracle(chainId: "shared"), for: TxDomainId("a"))
         oracles.register(StubCompletionOracle(chainId: "shared"), for: TxDomainId("b"))
 
@@ -105,7 +105,7 @@ struct RecoveryPassTests {
     @Test("A pass that cannot pin writes nothing")
     func pinFailureWritesNothing() async throws {
         let tx = DurableTxEntry.fixture()
-        await store.insert(tx)
+        store.insert(tx)
         view.setPinFails(true)
         oracles.register(
             StubCompletionOracle { txs, _ in StubPassScope(completedAtFinalized: Set(txs.map(\.id))) },
@@ -121,7 +121,7 @@ struct RecoveryPassTests {
     @Test("An oracle that fails to open leaves its domain untouched this pass")
     func oracleFailureWritesNothing() async throws {
         let tx = DurableTxEntry.fixture()
-        await store.insert(tx)
+        store.insert(tx)
         view.setBodySearchResponse(tx.txHash, to: .foundSucceeded(.fixture(120)))
         oracles.register(StubCompletionOracle { _, _ in throw ChainReadFailure(message: "down") }, for: .test)
 
@@ -135,7 +135,7 @@ struct RecoveryPassTests {
     func recordedCanonicalityReadFromView() async throws {
         let recorded = BlockRef.fixture(120)
         let tx = DurableTxEntry.fixture(successDetectedAt: recorded, status: .pendingSuccess)
-        await store.insert(tx)
+        store.insert(tx)
         view.setBlockHash(Data([9, 9]), forNumber: 120)
         oracles.register(StubCompletionOracle(), for: .test)
 
@@ -152,8 +152,8 @@ struct RecoveryPassTests {
     @Test("updateTxStatus writes only while the observed status still holds")
     func compareAndSetRejectsMovedStatus() async throws {
         let entry = DurableTxEntry.fixture()
-        await store.insert(entry)
-        try await store.forceStatus(entry.id, to: .pendingSuccess)
+        store.insert(entry)
+        try store.forceStatus(entry.id, to: .pendingSuccess)
 
         let wrote = try await store.updateTxStatus(
             for: entry.id,
@@ -169,7 +169,7 @@ struct RecoveryPassTests {
     @Test("updateTxStatus does not overwrite a terminal entry")
     func compareAndSetLeavesTerminalUntouched() async throws {
         let entry = DurableTxEntry.fixture(status: .finalizedSuccess)
-        await store.insert(entry)
+        store.insert(entry)
 
         let wrote = try await store.updateTxStatus(
             for: entry.id,

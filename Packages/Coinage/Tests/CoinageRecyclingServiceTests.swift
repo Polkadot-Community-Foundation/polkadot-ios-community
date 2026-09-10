@@ -1,3 +1,4 @@
+import DurableTransactionsTestSupport
 import Testing
 import Foundation
 @testable import Coinage

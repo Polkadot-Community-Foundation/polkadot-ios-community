@@ -62,7 +62,8 @@ let package = Package(
         .package(path: "../StateMachine"),
         .package(path: "../SubstrateOperation"),
         .package(path: "../BackgroundExecution"),
-        .package(path: "../ExtrinsicServiceExt")
+        .package(path: "../ExtrinsicServiceExt"),
+        .package(path: "../DurableTransactions")
     ],
     targets: [
         .target(
@@ -90,12 +91,19 @@ let package = Package(
                 "StateMachine",
                 "SubstrateOperation",
                 "BackgroundExecution",
-                "ExtrinsicServiceExt"
+                "ExtrinsicServiceExt",
+                "DurableTransactions"
             ],
         ),
         .testTarget(
             name: "CoinageTests",
-            dependencies: ["Coinage", "BackgroundExecution", "ExtrinsicServiceExt"],
+            dependencies: [
+                "Coinage",
+                "BackgroundExecution",
+                "ExtrinsicServiceExt",
+                "DurableTransactions",
+                .product(name: "DurableTransactionsTestSupport", package: "DurableTransactions")
+            ],
             path: "Tests"
         )
     ]

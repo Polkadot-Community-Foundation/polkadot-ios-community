@@ -123,7 +123,7 @@ actor MockCoinageTxService: CoinageTxServicing {
         callJournal.record("preCommitHandoff")
         handoffAssets.append(contentsOf: assets)
         try await store.precommitHandOff(assets) { _ in }
-        return StoreHandoffCommit(assets: assets, store: store)
+        return StoreHandoffCommit(assets: assets, ledger: store.ledger)
     }
 
     func releaseUncommittedHandoffs() async throws {
