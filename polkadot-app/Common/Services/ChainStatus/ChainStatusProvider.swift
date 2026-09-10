@@ -18,7 +18,6 @@ actor ChainStatusProvider {
 
     private let networkStatusService: NetworkStatusProviding
     private let blockProvider: ChainBlockProviding
-    private let statementTracker: StatementDeliveryTracking
     private let anchorProvider: ChainLivenessAnchorProviding
     private let appStateStreamFactory: ApplicationStateStreamFactory
     private let logger: LoggerProtocol
@@ -28,7 +27,7 @@ actor ChainStatusProvider {
     private var statuses: [ChainConnectionTarget: NetworkStatus]
     private var blocks: [ChainConnectionTarget: ChainBlockInfo] = [:]
     private var liveness: [ChainConnectionTarget: ChainLiveness] = [:]
-    private var statementState: StatementDeliveryState = .noSubscriptions
+
     private var statusTasks: [Task<Void, Never>] = []
     private var previousIndications: [String: ChainStatusIndication] = [:]
     private var deadSince: [String: Date] = [:]
@@ -41,14 +40,12 @@ actor ChainStatusProvider {
     init(
         networkStatusService: NetworkStatusProviding,
         blockProvider: ChainBlockProviding,
-        statementTracker: StatementDeliveryTracking,
         anchorProvider: ChainLivenessAnchorProviding,
         appStateStreamFactory: ApplicationStateStreamFactory,
         logger: LoggerProtocol
     ) {
         self.networkStatusService = networkStatusService
         self.blockProvider = blockProvider
-        self.statementTracker = statementTracker
         self.anchorProvider = anchorProvider
         self.appStateStreamFactory = appStateStreamFactory
         self.logger = logger
@@ -61,7 +58,7 @@ actor ChainStatusProvider {
             dict[target] = ChainLiveness(blockPeriod: target.expectedBlockTime)
         }
         rowsSubject = AsyncCurrentValueSubject(
-            Self.makeRows(statuses: seededStatuses, statementState: .noSubscriptions)
+            Self.makeRows(statuses: seededStatuses)
         )
     }
 
@@ -91,7 +88,7 @@ extension ChainStatusProvider: ChainStatusProviding {
 
         statusTasks = ChainConnectionTarget.allCases.map { target in
             observeStatus(for: target)
-        } + [observeBlocks(), observeStatementState(), observeForeground()]
+        } + [observeBlocks(), observeForeground()]
 
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -146,15 +143,6 @@ extension ChainStatusProvider {
         emitRows(at: date)
     }
 
-    func handleStatementStateUpdate(_ state: StatementDeliveryState, at date: Date = Date()) {
-        guard state != statementState else {
-            return
-        }
-
-        statementState = state
-        emitRows(at: date)
-    }
-
     func handleForeground(at date: Date = Date()) {
         for target in ChainConnectionTarget.allCases where statuses[target] == .connected {
             awaitingReanchor.insert(target)
@@ -165,7 +153,7 @@ extension ChainStatusProvider {
     }
 
     func emitRows(at date: Date = Date()) {
-        let rawRows = Self.makeRows(statuses: statuses, statementState: statementState)
+        let rawRows = Self.makeRows(statuses: statuses)
         let indicatedRows = indicateRows(rawRows, at: date)
 
         guard indicatedRows != lastEmittedRows else { return }
@@ -179,12 +167,12 @@ extension ChainStatusProvider {
         at date: Date
     ) -> [ChainConnectionStatusViewModel] {
         rows.map { row in
-            let targetLiveness = ChainConnectionTarget.livenessOwner(forRowId: row.id)
+            let owner = ChainConnectionTarget.allCases.first { $0.chainId == row.id }
+            let targetLiveness = owner
                 .flatMap { liveness[$0]?.liveness(at: date) }
 
             let rawIndication = ChainStatusIndication.resolve(state: row.state, liveness: targetLiveness)
 
-            let owner = ChainConnectionTarget.livenessOwner(forRowId: row.id)
             if
                 rawIndication != .dead,
                 let owner,
@@ -245,8 +233,7 @@ extension ChainStatusProvider {
     }
 
     static func makeRows(
-        statuses: [ChainConnectionTarget: NetworkStatus],
-        statementState: StatementDeliveryState
+        statuses: [ChainConnectionTarget: NetworkStatus]
     ) -> [ChainConnectionStatusViewModel] {
         let targetRows = ChainConnectionTarget.allCases.map { target in
             let state = (statuses[target] ?? .connecting).connectionState
@@ -261,30 +248,7 @@ extension ChainStatusProvider {
             )
         }
 
-        let statementStoreRow = makeStatementStoreRow(
-            chatStatus: statuses[.chat] ?? .connecting,
-            statementState: statementState
-        )
-
-        return targetRows + [statementStoreRow]
-    }
-
-    private static func makeStatementStoreRow(
-        chatStatus: NetworkStatus,
-        statementState: StatementDeliveryState
-    ) -> ChainConnectionStatusViewModel {
-        // The Statement Store is reached over Individuality's connection, so its state follows
-        // that chain. A delivery failure is the only store-specific signal, forcing it offline.
-        let state: ChainConnectionState = statementState == .failed ? .offline : chatStatus.connectionState
-
-        return ChainConnectionStatusViewModel(
-            id: ChainConnectionTarget.statementStoreRowId,
-            title: "Statement Store",
-            state: state,
-            stateTitle: state.localizedTitle,
-            icon: .statementStore,
-            indication: ChainStatusIndication.resolve(state: state, liveness: nil)
-        )
+        return targetRows
     }
 
     private func startAnchor(for target: ChainConnectionTarget, at date: Date) {
@@ -350,18 +314,6 @@ private extension ChainStatusProvider {
                 }
             } catch {
                 logger.error("Chain block stream failed: \(error)")
-            }
-        }
-    }
-
-    func observeStatementState() -> Task<Void, Never> {
-        Task { [weak self, statementTracker, logger] in
-            do {
-                for try await state in statementTracker.stateStream() {
-                    await self?.handleStatementStateUpdate(state)
-                }
-            } catch {
-                logger.error("Statement delivery state stream failed: \(error)")
             }
         }
     }

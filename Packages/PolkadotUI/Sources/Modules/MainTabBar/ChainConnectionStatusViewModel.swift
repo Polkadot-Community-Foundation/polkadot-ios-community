@@ -11,7 +11,6 @@ public enum ChainStatusIcon: Hashable {
     case people
     case bulletin
     case assetHub
-    case statementStore
 }
 
 public struct ChainConnectionStatusViewModel: Hashable, Identifiable {

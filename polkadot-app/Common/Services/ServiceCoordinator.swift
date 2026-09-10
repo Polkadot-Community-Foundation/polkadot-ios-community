@@ -345,8 +345,7 @@ extension ServiceCoordinator {
             return nil
         }
 
-        let statementDeliveryTracker = StatementDeliveryTracker()
-        let chatRequestCoordinator = createChatRequestCoordinator(statementTracker: statementDeliveryTracker)
+        let chatRequestCoordinator = createChatRequestCoordinator()
         let audioSessionManager = AudioSessionManager()
 
         let paymentsSupport = PaymentsSupport(coinageService: coinageServices.coinageService)
@@ -419,7 +418,6 @@ extension ServiceCoordinator {
         let chainStatusProvider = ChainStatusProvider(
             networkStatusService: networkStatusService,
             blockProvider: chainBlockProvider,
-            statementTracker: statementDeliveryTracker,
             anchorProvider: chainLivenessAnchorProvider,
             appStateStreamFactory: ApplicationStateStreamFactory(),
             logger: logger
@@ -508,9 +506,7 @@ private extension ServiceCoordinator {
 }
 
 private extension ServiceCoordinator {
-    static func createChatRequestCoordinator(
-        statementTracker: StatementDeliveryTracking
-    ) -> ChatRequestCoordinatorServicing {
+    static func createChatRequestCoordinator() -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let logger = Logger.shared
@@ -533,8 +529,7 @@ private extension ServiceCoordinator {
                         remoteAccountOperation(chatChainId: AppConfig.Chains.usernameChain)
                     ],
                     logger: Logger.shared
-                ),
-                statementTracker: statementTracker
+                )
             ),
             logger: Logger.shared
         )

@@ -7,8 +7,6 @@ enum ChainConnectionTarget: CaseIterable {
     case assethub
     case bulletin
 
-    static let statementStoreRowId = "statement-store"
-
     var chainId: ChainModel.Id {
         switch self {
         case .chat:
@@ -52,16 +50,6 @@ enum ChainConnectionTarget: CaseIterable {
         case .assethub:
             .assetHub
         }
-    }
-
-    /// The Statement Store row is not a chain and measures nothing of its own, so it borrows the
-    /// liveness of Individuality — the chain its connection is carried over.
-    static func livenessOwner(forRowId rowId: String) -> ChainConnectionTarget? {
-        if rowId == statementStoreRowId {
-            return .chat
-        }
-
-        return allCases.first { $0.chainId == rowId }
     }
 }
 
