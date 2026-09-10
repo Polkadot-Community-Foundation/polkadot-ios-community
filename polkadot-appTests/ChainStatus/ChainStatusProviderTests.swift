@@ -270,14 +270,67 @@ struct ChainStatusProviderTests {
             "Store row indication must equal chat row indication exactly"
         )
     }
+
+    @Test("Cold connect fetches exactly one anchor")
+    func coldConnectFetchesOneAnchor() async {
+        // A stalled anchor, not a healthy one: span 90 over a 30s window is 5 of 15 slots, so
+        // the row can only read outage if the anchor was actually applied. A healthy anchor
+        // would read normal, which is also what an un-applied anchor reads.
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 90))
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        // Give the async fetch task a moment to complete
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(await mockAnchor.fetchAnchorCalls.count == 1)
+        #expect(await mockAnchor.fetchAnchorCalls[0].target == .chat)
+        #expect(await mockAnchor.fetchAnchorCalls[0].slotCount == 15)
+
+        let chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 5.0 / 15.0), "anchor was applied")
+    }
+
+    @Test("Status change not into connected does not fetch anchor")
+    func notConnectedDoesNotFetchAnchor() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connecting, for: .chat, at: t0)
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(await mockAnchor.fetchAnchorCalls.isEmpty)
+    }
+
+    @Test("fetchAnchor error leaves row un-anchored")
+    func fetchAnchorErrorLeavesRowUnanchored() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.setError(NSError(domain: "test", code: -1))
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(100))
+
+        let chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "error does not crash; row stays on default indication")
+    }
 }
 
 private extension ChainStatusProviderTests {
-    func makeProvider() -> ChainStatusProvider {
+    func makeProvider(anchorProvider: ChainLivenessAnchorProviding? = nil) -> ChainStatusProvider {
         ChainStatusProvider(
             networkStatusService: MockNetworkStatusService(),
             blockProvider: MockChainBlockProvider(),
             statementTracker: MockStatementDeliveryTracker(),
+            anchorProvider: anchorProvider ?? MockChainLivenessAnchorProvider(),
             logger: StubLogger()
         )
     }

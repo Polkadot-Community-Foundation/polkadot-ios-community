@@ -18,6 +18,7 @@ actor ChainStatusProvider {
     private let networkStatusService: NetworkStatusProviding
     private let blockProvider: ChainBlockProviding
     private let statementTracker: StatementDeliveryTracking
+    private let anchorProvider: ChainLivenessAnchorProviding
     private let logger: LoggerProtocol
 
     private nonisolated let rowsSubject: AsyncCurrentValueSubject<[ChainConnectionStatusViewModel]>
@@ -37,11 +38,13 @@ actor ChainStatusProvider {
         networkStatusService: NetworkStatusProviding,
         blockProvider: ChainBlockProviding,
         statementTracker: StatementDeliveryTracking,
+        anchorProvider: ChainLivenessAnchorProviding,
         logger: LoggerProtocol
     ) {
         self.networkStatusService = networkStatusService
         self.blockProvider = blockProvider
         self.statementTracker = statementTracker
+        self.anchorProvider = anchorProvider
         self.logger = logger
 
         let seededStatuses = ChainConnectionTarget.allCases
@@ -113,6 +116,16 @@ extension ChainStatusProvider {
             liveness[target]?.clear()
             // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
             await blockProvider.clear(for: target)
+        } else if previousStatus != .connected, status == .connected {
+            let slotCount = liveness[target]?.slotCount ?? 0
+            Task {
+                do {
+                    let anchor = try await anchorProvider.fetchAnchor(for: target, slotCount: slotCount)
+                    applyAnchor(anchor, for: target, at: date)
+                } catch {
+                    logger.error("Failed to fetch anchor for \(target.chainId): \(error)")
+                }
+            }
         }
 
         emitRows(at: date)
@@ -255,6 +268,11 @@ extension ChainStatusProvider {
             icon: .statementStore,
             indication: ChainStatusIndication.resolve(state: state, liveness: nil)
         )
+    }
+
+    func applyAnchor(_ anchor: ChainLivenessAnchor, for target: ChainConnectionTarget, at date: Date) {
+        liveness[target]?.apply(anchor, at: date)
+        emitRows(at: date)
     }
 }
 

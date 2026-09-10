@@ -16,6 +16,39 @@ struct ChainLiveness {
         slotCount = Int(calculatedWindow / blockSeconds)
     }
 
+    /// Seeds history from a chain-time measurement so liveness is correct at once rather than
+    /// after a full window. The anchor provider rejects a non-positive span; this repeats the
+    /// check because mapping one to a full window would report a healthy chain on input already
+    /// known to be inconsistent.
+    mutating func apply(_ anchor: ChainLivenessAnchor, at date: Date) {
+        let span = anchor.chainTimeSpanSeconds
+
+        guard span > 0 else {
+            return
+        }
+
+        let maxSlots = Double(slotCount)
+
+        let effectiveSlots: UInt32
+        if span <= windowSeconds {
+            effectiveSlots = UInt32(slotCount)
+        } else {
+            let computed = floor(maxSlots * windowSeconds / span)
+            effectiveSlots = UInt32(max(0, min(Double(slotCount), computed)))
+        }
+
+        clear()
+
+        guard anchor.headHeight >= effectiveSlots else {
+            record(height: 0, at: date.addingTimeInterval(-windowSeconds))
+            record(height: anchor.headHeight, at: date)
+            return
+        }
+
+        record(height: anchor.headHeight - effectiveSlots, at: date.addingTimeInterval(-windowSeconds))
+        record(height: anchor.headHeight, at: date)
+    }
+
     mutating func record(height: BlockNumber, at date: Date) {
         if firstRecordedAt == nil {
             firstRecordedAt = date
