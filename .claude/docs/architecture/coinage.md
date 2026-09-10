@@ -68,4 +68,5 @@ Transfer plans determine how coins are spent:
 | Transfer planning       | `Packages/Coinage/`           | New transfer strategies          |
 | Coinage UI              | `Modules/Coinage/`            | Coinage screen changes           |
 | Backup sync             | ServiceCoordinator             | Backup/restore flow changes      |
+| Durability (oracle, asset ledger) | `Packages/Coinage/Sources/CoinageTx/` | Coin/voucher evidence or invariants; the engine itself is `Packages/DurableTransactions` (see architecture/durable-transactions.md) |
 | Instance ID config      | `AppConfig.Coinage.instanceId` | Remote config schema or app instance strategy changes |
