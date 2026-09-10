@@ -421,6 +421,7 @@ extension ServiceCoordinator {
             blockProvider: chainBlockProvider,
             statementTracker: statementDeliveryTracker,
             anchorProvider: chainLivenessAnchorProvider,
+            appStateStreamFactory: ApplicationStateStreamFactory(),
             logger: logger
         )
 

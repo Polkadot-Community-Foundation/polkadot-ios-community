@@ -3,6 +3,7 @@ import Testing
 import AsyncExtensions
 import SubstrateSdk
 import PolkadotUI
+import FoundationExt
 @testable import polkadot_app
 
 struct ChainStatusProviderTests {
@@ -22,10 +23,15 @@ struct ChainStatusProviderTests {
     @Test("A stalling chain produces outage")
     func stallingChainOutage() async {
         // Chat is a 2s chain: 30s window, 15 slots. Blocks arrive on time up to t0+30, then stop.
-        let provider = makeProvider()
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        // Healthy anchor prevents clear on initial connect
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let provider = makeProvider(anchorProvider: mockAnchor)
         let t0 = Date()
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -58,37 +64,260 @@ struct ChainStatusProviderTests {
 
     @Test("Disconnect clears liveness so reconnect does not inherit pre-drop history")
     func disconnectClearsLiveness() async {
-        let provider = makeProvider()
+        // The gate keeps every probe parked, so no anchor ever touches history and the only thing
+        // that can clear it is the disconnect. Without the gate a failed probe clears history too,
+        // and the test could not tell the two apart.
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
         let t0 = Date()
 
-        await provider.handleStatusUpdate(.connected, for: .chat)
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        for index in 0 ... 10 {
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
             let blockInfo = ChainBlockInfo(
                 number: BlockNumber(index),
-                receivedAt: t0.addingTimeInterval(Double(index) * 2),
+                receivedAt: date,
                 finalizedNumber: nil
             )
-            await provider.handleBlocksUpdate([.chat: blockInfo])
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
         }
 
-        await provider.emitRows(at: t0.addingTimeInterval(20))
+        await provider.emitRows(at: t0.addingTimeInterval(40))
 
-        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat)
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 10.0 / 15.0), "history contributes")
+
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0.addingTimeInterval(50))
+        await provider.emitRows(at: t0.addingTimeInterval(53.1))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .dead)
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0.addingTimeInterval(54))
+        await provider.emitRows(at: t0.addingTimeInterval(55))
+
+        // Were the pre-drop samples still there, the window at t0+55 would read 3 of 15 slots.
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "pre-drop history did not survive the reconnect")
+
+        await mockAnchor.release()
+    }
+
+    @Test("Foreground re-anchors every connected chain")
+    func foregroundReanchorsEveryConnectedChain() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+        await provider.handleStatusUpdate(.connected, for: .assethub, at: t0)
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .bulletin, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        let callsAfterConnect = await mockAnchor.fetchAnchorCalls.count
+
+        await provider.handleForeground(at: t0)
+
+        try? await Task.sleep(for: .milliseconds(100))
+
+        let allCalls = await mockAnchor.fetchAnchorCalls
+        let foregroundCalls = Array(allCalls.suffix(2))
+
+        #expect(foregroundCalls.count == 2)
+        #expect(foregroundCalls.contains { $0.target == .chat })
+        #expect(foregroundCalls.contains { $0.target == .assethub })
+        #expect(!allCalls.contains { $0.target == .bulletin })
+    }
+
+    @Test("The last indication is held until the probe lands")
+    func lastIndicationHeldUntilProbeLands() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 10.0 / 15.0), "history builds a known outage")
+
+        // Foreground at t0+70, where the stale history computes to liveness 0. The held value and
+        // the computed value must differ, or the assertion would prove nothing.
+        await provider.handleForeground(at: t0.addingTimeInterval(70))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(
+            chatRow?.indication == .outage(liveness: 10.0 / 15.0),
+            "held at the prior value, not the stale-history 0"
+        )
+
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        await mockAnchor.openGate()
+        await mockAnchor.release()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "the landed anchor replaces the held value")
+    }
+
+    @Test("A healthy chain does not flash an outage after minutes away")
+    func healthyChainNoOutageAfterAwayTime() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
         await provider.emitRows(at: t0.addingTimeInterval(30))
 
         var chatRow = await currentChatRow(from: provider)
-        #expect(chatRow?.indication == .dead)
+        #expect(chatRow?.indication == .normal, "a full window of blocks is liveness 1")
 
-        await provider.handleStatusUpdate(.connected, for: .chat)
-        await provider.emitRows(at: t0.addingTimeInterval(31))
+        // Three minutes away. The stale history now computes to liveness 0 — the false alarm this
+        // ticket exists to prevent — so the hold is the only reason this stays normal.
+        await provider.handleForeground(at: t0.addingTimeInterval(180))
 
-        chatRow = await currentChatRow(from: provider) ?? chatRow
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "no outage flashes while the probe is outstanding")
 
-        #expect(
-            chatRow?.indication == .normal,
-            "after reconnect, liveness was cleared so history does not persist"
-        )
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        await mockAnchor.openGate()
+        await mockAnchor.release()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "and still normal once the probe lands")
+    }
+
+    @Test("A failed re-anchor clears history and reads normal")
+    func failedReanchorClearsHistoryAndNormal() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        // Set healthy anchor initially
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        // Build history
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .outage(liveness: 10.0 / 15.0))
+
+        // Now set error for foreground re-anchor
+        await mockAnchor.setError(NSError(domain: "test", code: -1))
+        await provider.handleForeground(at: t0.addingTimeInterval(41))
+
+        // Wait for the probe to complete
+        try? await Task.sleep(for: .milliseconds(200))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "failed re-anchor clears history, row reads normal")
+    }
+
+    @Test("A hold does not mask a dead row")
+    func holdDoesNotMaskDeadRow() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(30))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal)
+
+        // Probe outstanding, so the row is held. Dead is state-driven, not liveness-driven, and
+        // must come through anyway.
+        await provider.handleForeground(at: t0.addingTimeInterval(180))
+        await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0.addingTimeInterval(181))
+
+        // Past the 3s dead dwell, which is the only thing that should have delayed it.
+        await provider.emitRows(at: t0.addingTimeInterval(185))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .dead, "the hold never masks a dropped socket")
+
+        await mockAnchor.release()
+    }
+
+    @Test("A superseded anchor completion is a no-op")
+    func supersededAnchorCompletionIsNoop() async {
+        // Two anchors in flight for one target: the connect probe is parked while the foreground
+        // probe runs to completion. The parked one is stale by the time it resumes.
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        await mockAnchor.openGate()
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        await provider.handleForeground(at: t0.addingTimeInterval(1))
+        try? await Task.sleep(for: .milliseconds(200))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "the foreground anchor applied")
+
+        // The parked connect probe now resumes carrying a much worse reading.
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 90))
+        await mockAnchor.release()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.indication == .normal, "the superseded completion changed nothing")
     }
 
     @Test("Recovery within dwell window clears deadSince so fresh dwell can start")
@@ -233,11 +462,16 @@ struct ChainStatusProviderTests {
         // Chat is a 2s chain: 30s window, 15 slots. The blocks have to span a full window:
         // liveness reads nil until one has elapsed, and both rows would then compare equal at
         // .normal while asserting nothing.
-        let provider = makeProvider()
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        // Healthy anchor prevents clear on initial connect
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let provider = makeProvider(anchorProvider: mockAnchor)
         let t0 = Date()
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
         await provider.handleStatementStateUpdate(.active, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -331,6 +565,7 @@ private extension ChainStatusProviderTests {
             blockProvider: MockChainBlockProvider(),
             statementTracker: MockStatementDeliveryTracker(),
             anchorProvider: anchorProvider ?? MockChainLivenessAnchorProvider(),
+            appStateStreamFactory: ApplicationStateStreamFactory(),
             logger: StubLogger()
         )
     }

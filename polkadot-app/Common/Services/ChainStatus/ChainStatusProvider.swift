@@ -2,6 +2,7 @@ import Foundation
 import AsyncExtensions
 import PolkadotUI
 import StructuredConcurrency
+import FoundationExt
 
 protocol ChainStatusProviding: Actor {
     nonisolated func statusStream() -> AnyAsyncSequence<[ChainConnectionStatusViewModel]>
@@ -19,6 +20,7 @@ actor ChainStatusProvider {
     private let blockProvider: ChainBlockProviding
     private let statementTracker: StatementDeliveryTracking
     private let anchorProvider: ChainLivenessAnchorProviding
+    private let appStateStreamFactory: ApplicationStateStreamFactory
     private let logger: LoggerProtocol
 
     private nonisolated let rowsSubject: AsyncCurrentValueSubject<[ChainConnectionStatusViewModel]>
@@ -30,6 +32,8 @@ actor ChainStatusProvider {
     private var statusTasks: [Task<Void, Never>] = []
     private var previousIndications: [String: ChainStatusIndication] = [:]
     private var deadSince: [String: Date] = [:]
+    private var awaitingReanchor: Set<ChainConnectionTarget> = []
+    private var anchorGeneration: [ChainConnectionTarget: Int] = [:]
     private var tickTask: Task<Void, Never>?
     private var isObserving = false
     private var lastEmittedRows: [ChainConnectionStatusViewModel] = []
@@ -39,12 +43,14 @@ actor ChainStatusProvider {
         blockProvider: ChainBlockProviding,
         statementTracker: StatementDeliveryTracking,
         anchorProvider: ChainLivenessAnchorProviding,
+        appStateStreamFactory: ApplicationStateStreamFactory,
         logger: LoggerProtocol
     ) {
         self.networkStatusService = networkStatusService
         self.blockProvider = blockProvider
         self.statementTracker = statementTracker
         self.anchorProvider = anchorProvider
+        self.appStateStreamFactory = appStateStreamFactory
         self.logger = logger
 
         let seededStatuses = ChainConnectionTarget.allCases
@@ -85,7 +91,7 @@ extension ChainStatusProvider: ChainStatusProviding {
 
         statusTasks = ChainConnectionTarget.allCases.map { target in
             observeStatus(for: target)
-        } + [observeBlocks(), observeStatementState()]
+        } + [observeBlocks(), observeStatementState(), observeForeground()]
 
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -117,15 +123,7 @@ extension ChainStatusProvider {
             // Without this a drop-and-reconnect keeps captioning the row with its pre-drop data.
             await blockProvider.clear(for: target)
         } else if previousStatus != .connected, status == .connected {
-            let slotCount = liveness[target]?.slotCount ?? 0
-            Task {
-                do {
-                    let anchor = try await anchorProvider.fetchAnchor(for: target, slotCount: slotCount)
-                    applyAnchor(anchor, for: target, at: date)
-                } catch {
-                    logger.error("Failed to fetch anchor for \(target.chainId): \(error)")
-                }
-            }
+            startAnchor(for: target, at: date)
         }
 
         emitRows(at: date)
@@ -157,6 +155,15 @@ extension ChainStatusProvider {
         emitRows(at: date)
     }
 
+    func handleForeground(at date: Date = Date()) {
+        for target in ChainConnectionTarget.allCases where statuses[target] == .connected {
+            awaitingReanchor.insert(target)
+            startAnchor(for: target, at: date)
+        }
+
+        emitRows(at: date)
+    }
+
     func emitRows(at date: Date = Date()) {
         let rawRows = Self.makeRows(statuses: statuses, statementState: statementState)
         let indicatedRows = indicateRows(rawRows, at: date)
@@ -176,6 +183,16 @@ extension ChainStatusProvider {
                 .flatMap { liveness[$0]?.liveness(at: date) }
 
             let rawIndication = ChainStatusIndication.resolve(state: row.state, liveness: targetLiveness)
+
+            let owner = ChainConnectionTarget.livenessOwner(forRowId: row.id)
+            if
+                rawIndication != .dead,
+                let owner,
+                awaitingReanchor.contains(owner),
+                let previous = previousIndications[row.id] {
+                return row.withIndication(previous)
+            }
+
             let indication = applyDwell(to: rawIndication, rowId: row.id, at: date)
             previousIndications[row.id] = indication
 
@@ -270,8 +287,40 @@ extension ChainStatusProvider {
         )
     }
 
-    func applyAnchor(_ anchor: ChainLivenessAnchor, for target: ChainConnectionTarget, at date: Date) {
-        liveness[target]?.apply(anchor, at: date)
+    private func startAnchor(for target: ChainConnectionTarget, at date: Date) {
+        let slotCount = liveness[target]?.slotCount ?? 0
+        let generation = (anchorGeneration[target] ?? 0) + 1
+        anchorGeneration[target] = generation
+
+        Task { [weak self] in
+            do {
+                let anchor = try await self?.anchorProvider.fetchAnchor(for: target, slotCount: slotCount)
+                await self?.finishReanchor(for: target, generation: generation, anchor: anchor, at: date)
+            } catch {
+                await self?.finishReanchor(for: target, generation: generation, anchor: nil, at: date)
+                self?.logger.error("Failed to fetch anchor for \(target.chainId): \(error)")
+            }
+        }
+    }
+
+    private func finishReanchor(
+        for target: ChainConnectionTarget,
+        generation: Int,
+        anchor: ChainLivenessAnchor?,
+        at date: Date
+    ) {
+        guard generation == anchorGeneration[target] else {
+            return
+        }
+
+        awaitingReanchor.remove(target)
+
+        if let anchor {
+            liveness[target]?.apply(anchor, at: date)
+        } else {
+            liveness[target]?.clear()
+        }
+
         emitRows(at: date)
     }
 }
@@ -313,6 +362,15 @@ private extension ChainStatusProvider {
                 }
             } catch {
                 logger.error("Statement delivery state stream failed: \(error)")
+            }
+        }
+    }
+
+    func observeForeground() -> Task<Void, Never> {
+        Task { [weak self, appStateStreamFactory] in
+            let foregroundStream = appStateStreamFactory.stream(for: .willEnterForeground)
+            for await _ in foregroundStream {
+                await self?.handleForeground()
             }
         }
     }
