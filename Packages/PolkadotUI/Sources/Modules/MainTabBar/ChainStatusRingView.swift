@@ -22,7 +22,10 @@ struct ChainStatusRingView: View, Hashable {
 
             if showsArc {
                 Circle()
-                    .trim(from: 0, to: arcEnd)
+                    // Trimming the tail rather than the head runs the arc counterclockwise from
+                    // 12 o'clock. Mirroring the shape would do it too, but would also mirror the
+                    // round line caps.
+                    .trim(from: 1 - arcEnd, to: 1)
                     .stroke(
                         arcColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
