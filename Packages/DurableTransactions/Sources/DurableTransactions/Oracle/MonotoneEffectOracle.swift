@@ -54,12 +54,12 @@ private struct MonotoneScope: TxCompletionPassScope {
     let atFinalized: [DurableTxId: Bool]
     let atBest: [DurableTxId: Bool]
 
-    func provenCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
-        read(head)[tx.id] == true
+    func provenCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
+        read(head)[transaction.id] == true
     }
 
-    func provenNotCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
-        read(head)[tx.id] == false
+    func provenNotCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
+        read(head)[transaction.id] == false
     }
 
     private func read(_ head: HeadKind) -> [DurableTxId: Bool] {

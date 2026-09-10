@@ -24,12 +24,16 @@ public struct CoinageEvidenceCollector: Sendable {
         let outputKeys = entry.outputs.map(\.publicKey)
 
         let (presenceF, aliasF) = await maps(
-            inputKeys: inputKeys, inputReads: inputsAtFinalized,
-            outputKeys: outputKeys, outputReads: outputsAtFinalized
+            inputKeys: inputKeys,
+            inputReads: inputsAtFinalized,
+            outputKeys: outputKeys,
+            outputReads: outputsAtFinalized
         )
         let (presenceB, aliasB) = await maps(
-            inputKeys: inputKeys, inputReads: inputsAtBest,
-            outputKeys: outputKeys, outputReads: outputsAtBest
+            inputKeys: inputKeys,
+            inputReads: inputsAtBest,
+            outputKeys: outputKeys,
+            outputReads: outputsAtBest
         )
 
         return ChainEvidence(

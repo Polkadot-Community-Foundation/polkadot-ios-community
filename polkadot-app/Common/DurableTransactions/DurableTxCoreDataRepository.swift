@@ -131,8 +131,10 @@ extension DurableTxCoreDataRepository {
     private static func groupPredicate(domain: TxDomainId, groupId: DurableTxGroupId) -> NSPredicate {
         NSPredicate(
             format: "%K == %@ AND %K == %@",
-            #keyPath(CDDurableTx.domainId), domain.rawValue,
-            #keyPath(CDDurableTx.groupId), groupId
+            #keyPath(CDDurableTx.domainId),
+            domain.rawValue,
+            #keyPath(CDDurableTx.groupId),
+            groupId
         )
     }
 }

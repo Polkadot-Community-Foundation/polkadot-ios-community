@@ -53,12 +53,13 @@ private extension ExtrinsicBatchBuilder {
     /// Builds one same-origin group's extrinsics in a single indexed call, so their nonces are sequential.
     func buildGroup(_ group: [Int], of requests: [DurableTxRequest]) async throws -> [ExtrinsicBuiltModel] {
         logger?.debug("Building \(group.count) extrinsic(s)")
-        let built = try await operationFactory.buildExtrinsics(
+        let wrapper = operationFactory.buildExtrinsics(
             { builder, index in try requests[group[index]].builder(builder) },
             origin: requests[group[0]].origin,
             payingIn: nil,
             indexes: IndexSet(0 ..< group.count)
-        ).asyncExecute()
+        )
+        let built = try await wrapper.asyncExecute()
 
         guard built.count == group.count else {
             throw DurableTxError.buildIncomplete

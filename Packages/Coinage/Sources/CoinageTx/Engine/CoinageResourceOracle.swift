@@ -58,8 +58,8 @@ struct CoinagePassScope: TxCompletionPassScope {
     /// Rules 1 and 2 (an effect is visible) and 5 and 6 (every input we minted ourselves is gone), plus
     /// propagation: a finalized successor proves this entry ran. The engine runs two rounds per pass, so a
     /// successor promoted in the first is visible here in the second.
-    func provenCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
-        guard let entry = dag.entry(tx.id), let evidence = evidence[tx.id] else { return false }
+    func provenCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
+        guard let entry = dag.entry(transaction.id), let evidence = evidence[transaction.id] else { return false }
         let atFinalized = head == .finalized
 
         if evidence.executed(entry, atFinalized: atFinalized) { return true }
@@ -73,8 +73,8 @@ struct CoinagePassScope: TxCompletionPassScope {
     /// Rules 3 and 4: an output nothing could have removed is absent, or an input is still there to be
     /// spent. Sound by construction — `noPotentialConsumers` enumerates every party that could have erased
     /// the effect: a peer holding the key, another of our transactions, a live claimant.
-    func provenNotCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
-        guard let entry = dag.entry(tx.id), let evidence = evidence[tx.id] else { return false }
+    func provenNotCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
+        guard let entry = dag.entry(transaction.id), let evidence = evidence[transaction.id] else { return false }
         let atFinalized = head == .finalized
 
         return entry.outputs.contains {

@@ -32,14 +32,14 @@ public struct SnapshotLedgerView: LedgerView {
 /// A domain's reads for one pass, already issued: the ladder asks it two questions per transaction and
 /// it answers without suspending, so a per-transaction chain read is not expressible.
 public protocol TxCompletionPassScope: Sendable {
-    /// Positive proof `tx` took effect at `head`.
+    /// Positive proof `transaction` took effect at `head`.
     ///
     /// Safe to assert optimistically at the best head: a reorg demotes it through Rule 0. This is also
     /// the only source of pre-finality success — the body search is bounded at the finalized head and
     /// can never establish it.
-    func provenCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool
+    func provenCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool
 
-    /// Positive proof `tx` has not taken effect at `head` — and could not have taken effect and been
+    /// Positive proof `transaction` has not taken effect at `head` — and could not have taken effect and been
     /// erased since.
     ///
     /// Assert this only when the observed state is monotone and this transaction is its only writer. At
@@ -47,7 +47,7 @@ public protocol TxCompletionPassScope: Sendable {
     /// whatever the domain locked and is never revised. Leaving it false costs a block-body search over
     /// the mortality window; getting it wrong costs a double spend, which is why it defaults to false
     /// and must be opted into.
-    func provenNotCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool
+    func provenNotCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool
 }
 
 public extension TxCompletionPassScope {

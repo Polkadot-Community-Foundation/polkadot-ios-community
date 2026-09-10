@@ -25,17 +25,17 @@ public struct StubPassScope: TxCompletionPassScope {
     /// A scope that established nothing: every transaction reaches the body search.
     public static let unknown = StubPassScope()
 
-    public func provenCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
+    public func provenCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
         switch head {
-        case .finalized: completedAtFinalized.contains(tx.id)
-        case .best: completedAtBest.contains(tx.id)
+        case .finalized: completedAtFinalized.contains(transaction.id)
+        case .best: completedAtBest.contains(transaction.id)
         }
     }
 
-    public func provenNotCompleted(_ tx: DurableTxEntry, at head: HeadKind) -> Bool {
+    public func provenNotCompleted(_ transaction: DurableTxEntry, at head: HeadKind) -> Bool {
         switch head {
-        case .finalized: notCompletedAtFinalized.contains(tx.id)
-        case .best: notCompletedAtBest.contains(tx.id)
+        case .finalized: notCompletedAtFinalized.contains(transaction.id)
+        case .best: notCompletedAtBest.contains(transaction.id)
         }
     }
 }

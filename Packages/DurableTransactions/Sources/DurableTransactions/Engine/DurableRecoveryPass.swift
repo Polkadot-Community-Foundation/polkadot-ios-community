@@ -154,9 +154,14 @@ private extension DurableRecoveryPass {
         let canonical = await recordedCanonicality(decidable, view: view)
 
         var wrote = 0
-        for tx in decidable {
-            let outcome = await ladder.evaluate(tx, scope: scope, view: view, recordedStillCanonical: canonical[tx.id])
-            if case let .decided(verdict) = outcome, await write(tx, verdict) {
+        for transaction in decidable {
+            let outcome = await ladder.evaluate(
+                transaction,
+                scope: scope,
+                view: view,
+                recordedStillCanonical: canonical[transaction.id]
+            )
+            if case let .decided(verdict) = outcome, await write(transaction, verdict) {
                 wrote += 1
             }
         }
@@ -177,7 +182,8 @@ private extension DurableRecoveryPass {
         _ transactions: [DurableTxEntry],
         view: any PinnedChainViewProtocol
     ) async -> [DurableTxId: Bool] {
-        let recorded = transactions.compactMap { tx in tx.successDetectedAt.map { (tx.id, $0) } }
+        let recorded = transactions
+            .compactMap { transaction in transaction.successDetectedAt.map { (transaction.id, $0) } }
         guard !recorded.isEmpty else { return [:] }
 
         var hashesByHeight: [UInt32: ReadResult<Data>] = [:]
@@ -199,14 +205,18 @@ private extension DurableRecoveryPass {
 
     /// Compare-and-set against the status the verdict was formed from. Skips a write that would change
     /// nothing.
-    func write(_ tx: DurableTxEntry, _ verdict: Verdict) async -> Bool {
-        guard verdict.status != tx.status || verdict.successDetectedAt != tx.successDetectedAt else {
+    func write(_ transaction: DurableTxEntry, _ verdict: Verdict) async -> Bool {
+        guard verdict.status != transaction.status || verdict.successDetectedAt != transaction.successDetectedAt else {
             return false
         }
         do {
-            return try await store.updateTxStatus(for: tx.id, expectedCurrentStatus: tx.status, verdict: verdict)
+            return try await store.updateTxStatus(
+                for: transaction.id,
+                expectedCurrentStatus: transaction.status,
+                verdict: verdict
+            )
         } catch {
-            logger?.error("Verdict write failed for \(tx.id): \(error)")
+            logger?.error("Verdict write failed for \(transaction.id): \(error)")
             return false
         }
     }
