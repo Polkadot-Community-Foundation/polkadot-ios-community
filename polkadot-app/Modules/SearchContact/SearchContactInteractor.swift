@@ -1,50 +1,57 @@
 import UIKit
-import Operation_iOS
-import SubstrateSdk
+import AsyncExtensions
+import StructuredConcurrency
+import os
 
 final class SearchContactInteractor {
     weak var presenter: SearchContactInteractorOutputProtocol?
 
-    private let searchApi: RemoteContactOperationMaking
+    private let accountSearching: any AccountSearching<Chat.RemoteContact, Chat.RemoteContact>
     private let chatOpenResolver: ChatOpenModelResolving
-    private let ownAccountId: AccountId
     private let searchRunner = SearchRunner()
     private var searchTask: Task<Void, Never>?
+    private var sourcesChangedTask: Task<Void, Never>?
+    private let stateLock: OSAllocatedUnfairLock<State>
 
     init(
-        ownAccountId: AccountId,
-        searchApi: RemoteContactOperationMaking = RemoteContactOperationFactory(),
+        accountSearching: any AccountSearching<Chat.RemoteContact, Chat.RemoteContact>,
         chatOpenResolver: ChatOpenModelResolving = ChatOpenModelResolver()
     ) {
-        self.ownAccountId = ownAccountId
-        self.searchApi = searchApi
+        self.accountSearching = accountSearching
         self.chatOpenResolver = chatOpenResolver
+        stateLock = OSAllocatedUnfairLock(initialState: State())
     }
 
     deinit {
         cancelSearchTask()
+        cancelSourcesChangedTask()
     }
 }
 
 extension SearchContactInteractor: SearchContactInteractorInputProtocol {
+    func setup() {
+        accountSearching.setup()
+        subscribeToSourcesChanged()
+    }
+
     func search(username: String) {
         cancelSearchTask()
 
         guard !username.isEmpty else {
             searchTask = Task { [weak self] in
                 guard !Task.isCancelled else { return }
-                await self?.presenter?.didReceive(searchState: .result(.contacts([])), for: username)
+                await self?.emitEmptyResult(for: username)
             }
             return
         }
 
-        searchTask = Task { [weak presenter, searchRunner, searchApi, ownAccountId] in
+        searchTask = Task { [weak self, weak presenter, searchRunner] in
             let stateStream = searchRunner.run {
-                await Self.makeSearchResult(
-                    for: username,
-                    ownAccountId: ownAccountId,
-                    searchApi: searchApi
-                )
+                do {
+                    return try await self?.makeSearchResult(for: username)
+                } catch {
+                    return nil
+                }
             }
             for await state in stateStream {
                 guard !Task.isCancelled else { return }
@@ -66,30 +73,67 @@ extension SearchContactInteractor: SearchContactInteractorInputProtocol {
 }
 
 private extension SearchContactInteractor {
+    struct State {
+        var currentQuery: String?
+    }
+
+    func subscribeToSourcesChanged() {
+        sourcesChangedTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                for try await _ in accountSearching.sourcesChanged() {
+                    guard !Task.isCancelled else { return }
+                    let query = stateLock.withLock { $0.currentQuery }
+                    if let query, !query.isEmpty {
+                        await performSearch(for: query)
+                    }
+                }
+            } catch {
+                // Subscription ended
+            }
+        }
+    }
+
     func cancelSearchTask() {
         searchTask?.cancel()
         searchTask = nil
     }
 
-    static func makeSearchResult(
-        for query: String,
-        ownAccountId: AccountId,
-        searchApi: RemoteContactOperationMaking
-    ) async -> SearchContactSearchResult? {
-        do {
-            if let accountId = try? query.toAccountId(),
-               accountId != ownAccountId,
-               let account = try? await searchApi.fetch(by: accountId) {
-                try Task.checkCancellation()
-                return .contacts([account])
+    func cancelSourcesChangedTask() {
+        sourcesChangedTask?.cancel()
+        sourcesChangedTask = nil
+    }
+
+    @MainActor
+    func emitEmptyResult(for query: String) {
+        stateLock.withLock { $0.currentQuery = query }
+        Task {
+            do {
+                let sections = try await accountSearching.search(query: nil)
+                await presenter?.didReceive(
+                    searchState: .result(.sections(sections)),
+                    for: query
+                )
+            } catch {
+                await presenter?.didReceive(error: error)
             }
-            let contacts = try await searchApi.search(by: query).asyncExecute()
-            let matchedContacts = contacts.filter { $0.accountId != ownAccountId }
+        }
+    }
+
+    func makeSearchResult(for query: String) async -> SearchContactSearchResult? {
+        do {
+            stateLock.withLock { $0.currentQuery = query }
+            let sections = try await accountSearching.search(query: query)
             try Task.checkCancellation()
-            return .contacts(matchedContacts)
+            return .sections(sections)
         } catch {
             guard !Task.isCancelled else { return nil }
             return .error(error)
         }
+    }
+
+    @MainActor
+    func performSearch(for query: String) {
+        search(username: query)
     }
 }

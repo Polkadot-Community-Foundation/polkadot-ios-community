@@ -22,15 +22,29 @@ enum SearchAccountViewFactory {
             operationQueue: operationQueue,
             logger: logger
         )
-        let searchUsernameFactory = SearchUsernameFactory(
-            chatContactRepositoryFactory: ChatContactRepositoryFactory(),
-            chainModel: chainAsset.chain
+        let localContactSearch = LocalContactSearchService(
+            repositoryFactory: ChatContactRepositoryFactory()
         )
+        let recentRecipientsProvider = RecentRecipientsProvider(
+            service: recentContactsService,
+            chainFormat: chainAsset.chain.chainFormat,
+            logger: logger
+        )
+
+        let accountSearching: any AccountSearching<
+            RecentContactModelWithUsername,
+            ContactSearchPayload
+        > = RecipientAccountSearchProvider(
+            recentRecipientsProvider: recentRecipientsProvider,
+            localContactSearch: localContactSearch,
+            remoteContactSearch: RemoteContactOperationFactory(),
+            chainFormat: chainAsset.chain.chainFormat,
+            logger: logger
+        )
+
         let recipientViewModelFactory = RecipientViewModelFactory()
         let interactor = SearchAccountInteractor(
-            searchUsernameFactory: searchUsernameFactory,
-            recentContactsManager: recentContactsService,
-            remoteContactSearch: RemoteContactOperationFactory(),
+            accountSearching: accountSearching,
             chatOpenResolver: ChatOpenModelResolver(),
             chainAsset: chainAsset,
             logger: logger

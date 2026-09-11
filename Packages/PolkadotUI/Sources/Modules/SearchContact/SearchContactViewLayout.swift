@@ -7,6 +7,7 @@ public final class SearchContactViewLayout: DiffableCollectionViewProviderView<S
     private let searchHeader = SearchContactHeaderView()
 
     private let separatorSuffix = "_separator"
+    private let headerSuffix = "_header"
 
     private let searchHintLabel: Label = create {
         $0.text = String(localized: .searchContactHint)
@@ -33,7 +34,6 @@ public final class SearchContactViewLayout: DiffableCollectionViewProviderView<S
         collectionView.keyboardDismissMode = .onDrag
         collectionView.delegate = self
 
-        // hidden by default
         searchHintLabel.setHidden(true)
         noResultsLabel.setHidden(true)
         loadingView.setHidden(true)
@@ -44,7 +44,6 @@ public final class SearchContactViewLayout: DiffableCollectionViewProviderView<S
         addSubview(noResultsLabel)
         addSubview(loadingView)
 
-        // keyboard to search field
         let centeringLayoutGuide = UILayoutGuide()
         addLayoutGuide(centeringLayoutGuide)
 
@@ -97,25 +96,47 @@ public final class SearchContactViewLayout: DiffableCollectionViewProviderView<S
             for: collectionView,
             reuseId: SeparatorContentView.reuseIdentifier
         )
+
+        CollectionRegistration.registerCell(
+            UICollectionViewCell.self,
+            for: collectionView,
+            reuseId: SearchContactSectionHeaderView.reuseIdentifier
+        )
     }
 }
 
 public extension SearchContactViewLayout {
     struct ViewModel {
-        let contactsById: [IdentifiableContentConfiguration<ItemIdentifierType, SearchContactListConfiguration>]
+        public struct Section {
+            public let id: String
+            public let title: String?
+            public let rows: [IdentifiableContentConfiguration<String, SearchContactListConfiguration>]
+
+            public init(
+                id: String,
+                title: String?,
+                rows: [IdentifiableContentConfiguration<String, SearchContactListConfiguration>]
+            ) {
+                self.id = id
+                self.title = title
+                self.rows = rows
+            }
+        }
+
+        let sections: [Section]
         let showHint: Bool
         let searchFailReason: NSAttributedString?
         let showsLoader: Bool
         let loaderText: String?
 
         public init(
-            contactsById: [IdentifiableContentConfiguration<String, SearchContactListConfiguration>],
+            sections: [Section],
             showHint: Bool,
             searchFailReason: NSAttributedString?,
             showsLoader: Bool,
             loaderText: String?
         ) {
-            self.contactsById = contactsById
+            self.sections = sections
             self.showHint = showHint
             self.searchFailReason = searchFailReason
             self.showsLoader = showsLoader
@@ -162,28 +183,48 @@ private extension SearchContactViewLayout {
     }
 
     func configureCollectionView(viewModel: ViewModel) {
-        let itemProviders = viewModel.contactsById.enumerated().map { offset, item in
-            var items: [ItemProviderType] = [
+        let sectionProviders = viewModel.sections.map { section in
+            createSectionProvider(for: section)
+        }
+        applySnapshot(sections: sectionProviders)
+    }
+
+    func createSectionProvider(for section: ViewModel.Section) -> SectionProviderType {
+        var items: [ItemProviderType] = []
+
+        if let title = section.title {
+            items.append(
+                ItemProviderType(
+                    id: section.id + headerSuffix,
+                    configuration: SearchContactSectionHeaderConfiguration(title: title),
+                    reuseIdentifier: SearchContactSectionHeaderView.reuseIdentifier
+                )
+            )
+        }
+
+        section.rows.enumerated().forEach { offset, item in
+            items.append(
                 ItemProviderType(
                     id: item.id,
                     configuration: item.configuration,
                     reuseIdentifier: SearchContactListView.reuseIdentifier
                 )
-            ]
-            if offset < viewModel.contactsById.count - 1 {
-                let separator = ItemProviderType(
-                    id: item.id + separatorSuffix,
-                    configuration: separatorConfiguration,
-                    reuseIdentifier: SeparatorContentView.reuseIdentifier
-                )
-                items.append(separator)
-            }
-            return items
-        }.flatMap { $0 }
+            )
 
-        let sectionProvider = SectionProviderType(
-            id: "ContactsSection",
-            itemProviders: itemProviders
+            if offset < section.rows.count - 1 {
+                items.append(
+                    ItemProviderType(
+                        id: item.id + separatorSuffix,
+                        configuration: separatorConfiguration,
+                        reuseIdentifier: SeparatorContentView.reuseIdentifier
+                    )
+                )
+            }
+        }
+
+        return SectionProviderType(
+            id: section.id,
+            itemProviders: items
         ) { _, _ in
             let group = NSCollectionLayoutGroup.list(
                 heightDimension: .estimated(60),
@@ -195,9 +236,6 @@ private extension SearchContactViewLayout {
             section.contentInsets = .init(top: 16, leading: 16, bottom: 0, trailing: 16)
             return section
         }
-        applySnapshot(sections: [
-            sectionProvider
-        ])
     }
 }
 
@@ -284,8 +322,13 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
             avatarViewModel: .colored(text: "M", colorSeed: "max")
         )
     ]
+    let section = SearchContactViewLayout.ViewModel.Section(
+        id: "contacts",
+        title: nil,
+        rows: contacts.identifiedByUUIDs()
+    )
     let viewModel = SearchContactViewLayout.ViewModel(
-        contactsById: contacts.identifiedByUUIDs(),
+        sections: [section],
         showHint: false,
         searchFailReason: nil,
         showsLoader: false,
@@ -299,7 +342,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     let layout = SearchContactViewLayout()
     let string = NSAttributedString(string: "No results for\n\"notfoundusername\"")
     let viewModel = SearchContactViewLayout.ViewModel(
-        contactsById: [],
+        sections: [],
         showHint: false,
         searchFailReason: string,
         showsLoader: false,
@@ -312,7 +355,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
 #Preview("Empty input") {
     let layout = SearchContactViewLayout()
     let viewModel = SearchContactViewLayout.ViewModel(
-        contactsById: [],
+        sections: [],
         showHint: true,
         searchFailReason: nil,
         showsLoader: false,
@@ -325,11 +368,57 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
 #Preview("Loading") {
     let layout = SearchContactViewLayout()
     let viewModel = SearchContactViewLayout.ViewModel(
-        contactsById: [],
+        sections: [],
         showHint: false,
         searchFailReason: nil,
         showsLoader: true,
         loaderText: "Search is taking longer than usual"
+    )
+    layout.bind(viewModel: viewModel)
+    return layout
+}
+
+#Preview("Multiple sections with headers") {
+    let layout = SearchContactViewLayout()
+    let recentContacts = [
+        SearchContactListConfiguration(
+            userName: "Alice.01",
+            avatarViewModel: .colored(text: "A", colorSeed: "alice")
+        ),
+        SearchContactListConfiguration(
+            userName: "Bob.02",
+            avatarViewModel: .colored(text: "B", colorSeed: "bob")
+        )
+    ]
+    let otherContacts = [
+        SearchContactListConfiguration(
+            userName: "Charlie.03",
+            avatarViewModel: .colored(text: "C", colorSeed: "charlie")
+        ),
+        SearchContactListConfiguration(
+            userName: "Diana.04",
+            avatarViewModel: .colored(text: "D", colorSeed: "diana")
+        )
+    ]
+
+    let sections = [
+        SearchContactViewLayout.ViewModel.Section(
+            id: "recent",
+            title: "Recent",
+            rows: recentContacts.identifiedByUUIDs()
+        ),
+        SearchContactViewLayout.ViewModel.Section(
+            id: "other",
+            title: "Other",
+            rows: otherContacts.identifiedByUUIDs()
+        )
+    ]
+    let viewModel = SearchContactViewLayout.ViewModel(
+        sections: sections,
+        showHint: false,
+        searchFailReason: nil,
+        showsLoader: false,
+        loaderText: nil
     )
     layout.bind(viewModel: viewModel)
     return layout

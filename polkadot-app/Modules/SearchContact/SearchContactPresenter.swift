@@ -12,7 +12,7 @@ final class SearchContactPresenter {
 
     private var currentSearch = CurrentSearch(
         query: "",
-        state: .result(.contacts([]))
+        state: .result(.sections(AccountSearchSections(recent: [], contacts: [], global: [])))
     )
 
     init(
@@ -26,6 +26,7 @@ final class SearchContactPresenter {
 
 extension SearchContactPresenter: SearchContactPresenterProtocol {
     func setup() {
+        interactor.setup()
         provideViewModel()
     }
 
@@ -34,7 +35,7 @@ extension SearchContactPresenter: SearchContactPresenterProtocol {
     }
 
     func didSelectContact(identifier: String) {
-        guard let contact = currentSearch.contacts.first(where: { $0.username == identifier }) else {
+        guard let contact = findContact(by: identifier) else {
             return
         }
         interactor.decide(on: contact)
@@ -73,12 +74,12 @@ private extension SearchContactPresenter {
 
     func provideViewModel() {
         let query = currentSearch.query
-        let contacts = currentSearch.contacts
-        let showHint = !currentSearch.isSearching && !currentSearch.queryFailed && contacts.isEmpty && query.isEmpty
+        let sections = currentSearch.sections
+        let allEmpty = sections.recent.isEmpty && sections.contacts.isEmpty && sections.global.isEmpty
+        let showHint = !currentSearch.isSearching && !currentSearch.queryFailed && allEmpty && query.isEmpty
 
-        // TODO: Add Highlight for username + move to factory OR move logic into ui level
         let searchFailReason: NSAttributedString?
-        if !currentSearch.isSearching, currentSearch.queryFailed || (!query.isEmpty && contacts.isEmpty) {
+        if !currentSearch.isSearching, currentSearch.queryFailed || (!query.isEmpty && allEmpty) {
             let searchFailedString = String(localized: .searchContactNoSuchUsername(username: query))
             var attributes = LabelStyle.title16SemiBold().attributes(for: .center)
             attributes[.foregroundColor] = UIColor.fgSecondary
@@ -90,19 +91,10 @@ private extension SearchContactPresenter {
             searchFailReason = nil
         }
 
+        let viewSections = buildViewSections(from: sections)
+
         let viewModel = SearchContactViewLayout.ViewModel(
-            contactsById: contacts.map { contact in
-                let prefix = String(contact.username.prefix(1))
-                let avatarViewModel = AvatarViewModel.colored(
-                    text: prefix,
-                    colorSeed: contact.accountId.toHex()
-                )
-                return SearchContactListConfiguration(
-                    userName: contact.username,
-                    avatarViewModel: avatarViewModel
-                )
-            }
-            .identified { $0.userName },
+            sections: viewSections,
             showHint: showHint,
             searchFailReason: searchFailReason,
             showsLoader: currentSearch.showsLoader,
@@ -111,15 +103,75 @@ private extension SearchContactPresenter {
         view?.didReceive(viewModel: viewModel)
     }
 
+    func buildViewSections(
+        from sections: AccountSearchSections<Chat.RemoteContact, Chat.RemoteContact>
+    ) -> [SearchContactViewLayout.ViewModel.Section] {
+        [
+            makeViewSection(
+                id: "recent",
+                title: String(localized: .searchContactRecentChats),
+                rows: sections.recent
+            ),
+            makeViewSection(
+                id: "contacts",
+                title: String(localized: .transactionSearchMyContacts),
+                rows: sections.contacts
+            ),
+            makeViewSection(
+                id: "global",
+                title: String(localized: .transactionSearchAllUsers),
+                rows: sections.global
+            )
+        ].compactMap { $0 }
+    }
+
+    func makeViewSection(
+        id: String,
+        title: String,
+        rows: [SearchRow<Chat.RemoteContact>]
+    ) -> SearchContactViewLayout.ViewModel.Section? {
+        guard !rows.isEmpty else { return nil }
+
+        return SearchContactViewLayout.ViewModel.Section(
+            id: id,
+            title: title,
+            rows: rows.map { row in
+                IdentifiableContentConfiguration(
+                    id: row.payload.accountId.toHex(),
+                    configuration: makeListConfiguration(for: row.payload)
+                )
+            }
+        )
+    }
+
+    func makeListConfiguration(for contact: Chat.RemoteContact) -> SearchContactListConfiguration {
+        let prefix = String(contact.username.prefix(1))
+        let avatarViewModel = AvatarViewModel.colored(
+            text: prefix,
+            colorSeed: contact.accountId.toHex()
+        )
+        return SearchContactListConfiguration(
+            userName: contact.username,
+            avatarViewModel: avatarViewModel
+        )
+    }
+
+    func findContact(by identifier: String) -> Chat.RemoteContact? {
+        let sections = currentSearch.sections
+        return sections.recent.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
+            ?? sections.contacts.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
+            ?? sections.global.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
+    }
+
     struct CurrentSearch {
         let query: String
         let state: SearchContactSearchState
 
-        var contacts: [Chat.RemoteContact] {
-            guard case let .result(.contacts(contacts)) = state else {
-                return []
+        var sections: AccountSearchSections<Chat.RemoteContact, Chat.RemoteContact> {
+            guard case let .result(.sections(sections)) = state else {
+                return AccountSearchSections(recent: [], contacts: [], global: [])
             }
-            return contacts.sorted { Username(value: $0.username) < Username(value: $1.username) }
+            return sections
         }
 
         var queryFailed: Bool {

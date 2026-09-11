@@ -13,6 +13,7 @@ protocol SearchContactPresenterProtocol: AnyObject {
 }
 
 protocol SearchContactInteractorInputProtocol: AnyObject {
+    func setup()
     func search(username: String)
     func decide(on contact: Chat.RemoteContact)
 }
