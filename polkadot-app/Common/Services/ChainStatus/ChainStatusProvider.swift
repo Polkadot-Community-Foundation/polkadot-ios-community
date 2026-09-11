@@ -31,6 +31,7 @@ actor ChainStatusProvider {
 
     private var statusTasks: [Task<Void, Never>] = []
     private var previousIndications: [String: ChainStatusIndication] = [:]
+    private var previousLiveness: [String: Double] = [:]
     private var deadSince: [String: Date] = [:]
     private var awaitingReanchor: Set<ChainConnectionTarget> = []
     private var anchorGeneration: [ChainConnectionTarget: Int] = [:]
@@ -104,6 +105,11 @@ extension ChainStatusProvider: ChainStatusProviding {
 }
 
 extension ChainStatusProvider {
+    private static func durationToSeconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1e18
+    }
+
     func handleStatusUpdate(
         _ status: NetworkStatus,
         for target: ChainConnectionTarget,
@@ -181,13 +187,16 @@ extension ChainStatusProvider {
                 let owner,
                 awaitingReanchor.contains(owner),
                 let previous = previousIndications[row.id] {
-                return row.withIndication(previous)
+                return row.withIndication(previous, liveness: previousLiveness[row.id])
             }
 
             let indication = applyDwell(to: rawIndication, rowId: row.id, at: date)
             previousIndications[row.id] = indication
+            if let targetLiveness {
+                previousLiveness[row.id] = targetLiveness
+            }
 
-            return row.withIndication(indication)
+            return row.withIndication(indication, liveness: targetLiveness)
         }
     }
 
@@ -247,7 +256,9 @@ extension ChainStatusProvider {
                 state: state,
                 stateTitle: state.localizedTitle,
                 icon: target.statusIcon,
-                indication: ChainStatusIndication.resolve(state: state, liveness: nil)
+                indication: ChainStatusIndication.resolve(state: state, liveness: nil),
+                liveness: nil,
+                expectedBlockSeconds: Self.durationToSeconds(target.expectedBlockTime)
             )
         }
 

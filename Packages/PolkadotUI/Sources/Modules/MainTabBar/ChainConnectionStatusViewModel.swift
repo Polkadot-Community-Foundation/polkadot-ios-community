@@ -20,8 +20,8 @@ public struct ChainConnectionStatusViewModel: Hashable, Identifiable {
     public let stateTitle: String
     public let icon: ChainStatusIcon
     public let indication: ChainStatusIndication
-
-//    public var healthGrade: ChainHealthGrade { .init(health: health) }
+    public let liveness: Double?
+    public let expectedBlockSeconds: Double
 
     public init(
         id: String,
@@ -29,7 +29,9 @@ public struct ChainConnectionStatusViewModel: Hashable, Identifiable {
         state: ChainConnectionState,
         stateTitle: String,
         icon: ChainStatusIcon,
-        indication: ChainStatusIndication
+        indication: ChainStatusIndication,
+        liveness: Double?,
+        expectedBlockSeconds: Double
     ) {
         self.id = id
         self.title = title
@@ -37,16 +39,23 @@ public struct ChainConnectionStatusViewModel: Hashable, Identifiable {
         self.stateTitle = stateTitle
         self.icon = icon
         self.indication = indication
+        self.liveness = liveness
+        self.expectedBlockSeconds = expectedBlockSeconds
     }
 
-    public func withIndication(_ indication: ChainStatusIndication) -> ChainConnectionStatusViewModel {
+    public func withIndication(
+        _ indication: ChainStatusIndication,
+        liveness: Double?
+    ) -> ChainConnectionStatusViewModel {
         ChainConnectionStatusViewModel(
             id: id,
             title: title,
             state: state,
             stateTitle: stateTitle,
             icon: icon,
-            indication: indication
+            indication: indication,
+            liveness: liveness,
+            expectedBlockSeconds: expectedBlockSeconds
         )
     }
 }

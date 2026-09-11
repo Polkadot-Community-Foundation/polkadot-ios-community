@@ -419,6 +419,101 @@ struct ChainStatusProviderTests {
         let chatRow = await currentChatRow(from: provider)
         #expect(chatRow?.indication == .normal, "error does not crash; row stays on default indication")
     }
+
+    @Test("A full window of blocks publishes liveness 1")
+    func fullWindowBlocksPublishesLiveness1() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(30))
+
+        let chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.liveness == 1, "full window of blocks yields liveness 1")
+    }
+
+    @Test("A stalling chain publishes the liveness its indication carries")
+    func stallingChainPublishesIndicationLiveness() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        let chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.liveness == 10.0 / 15.0, "stalling chain publishes its outage liveness")
+    }
+
+    @Test("A held row keeps the previous liveness")
+    func heldRowKeptPreviousLiveness() async {
+        let mockAnchor = MockChainLivenessAnchorProvider()
+        await mockAnchor.closeGate()
+        let provider = makeProvider(anchorProvider: mockAnchor)
+        let t0 = Date()
+
+        await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
+
+        for index in 0 ... 15 {
+            let date = t0.addingTimeInterval(Double(index) * 2)
+            let blockInfo = ChainBlockInfo(
+                number: BlockNumber(index),
+                receivedAt: date,
+                finalizedNumber: nil
+            )
+            await provider.handleBlocksUpdate([.chat: blockInfo], at: date)
+        }
+
+        await provider.emitRows(at: t0.addingTimeInterval(40))
+
+        var chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.liveness == 10.0 / 15.0, "history builds liveness 10/15")
+
+        await provider.handleForeground(at: t0.addingTimeInterval(70))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(
+            chatRow?.liveness == 10.0 / 15.0,
+            "held at the prior liveness, not the stale-history 0"
+        )
+
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        await mockAnchor.openGate()
+        await mockAnchor.release()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        chatRow = await currentChatRow(from: provider)
+        #expect(chatRow?.liveness == 1, "the landed anchor updates liveness")
+    }
 }
 
 private extension ChainStatusProviderTests {
