@@ -93,6 +93,20 @@ extension DurableTxCoreDataRepository {
             .sorted { $0.sequence < $1.sequence }
     }
 
+    /// A predicate fetch rather than the protocol's filter-everything default: the pass reads this twice
+    /// per domain per pass.
+    func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry] {
+        let domainRepository = storageFacade.createRepository(
+            filter: NSPredicate(format: "%K == %@", #keyPath(CDDurableTx.domainId), domain.rawValue),
+            sortDescriptors: [NSSortDescriptor(key: #keyPath(CDDurableTx.sequence), ascending: true)],
+            mapper: AnyCoreDataMapper(DurableTxMapper())
+        )
+        return try await AnyDataProviderRepository(domainRepository)
+            .fetchAllOperation(with: RepositoryFetchOptions())
+            .asyncExecute()
+            .sorted { $0.sequence < $1.sequence }
+    }
+
     func getEntry(id: DurableTxId) async throws -> DurableTxEntry? {
         try await repository
             .fetchOperation(by: { id.uuidString }, options: RepositoryFetchOptions())

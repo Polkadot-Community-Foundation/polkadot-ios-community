@@ -119,9 +119,11 @@ private extension CompletionLadder {
         view: any PinnedChainViewProtocol,
         windowClosed: Bool
     ) async -> RuleOutcome {
-        // No search window means there is nothing to read yet; decide by mortality.
+        // The checkpoint is above the finalized head, so there is nothing to read yet. The window cannot
+        // be closed here: closing needs the finalized head past the mortality end, which is at or above
+        // the checkpoint.
         guard let window = searchWindow(transaction, finalizedNumber: view.finalizedHead.number) else {
-            return decided(transaction, rule: "5 nothing to search", windowClosed ? .failure : .pending, at: nil)
+            return decided(transaction, rule: "5 nothing to search yet", .pending, at: nil)
         }
 
         switch await view.searchBodies(for: transaction.txHash, in: window) {

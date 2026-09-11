@@ -31,10 +31,12 @@ public protocol CoinageTxServicing: Sendable {
     /// entry must not hold the app for a mortality window.
     func startRecoveryPass()
 
-    /// Starts the head-driven recovery and runs one pass immediately. Subsumes ``startRecoveryPass()``.
+    /// Starts the shared engine's head-driven recovery and runs one pass immediately. Subsumes
+    /// ``startRecoveryPass()``. Idempotent across domains.
     func start()
 
-    /// Cancels the head-driven recovery. Safe to call when not started.
+    /// Cancels the shared engine's head-driven recovery — for every domain, not only coinage. Safe to call
+    /// when not started.
     func stop()
 
     /// Provisionally reserves `assets` against being spent again, before their keys reach the transport.

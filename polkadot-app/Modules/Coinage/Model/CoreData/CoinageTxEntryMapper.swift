@@ -10,7 +10,7 @@ import SubstrateSdk
 /// Inputs and outputs are immutable: they are written once when the entry is registered (by
 /// ``CoinageAssetLedgerCoreData`` inside the engine's transaction) and never rewritten. Each row
 /// references its asset through the `CDCoin` / `CDVoucher` relation — or `receivedPubKey` for a coin
-/// received from a peer — which must already exist at registration.
+/// received from a peer — which must already exist at registration. The mapper only reads.
 final class CoinageTxEntryMapper: CoreDataMapperProtocol {
     typealias DataProviderModel = CoinageTxEntry
     typealias CoreDataEntity = CDDurableTx
@@ -27,20 +27,11 @@ final class CoinageTxEntryMapper: CoreDataMapperProtocol {
         )
     }
 
-    func populate(entity: CDDurableTx, from model: CoinageTxEntry, using context: NSManagedObjectContext) throws {
-        let isNew = entity.identifier == nil
-        try durableMapper.populate(entity: entity, from: model.entry, using: context)
-
-        // Inputs and outputs never change once the entry exists — write them only on first insert.
-        if isNew {
-            try CoinageTxAssetRows.populate(
-                entity: entity,
-                inputs: model.inputs,
-                outputs: model.outputs,
-                using: context
-            )
-        }
-        CoinageTxAssetRows.touchRelatedAssets(of: entity)
+    /// Read-only by design: the engine row is written by `DurableTxCoreDataRepository` and the asset rows
+    /// by `CoinageAssetLedgerCoreData` inside its registration scope. A second write path here would
+    /// bypass the sequence assignment and the invariants.
+    func populate(entity _: CDDurableTx, from _: CoinageTxEntry, using _: NSManagedObjectContext) throws {
+        throw CoreDataMapperError.unsupported
     }
 }
 

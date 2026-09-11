@@ -43,10 +43,12 @@ public protocol DurableTxServicing: Sendable {
     func startRecoveryPass()
 
     /// Runs one pass immediately, then a pass on every new head of every chain a registered domain lives
-    /// on. Subsumes ``startRecoveryPass()``. Idempotent: a second call replaces the running loop.
+    /// on. Subsumes ``startRecoveryPass()``. Idempotent: a second call replaces the running loop, so a
+    /// domain that registers its oracle after the loop started calls this again to have its chain watched.
     func start()
 
-    /// Cancels the head-driven passes. Safe to call when not started.
+    /// Cancels the head-driven passes for every domain — the engine is shared. Safe to call when not
+    /// started.
     func stop()
 }
 

@@ -63,13 +63,4 @@ public extension DurableTxRepositoryProtocol {
     func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry] {
         try await getAllEntries().filter { $0.domainId == domain }
     }
-
-    /// Domains with something a pass could still decide, in first-seen order.
-    func liveDomains() async throws -> [TxDomainId] {
-        var seen: Set<TxDomainId> = []
-        return try await getAllEntries()
-            .filter(\.status.isLive)
-            .map(\.domainId)
-            .filter { seen.insert($0).inserted }
-    }
 }
