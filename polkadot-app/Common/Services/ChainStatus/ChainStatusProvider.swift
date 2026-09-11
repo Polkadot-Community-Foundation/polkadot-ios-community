@@ -15,6 +15,7 @@ protocol ChainStatusProviding: Actor {
 actor ChainStatusProvider {
     private static let connectDebounce: Duration = .milliseconds(300)
     private static let deadDwell: TimeInterval = 3
+    private static let anchorTimeout: Duration = .seconds(15)
 
     private let networkStatusService: NetworkStatusProviding
     private let blockProvider: ChainBlockProviding
@@ -33,6 +34,7 @@ actor ChainStatusProvider {
     private var deadSince: [String: Date] = [:]
     private var awaitingReanchor: Set<ChainConnectionTarget> = []
     private var anchorGeneration: [ChainConnectionTarget: Int] = [:]
+    private var anchorTasks: [ChainConnectionTarget: Task<Void, Never>] = [:]
     private var tickTask: Task<Void, Never>?
     private var isObserving = false
     private var lastEmittedRows: [ChainConnectionStatusViewModel] = []
@@ -64,6 +66,7 @@ actor ChainStatusProvider {
 
     deinit {
         statusTasks.forEach { $0.cancel() }
+        anchorTasks.values.forEach { $0.cancel() }
         tickTask?.cancel()
     }
 }
@@ -82,13 +85,13 @@ extension ChainStatusProvider: ChainStatusProviding {
 
         // Sampling runs for the app's lifetime because the top status strip is permanent.
         // A host closing its subscription does not pause sampling.
-        Task { [blockProvider] in
+        let activationTask = Task { [blockProvider] in
             await blockProvider.setActive(true)
         }
 
         statusTasks = ChainConnectionTarget.allCases.map { target in
             observeStatus(for: target)
-        } + [observeBlocks(), observeForeground()]
+        } + [observeBlocks(), observeForeground(), activationTask]
 
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -256,9 +259,13 @@ extension ChainStatusProvider {
         let generation = (anchorGeneration[target] ?? 0) + 1
         anchorGeneration[target] = generation
 
-        Task { [weak self] in
+        anchorTasks[target] = Task { [weak self, anchorProvider] in
             do {
-                let anchor = try await self?.anchorProvider.fetchAnchor(for: target, slotCount: slotCount)
+                // Without a deadline a hung fetch would leave the target in awaitingReanchor forever, freezing its row
+                // on the last indication.
+                let anchor = try await withTimeout(Self.anchorTimeout) {
+                    try await anchorProvider.fetchAnchor(for: target, slotCount: slotCount)
+                }
                 await self?.finishReanchor(for: target, generation: generation, anchor: anchor, at: date)
             } catch {
                 await self?.finishReanchor(for: target, generation: generation, anchor: nil, at: date)
