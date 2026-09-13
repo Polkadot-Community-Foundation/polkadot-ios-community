@@ -1,14 +1,12 @@
-import BigInt
 import Foundation
 import SubstrateSdk
 
-/// Plans how to fulfill an external payment from what is spendable on-chain right now.
-public protocol ExternalPaymentPlanning {
-    /// `mustInclude` vouchers are taken first (a re-entered onboarding forces its freshly recycled
-    /// vouchers in), then the rest greedily.
-    func plan(
-        amount: Balance,
-        context: DenominationBreakdownContext,
-        mustInclude: [Voucher]
-    ) async throws -> ExternalPaymentPreview
+/// Prefers funds that cost no privacy, then falls back to anything the chain would accept. A caller
+/// that may reach the fallback confirms the privacy loss with the user first, see ``canPayPrivately``.
+protocol ExternalPaymentPlanning: Sendable {
+    func plan(amount: Balance, context: DenominationBreakdownContext) async throws -> ExternalPaymentPreview
+
+    /// Whether ``plan`` would pay `amount` from private vouchers alone — the same check as its first
+    /// step, so the warning and the plan cannot disagree.
+    func canPayPrivately(amount: Balance, context: DenominationBreakdownContext) async throws -> Bool
 }

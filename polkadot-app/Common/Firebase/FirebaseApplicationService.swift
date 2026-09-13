@@ -108,8 +108,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             dotNsNameRegistry: dotNsNameRegistryAddress(),
             coinageInstanceId: coinageInstanceId(),
             fundingDomain: nonEmptyString(for: .fundingDomain),
-            fundingUrl: url(for: .fundingUrl),
-            offrampUrl: url(for: .offrampUrl)
+            fundingUrl: fundingConfigUrl(.onrampUrl),
+            offrampUrl: fundingConfigUrl(.offrampUrl)
         )
     }
 
@@ -160,6 +160,14 @@ private extension FirebaseApplicationService {
     func url(for key: String) -> URL? {
         guard let value = nonEmptyString(for: key) else { return nil }
         return URL(string: value)
+    }
+
+    /// One JSON object shared with Android: `{ "onrampUrl": "getcash.dot", "offrampUrl": "getcash.dot/offramp" }`.
+    /// The scheme is optional on the wire.
+    func fundingConfigUrl(_ field: String) -> URL? {
+        let json = remoteConfig[.fundingConfig].jsonValue as? [String: String]
+        guard let value = json?[field], !value.isEmpty else { return nil }
+        return URL(string: value.contains("://") ? value : "https://" + value)
     }
 
     func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {
@@ -250,6 +258,7 @@ private extension String {
     static let dotNsResolver = "dot_ns_config"
     static let coinageInstanceId = "coinage_instance_id"
     static let fundingDomain = "funding_domain"
-    static let fundingUrl = "funding_url"
-    static let offrampUrl = "offramp_url"
+    static let fundingConfig = "funding_config"
+    static let onrampUrl = "onrampUrl"
+    static let offrampUrl = "offrampUrl"
 }

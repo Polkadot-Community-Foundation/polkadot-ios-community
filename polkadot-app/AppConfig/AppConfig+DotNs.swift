@@ -33,7 +33,7 @@ extension AppConfig {
         }
 
         static let dotNsBrowse = "browse"
-        /// The funding product's label: the host name of `funding_url`, falling back to the legacy
+        /// The funding product's label: the host name of the funding page URL, falling back to the legacy
         /// `funding_domain` key while both are published.
         static var dotNsGetSome: String {
             let config = AppConfigProvider.shared.getRemoteConfig()

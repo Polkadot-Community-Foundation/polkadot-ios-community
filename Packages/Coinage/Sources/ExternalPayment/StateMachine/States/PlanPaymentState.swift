@@ -2,7 +2,7 @@ import Foundation
 import StateMachine
 
 /// Invokes the planner and decides the next state. Every outcome is a verdict: an unreachable amount
-/// and any thrown error both persist `failed`; only a cancelled task keeps the stage.
+/// and any thrown error both persist `failed`.
 struct PlanPaymentState: StateMachineState {
     typealias StateFactory = ExternalPaymentStateFactory
     typealias PersistentValue = ExternalPayment
@@ -14,32 +14,35 @@ struct PlanPaymentState: StateMachineState {
         with factory: ExternalPaymentStateFactory
     ) async -> AnyStateMachineState<ExternalPaymentStateFactory, ExternalPayment> {
         do {
-            let plan = try await factory.planner.plan(
-                amount: payment.amountInPlanks,
-                context: factory.context,
-                mustInclude: []
-            )
+            let preview = try await factory.planner.plan(amount: payment.amountInPlanks, context: factory.context)
+            factory.logger?
+                .debug(
+                    "Payment \(payment.id) planned: \(preview.vouchers.count) vouchers, \(preview.coins.count) coins"
+                )
 
-            switch plan {
-            case let .ready(selection):
-                return factory.makeOffboardVouchersState(payment: payment, vouchers: selection.vouchers)
-            case let .loadCoins(selection):
+            switch preview {
+            case let .private(vouchers):
+                return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers.map(\.voucher))
+            case let .lowPrivacy(vouchers, coins) where coins.isEmpty:
+                return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers.map(\.voucher))
+            case let .lowPrivacy(vouchers, coins):
                 return factory.makeOnboardCoinsState(
                     payment: payment,
-                    coins: selection.coins,
-                    exactVouchers: selection.vouchers
+                    coins: coins.map(\.coin),
+                    exactVouchers: vouchers.map(\.voucher)
                 )
             case .notEnoughBalance:
-                return factory.makeFailedState(payment: payment, reason: "Insufficient balance")
+                return factory.makeFailedState(payment: payment, reason: "insufficient balance")
             }
         } catch {
-            return factory.makeFailedState(payment: payment, stage: .plan, error: error)
+            return factory.makeFailedState(payment: payment, reason: error.localizedDescription)
         }
     }
 
     func memo() async -> ExternalPayment {
         var currentPayment = payment
         currentPayment.stage = .plan
+        currentPayment.plannedVoucherIndices = []
         currentPayment.updatedAt = Date()
         return currentPayment
     }

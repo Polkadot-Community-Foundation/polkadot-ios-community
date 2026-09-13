@@ -1,34 +1,38 @@
 import AsyncExtensions
-import BigInt
 import Foundation
 import SubstrateSdk
 
 /// Public interface for previewing, initiating and monitoring external payments.
 public protocol ExternalPaymentServicing {
-    /// Plans over everything spendable on-chain right now; the caller has already obtained the user's
-    /// privacy consent, so no scope is involved.
     func previewPayment(
         for amount: Balance,
         context: DenominationBreakdownContext
     ) async throws -> ExternalPaymentPreview
 
+    /// Whether private vouchers alone would pay `amount`; anything else gives up privacy the user
+    /// should be asked about first.
+    func canExecuteExternalPaymentPrivately(
+        amount: Balance,
+        context: DenominationBreakdownContext
+    ) async throws -> Bool
+
     /// Registers a payment with stage `.plan`. Throws ``ExternalPaymentError/alreadyExists`` for a
-    /// known `(origin, paymentId)` and ``ExternalPaymentError/invalidPaymentId`` for an empty id.
+    /// known `(productId, paymentId)` and ``ExternalPaymentError/invalidPaymentId`` for an empty id.
     func initiatePayment(
-        origin: String,
+        productId: String,
         paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
     ) async throws
 
-    /// Unknown `(origin, paymentId)` emits `.failed(reason: "unknown payment")` once, then ends.
+    /// Ends after the first terminal status. Throws ``ExternalPaymentError/notFound`` when nothing is
+    /// registered under `(productId, paymentId)`.
     func subscribePaymentStatus(
-        origin: String,
+        productId: String,
         paymentId: String
-    ) throws -> AnyAsyncSequence<ExternalPaymentStatus>
+    ) -> AnyAsyncSequence<ExternalPaymentStatus>
 
     func setup(with context: DenominationBreakdownContext)
-    func throttle()
 }
 
 public enum ExternalPaymentStatus: Sendable, Equatable {

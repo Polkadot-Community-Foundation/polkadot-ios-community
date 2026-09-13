@@ -11,11 +11,10 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
     var entityIdentifierFieldName: String { #keyPath(CDExternalPayment.identifier) }
 
     func transform(entity: CDExternalPayment) throws -> ExternalPayment {
-        guard let identifier = entity.identifier,
-              let origin = entity.origin,
+        guard let productId = entity.productId,
+              let paymentId = entity.paymentId,
               let amountString = entity.amountInPlanks,
               let destination = entity.destination,
-              let readyAt = entity.readyAt,
               let createdAt = entity.createdAt,
               let updatedAt = entity.updatedAt
         else {
@@ -27,14 +26,14 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         let settled = entity.settledInPlanks.flatMap { BigUInt($0) } ?? 0
 
         return ExternalPayment(
-            id: identifier,
-            origin: origin,
+            productId: productId,
+            paymentId: paymentId,
             amountInPlanks: amount,
             destination: destination,
             settledInPlanks: settled,
             stage: stage,
+            plannedVoucherIndices: Self.decodeVoucherIndices(entity.plannedVoucherIndices),
             failureReason: entity.failureReason,
-            readyAt: readyAt,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -46,15 +45,25 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         using _: NSManagedObjectContext
     ) throws {
         entity.identifier = model.id
-        entity.origin = model.origin
+        entity.productId = model.productId
+        entity.paymentId = model.paymentId
         entity.amountInPlanks = String(model.amountInPlanks)
         entity.destination = model.destination
         entity.settledInPlanks = String(model.settledInPlanks)
         entity.stage = Int16(model.stage.rawValue)
+        entity.plannedVoucherIndices = Self.encodeVoucherIndices(model.plannedVoucherIndices)
         entity.failureReason = model.failureReason
-        entity.readyAt = model.readyAt
         entity.createdAt = model.createdAt
         entity.updatedAt = model.updatedAt
+    }
+
+    /// Comma-separated derivation indices; nil for none.
+    static func encodeVoucherIndices(_ indices: [DerivationIndex]) -> String? {
+        indices.isEmpty ? nil : indices.map { String($0) }.joined(separator: ",")
+    }
+
+    static func decodeVoucherIndices(_ encoded: String?) -> [DerivationIndex] {
+        encoded?.split(separator: ",").compactMap { DerivationIndex($0) } ?? []
     }
 }
 
@@ -85,8 +94,8 @@ final class ExternalPaymentStageMapper: CoreDataMapperProtocol {
         }
         entity.stage = Int16(model.stage.rawValue)
         entity.settledInPlanks = String(model.settledInPlanks)
+        entity.plannedVoucherIndices = ExternalPaymentMapper.encodeVoucherIndices(model.plannedVoucherIndices)
         entity.failureReason = model.failureReason
-        entity.readyAt = model.readyAt
         entity.updatedAt = model.updatedAt
     }
 }

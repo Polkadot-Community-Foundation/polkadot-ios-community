@@ -63,17 +63,11 @@ final class OffboardVouchersForPaymentService {
     ) async throws -> OffboardOutcome {
         try await executeSubmissions(payment: payment, vouchers: vouchers)
     }
-
-    /// Whether this payment already has a registered durability group — i.e. a prior attempt got as
-    /// far as registration. Lets the state decide between re-joining and re-planning after a crash.
-    func hasPendingGroup(for payment: ExternalPayment) async throws -> Bool {
-        try await !txService.getOperationGroupStatuses(groupId(for: payment)).isEmpty
-    }
 }
 
 /// The unload's single verdict, folded from its per-group entries. `partialSuccess` is not a
 /// failure — money did move, just not all of it: `settledInPlanks` is what the finalized groups
-/// delivered, so the caller can settle it and re-plan the remainder.
+/// delivered, and the payment ends there.
 enum OffboardOutcome: Equatable {
     case success
     case partialSuccess(settledInPlanks: Balance, executed: Int, total: Int)
@@ -95,7 +89,7 @@ private extension OffboardVouchersForPaymentService {
     }
 
     func groupId(for payment: ExternalPayment) -> CoinageTxGroupId {
-        "external-payment:\(payment.id)"
+        payment.id
     }
 
     /// Registers the whole payment as one atomic durability group, or re-joins the group a prior

@@ -8,7 +8,6 @@ public typealias RenderWidgetHandler = (_ messageId: String, _ scaleHex: String)
 public enum ContainerBridgeHostApiError: Error {
     case missingRequiredParam(String)
     case invalidSignRawParams
-    case invalidPaymentRequestParams(String)
 
     public var errorDescription: String? {
         switch self {
@@ -16,8 +15,6 @@ public enum ContainerBridgeHostApiError: Error {
             "missing required param \(param)"
         case .invalidSignRawParams:
             "signRaw must have either data or payload"
-        case let .invalidPaymentRequestParams(detail):
-            "invalid payment request params: \(detail)"
         }
     }
 }
@@ -552,8 +549,7 @@ private extension ContainerBridge {
 
     func registerHostPaymentRequest(nativeApi: ProductsNativeApiProtocol) {
         registerRequestHandler(method: "paymentRequest") { params in
-            // TODO(Products): the shipped container.js still sends no `id`; regenerate with the host-api bump.
-            let request = try params.mapPaymentParams(to: PaymentRequestDto.self)
+            let request = try params.map(to: PaymentRequestDto.self)
 
             try await nativeApi.requestPayment(
                 amount: request.amount,
@@ -567,9 +563,9 @@ private extension ContainerBridge {
 
     func registerHostPaymentStatusSubscribe(nativeApi: ProductsNativeApiProtocol) {
         registerSubscriptionHandler(method: "paymentStatusSubscribe") { params in
-            let request = try params.mapPaymentParams(to: PaymentStatusSubscribeDto.self)
+            let request = try params.map(to: PaymentStatusSubscribeDto.self)
 
-            return try await nativeApi.subscribePaymentStatus(id: request.paymentId)
+            return try await nativeApi.subscribePaymentStatus(id: request.id)
                 .map { try HostPaymentStatusDto(status: $0).toScaleCompatibleJSON() }
                 .eraseToAnyAsyncSequence()
         }
@@ -718,18 +714,6 @@ extension JSON {
             return transformed
         } else {
             throw ContainerBridgeHostApiError.missingRequiredParam(param)
-        }
-    }
-}
-
-private extension JSON {
-    /// Decode failures (missing key, wrong hex length) surface as one coded param error instead of
-    /// a raw `DecodingError` the product cannot tell from a transport failure.
-    func mapPaymentParams<T: Decodable>(to type: T.Type) throws -> T {
-        do {
-            return try map(to: type)
-        } catch {
-            throw ContainerBridgeHostApiError.invalidPaymentRequestParams("\(error)")
         }
     }
 }

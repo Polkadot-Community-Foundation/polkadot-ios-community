@@ -3,96 +3,137 @@ import SubstrateSdk
 import Testing
 @testable import Coinage
 
+/// The real planner over the real pre-classification and parametric strategies: what counts as
+/// private is exactly what the balance calls usable.
 struct ExternalPaymentPlannerTests {
     private typealias Factory = ExternalPaymentTestFactory
 
-    private func plan(
-        vouchers: [TrackedVoucher] = [],
-        coins: [TrackedCoin] = [],
-        amount: Balance,
-        mustInclude: [Voucher] = []
-    ) async throws -> ExternalPaymentPreview {
-        let planner = ExternalPaymentPlanner(
-            coinService: StubCoinService(coins: coins),
-            voucherService: StubVoucherService(vouchers: vouchers.map(\.voucher), states: vouchers)
+    private func makePlanner(
+        vouchers: [Voucher] = [],
+        coins: [Coin] = [],
+        strategy: RecyclingStrategyType = .balanced
+    ) -> ExternalPaymentPlanner {
+        ExternalPaymentPlanner(
+            coinService: StubCoinService(coins: coins.map { Factory.tracked($0) }),
+            voucherService: StubVoucherService(vouchers: vouchers),
+            classifier: ExternalPaymentAssetClassifier(
+                settings: StubRecyclingStrategySettings(strategy: strategy),
+                strategyResolver: StubRecyclingStrategyProvider(),
+                ringCapacityProvider: StubRingCapacityProvider(capacities: [1: 767, 2: 767, 3: 767]),
+                preClassificator: CoinageAssetPreClassificator()
+            )
         )
-        return try await planner.plan(amount: amount, context: Factory.denomination, mustInclude: mustInclude)
     }
 
-    @Test func spendableVouchersCoverTheAmountGreedily() async throws {
-        let vouchers = [Factory.voucher(index: 1, exponent: 3), Factory.voucher(index: 2, exponent: 2)]
-            .map { Factory.tracked($0) }
+    private func indices(_ vouchers: [TrackedVoucher]) -> [DerivationIndex] {
+        vouchers.map(\.voucher.derivationIndex)
+    }
 
-        let preview = try await plan(vouchers: vouchers, amount: Factory.planks(3))
+    @Test func privateVouchersCoverTheAmountLargestFirst() async throws {
+        let planner = makePlanner(vouchers: [
+            Factory.voucher(index: 1, exponent: 2),
+            Factory.voucher(index: 2, exponent: 3)
+        ])
 
-        guard case let .ready(selection) = preview else {
-            Issue.record("expected ready: \(preview)")
+        let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
+
+        guard case let .private(vouchers) = preview else {
+            Issue.record("expected private: \(preview)")
             return
         }
-        #expect(selection.vouchers.map(\.derivationIndex) == [1])
-        #expect(selection.coins.isEmpty)
+        #expect(indices(vouchers) == [2])
+        #expect(try await planner.canPayPrivately(amount: Factory.planks(3), context: Factory.denomination))
     }
 
-    @Test func mustIncludeVouchersComeFirst() async throws {
-        let forced = Factory.voucher(index: 7, exponent: 1)
-        let vouchers = [Factory.voucher(index: 1, exponent: 3), forced].map { Factory.tracked($0) }
+    @Test func gainingVouchersAreSpentAfterPrivateOnesAndLargestFirst() async throws {
+        // A private 4 and two gaining 8s for a payment of 12 give up the privacy of one voucher, not two.
+        let planner = makePlanner(vouchers: [
+            Factory.voucher(index: 1, exponent: 1),
+            Factory.gainingVoucher(index: 2, exponent: 2),
+            Factory.gainingVoucher(index: 3, exponent: 2)
+        ])
+        let amount = Factory.planks(2) + Factory.planks(1)
 
-        let preview = try await plan(
-            vouchers: vouchers,
-            amount: Factory.planks(3) + Factory.planks(1),
-            mustInclude: [forced]
+        let preview = try await planner.plan(amount: amount, context: Factory.denomination)
+
+        guard case let .lowPrivacy(vouchers, coins) = preview else {
+            Issue.record("expected lowPrivacy: \(preview)")
+            return
+        }
+        #expect(indices(vouchers).first == 1)
+        #expect(indices(vouchers).count == 2)
+        #expect(coins.isEmpty)
+        #expect(try await !planner.canPayPrivately(amount: amount, context: Factory.denomination))
+    }
+
+    @Test func coinsCoverTheShortfallAndEveryVoucherIsOffboardedAsIs() async throws {
+        let planner = makePlanner(
+            vouchers: [Factory.voucher(index: 1, exponent: 2), Factory.gainingVoucher(index: 2, exponent: 1)],
+            coins: [Factory.coin(index: 9, exponent: 3), Factory.coin(index: 8, exponent: 1)]
         )
+        let amount = Factory.planks(3) + Factory.planks(2) + Factory.planks(1)
 
-        guard case let .ready(selection) = preview else {
-            Issue.record("expected ready: \(preview)")
+        let preview = try await planner.plan(amount: amount, context: Factory.denomination)
+
+        guard case let .lowPrivacy(vouchers, coins) = preview else {
+            Issue.record("expected lowPrivacy: \(preview)")
             return
         }
-        #expect(selection.vouchers.map(\.derivationIndex) == [7, 1])
+        #expect(Set(indices(vouchers)) == [1, 2])
+        #expect(coins.map(\.coin.derivationIndex) == [9])
     }
 
-    @Test func spendableCoinsCoverTheDeficit() async throws {
-        let vouchers = [Factory.tracked(Factory.voucher(index: 1, exponent: 2))]
-        let coins = [Factory.coin(index: 9, exponent: 3), Factory.coin(index: 8, exponent: 1)]
-            .map { Factory.tracked($0) }
+    @Test func privateCoinsStillCostPrivacy() async throws {
+        // Coins alone never make a plan private: loading them only to unload them gains nothing.
+        let planner = makePlanner(coins: [Factory.coin(index: 9, exponent: 3)], strategy: .minPrivacy)
 
-        let preview = try await plan(vouchers: vouchers, coins: coins, amount: Factory.planks(3) + Factory.planks(2))
+        let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
 
-        guard case let .loadCoins(selection) = preview else {
-            Issue.record("expected loadCoins: \(preview)")
-            return
-        }
-        #expect(selection.coins.map(\.derivationIndex) == [9])
-        #expect(selection.vouchers.map(\.derivationIndex) == [1])
+        #expect(!preview.isPrivate)
+        #expect(preview.coins.map(\.coin.derivationIndex) == [9])
+        #expect(try await !planner.canPayPrivately(amount: Factory.planks(3), context: Factory.denomination))
     }
 
-    @Test func nonSelectableAssetsAreIgnored() async throws {
+    @Test func minPrivacyTreatsEveryRecyclerVoucherAsPrivate() async throws {
+        let planner = makePlanner(vouchers: [Factory.gainingVoucher(index: 2, exponent: 3)], strategy: .minPrivacy)
+
+        let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
+
+        #expect(preview.isPrivate)
+    }
+
+    @Test func nonSpendableAssetsAreIgnored() async throws {
         let consumed = CoinageAssetState(handedOff: false, consumerStatus: .finalizedSuccess, minterStatus: nil)
-        let vouchers = [
-            Factory.tracked(Factory.voucher(index: 1, inRecycler: false)),
-            Factory.tracked(Factory.voucher(index: 2), state: consumed)
-        ]
-        let coins = [
-            Factory.tracked(Factory.coin(index: 9, isOnchain: false)),
-            Factory.tracked(Factory.coin(index: 8), state: consumed)
-        ]
+        let planner = ExternalPaymentPlanner(
+            coinService: StubCoinService(coins: [
+                Factory.tracked(Factory.coin(index: 9, isOnchain: false)),
+                Factory.tracked(Factory.coin(index: 8), state: consumed)
+            ]),
+            voucherService: StubVoucherService(
+                vouchers: [Factory.voucher(index: 1, inRecycler: false), Factory.voucher(index: 2)],
+                states: [Factory.tracked(Factory.voucher(index: 2), state: consumed)]
+            ),
+            classifier: ExternalPaymentAssetClassifier(
+                settings: StubRecyclingStrategySettings(strategy: .balanced),
+                strategyResolver: StubRecyclingStrategyProvider(),
+                ringCapacityProvider: StubRingCapacityProvider(capacities: [3: 767]),
+                preClassificator: CoinageAssetPreClassificator()
+            )
+        )
 
-        let preview = try await plan(vouchers: vouchers, coins: coins, amount: Factory.planks(1))
+        let preview = try await planner.plan(amount: Factory.planks(1), context: Factory.denomination)
 
-        guard case .notEnoughBalance = preview else {
-            Issue.record("expected notEnoughBalance: \(preview)")
-            return
-        }
+        #expect(preview == .notEnoughBalance)
     }
 
     @Test func unreachableAmountIsNotEnoughBalance() async throws {
-        let preview = try await plan(
-            vouchers: [Factory.tracked(Factory.voucher(index: 1, exponent: 1))],
-            amount: Factory.planks(3)
+        let planner = makePlanner(
+            vouchers: [Factory.voucher(index: 1, exponent: 1)],
+            coins: [Factory.coin(index: 9, exponent: 1)]
         )
 
-        guard case .notEnoughBalance = preview else {
-            Issue.record("expected notEnoughBalance: \(preview)")
-            return
-        }
+        let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
+
+        #expect(preview == .notEnoughBalance)
     }
 }

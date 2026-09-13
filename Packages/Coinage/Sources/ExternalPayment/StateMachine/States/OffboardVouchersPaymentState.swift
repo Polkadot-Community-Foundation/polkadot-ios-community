@@ -1,19 +1,20 @@
 import Foundation
 import SDKLogger
 import StateMachine
+import SubstrateSdk
 
-/// Unloads vouchers to external asset and transfers to destination.
+/// Unloads the planned vouchers to external asset at the destination.
 ///
-/// Submits straight to ``OffboardVouchersForPaymentService`` — the plan was validated moments ago and
-/// the service re-joins an already registered group on its own (the crash path). Every outcome is a
-/// verdict: `.success` completes, `.partialSuccess` persists what settled as `partiallyCompleted`,
-/// `.failed`, a submission failure and any thrown error persist `failed`.
+/// Submits straight to ``OffboardVouchersForPaymentService``, which re-joins an already registered
+/// group on its own (the relaunch path). Every outcome is a verdict: `.success` completes,
+/// `.partialSuccess` persists what settled as `partiallyCompleted`, `.failed`, a submission failure
+/// and any thrown error persist `failed`.
 struct OffboardVouchersPaymentState: StateMachineState {
     typealias StateFactory = ExternalPaymentStateFactory
     typealias PersistentValue = ExternalPayment
 
     let payment: ExternalPayment
-    let vouchers: [Voucher]
+    let voucherIndices: [DerivationIndex]
     let isTerminal = false
 
     func transit(
@@ -34,6 +35,10 @@ struct OffboardVouchersPaymentState: StateMachineState {
         )
 
         do {
+            let vouchers = try await factory.voucherService
+                .fetchTracked(derivationIndices: Set(voucherIndices))
+                .map(\.voucher)
+
             switch try await service.execute(payment: payment, vouchers: vouchers) {
             case .success:
                 var settled = payment
@@ -50,13 +55,14 @@ struct OffboardVouchersPaymentState: StateMachineState {
                 return factory.makeFailedState(payment: payment, reason: "no unload transaction executed")
             }
         } catch {
-            return factory.makeFailedState(payment: payment, stage: .offboardVouchers, error: error)
+            return factory.makeFailedState(payment: payment, reason: error.localizedDescription)
         }
     }
 
     func memo() async -> ExternalPayment {
         var currentPayment = payment
         currentPayment.stage = .offboardVouchers
+        currentPayment.plannedVoucherIndices = voucherIndices
         currentPayment.updatedAt = Date()
         return currentPayment
     }

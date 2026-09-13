@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 import SubstrateSdk
+import Testing
 @testable import Products
 
 @Suite("PaymentRequestDto Tests")
@@ -12,39 +12,38 @@ struct PaymentRequestDtoTests {
         try JSONDecoder().decode(type, from: Data(json.utf8))
     }
 
-    @Test("decodes the wire shape with 32-byte id and destination")
+    @Test("decodes the wire shape: idHex, amount and destinationHex")
     func decodesWireShape() throws {
-        let json = #"{"id":"\#(idHex)","amount":"1500","destinationHex":"\#(destinationHex)"}"#
+        let json = #"{"idHex":"\#(idHex)","amount":"1500","destinationHex":"\#(destinationHex)"}"#
 
         let dto = try decode(PaymentRequestDto.self, json: json)
 
         #expect(dto.id == Data(repeating: 0xAB, count: 32))
         #expect(dto.amount == 1_500)
         #expect(dto.destination == Data(repeating: 0xCD, count: 32))
-        #expect(dto.id.toHex(includePrefix: true) == idHex)
     }
 
-    @Test("rejects an id that is not 32 bytes", arguments: [31, 33])
-    func rejectsWrongIdLength(byteCount: Int) {
-        let shortId = "0x" + String(repeating: "ab", count: byteCount)
-        let json = #"{"id":"\#(shortId)","amount":"1","destinationHex":"\#(destinationHex)"}"#
+    @Test("the id is opaque: any length decodes, a missing key does not")
+    func idIsOpaque() throws {
+        let dto = try decode(
+            PaymentRequestDto.self,
+            json: #"{"idHex":"0xab","amount":"1","destinationHex":"\#(destinationHex)"}"#
+        )
+        #expect(dto.id == Data([0xAB]))
 
         #expect(throws: DecodingError.self) {
-            try decode(PaymentRequestDto.self, json: json)
+            try decode(PaymentRequestDto.self, json: #"{"amount":"1","destinationHex":"\#(destinationHex)"}"#)
         }
     }
 
-    @Test("status subscribe decodes paymentId with the same rule")
+    @Test("status subscribe decodes idHex")
     func statusSubscribeDecodes() throws {
-        let dto = try decode(PaymentStatusSubscribeDto.self, json: #"{"paymentId":"\#(idHex)"}"#)
-        #expect(dto.paymentId == Data(repeating: 0xAB, count: 32))
+        let dto = try decode(PaymentStatusSubscribeDto.self, json: #"{"idHex":"\#(idHex)"}"#)
 
-        #expect(throws: DecodingError.self) {
-            try decode(PaymentStatusSubscribeDto.self, json: #"{"paymentId":"0xab"}"#)
-        }
+        #expect(dto.id == Data(repeating: 0xAB, count: 32))
     }
 
-    @Test("status dto keeps the legacy tagged shape")
+    @Test("status dto keeps the tagged shape")
     func statusDtoShape() throws {
         let failed = try HostPaymentStatusDto(status: .failed(reason: "boom")).toScaleCompatibleJSON()
         #expect(failed.tag?.stringValue == "Failed")
@@ -62,5 +61,11 @@ struct PaymentRequestDtoTests {
             .toScaleCompatibleJSON()
         #expect(partial.tag?.stringValue == "PartiallyClaimed")
         #expect(partial.value?.stringValue == "1500")
+    }
+
+    @Test("status errors are coded")
+    func statusErrorCodes() {
+        #expect(HostPaymentStatusError.notFound.code == "NotFound")
+        #expect(HostPaymentRequestError.alreadyExists.code == "AlreadyExists")
     }
 }

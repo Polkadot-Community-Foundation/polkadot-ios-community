@@ -39,6 +39,10 @@ final class StubVoucherService: VoucherServiceProtocol, @unchecked Sendable {
         vouchers.withLock { $0 }.filter { publicKeys.contains($0.publicKey) }
     }
 
+    func fetchTracked(derivationIndices: Set<DerivationIndex>) async throws -> [TrackedVoucher] {
+        try await fetchAllTracked().filter { derivationIndices.contains($0.voucher.derivationIndex) }
+    }
+
     func fetchAllTracked() async throws -> [TrackedVoucher] {
         let overrides = states.withLock { $0 }
         return vouchers.withLock { $0 }.map {

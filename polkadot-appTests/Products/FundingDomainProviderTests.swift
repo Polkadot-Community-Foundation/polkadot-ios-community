@@ -43,6 +43,13 @@ struct FundingDomainProviderTests {
         #expect(page.page == "/offramp")
     }
 
+    @Test("a scheme-less remote URL still resolves once the service adds https")
+    func schemeLessUrlResolves() async throws {
+        let page = try await makeProvider(offrampUrl: "https://getcash.dot/offramp").offrampPage()
+
+        #expect(page.page == "/offramp")
+    }
+
     @Test("a missing remote key is unavailable")
     func missingKeyIsUnavailable() async {
         await #expect(throws: FundingDomainError.unavailable) {

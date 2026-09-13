@@ -28,19 +28,20 @@ extension ProductsNativeApi {
             .eraseToAnyAsyncSequence()
     }
 
-    /// Balance → approval → privacy consent (any preset but minPrivacy) → register. Uniqueness of
-    /// `(product, id)` is validated by the coinage service at registration, so a replay surfaces as
-    /// `AlreadyExists` after those steps; anything else the host throws reaches the product uncoded.
+    /// Balance → approval → privacy warning when private vouchers alone cannot pay → register.
+    /// Uniqueness of `(product, id)` is validated by the coinage service at registration, so a replay
+    /// surfaces as `AlreadyExists` after those steps; anything else the host throws reaches the
+    /// product uncoded.
     func requestPayment(amount: Balance, destination: AccountId, id: PaymentRequestId) async throws {
-        let externalPaymentService = try requirePaymentsSupport().externalPaymentService
+        let coinageService = try requirePaymentsSupport().coinageService
 
         try await checkSufficientBalance(amount: amount)
         try await awaitUserApproval(amount: amount, destination: destination)
         try await awaitPrivacyConsentIfNeeded(amount: amount)
 
         do {
-            try await externalPaymentService.initiatePayment(
-                origin: productId,
+            try await coinageService.initiateExternalPayment(
+                productId: productId,
                 paymentId: id.toHex(includePrefix: true),
                 amountInPlanks: amount,
                 destination: destination
@@ -51,18 +52,26 @@ extension ProductsNativeApi {
     }
 
     func subscribePaymentStatus(id: PaymentRequestId) async throws -> AnyAsyncSequence<HostPaymentStatus> {
-        let externalPaymentService = try requirePaymentsSupport().externalPaymentService
-        return try externalPaymentService.subscribePaymentStatus(
-            origin: productId,
+        let coinageService = try requirePaymentsSupport().coinageService
+        let statuses = coinageService.subscribeExternalPaymentStatus(
+            productId: productId,
             paymentId: id.toHex(includePrefix: true)
         )
-        .map { status in
-            switch status {
-            case .processing: .processing
-            case .completed: .completed
-            case let .partiallyCompleted(settled): .partiallyClaimed(settledInPlanks: settled)
-            case let .failed(reason): .failed(reason: reason)
+
+        return AsyncThrowingStream<HostPaymentStatus, Error> { continuation in
+            let task = Task {
+                do {
+                    for try await status in statuses {
+                        continuation.yield(HostPaymentStatus(status: status))
+                    }
+                    continuation.finish()
+                } catch ExternalPaymentError.notFound {
+                    continuation.finish(throwing: HostPaymentStatusError.notFound)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
             }
+            continuation.onTermination = { _ in task.cancel() }
         }
         .eraseToAnyAsyncSequence()
     }
@@ -153,10 +162,13 @@ private extension ProductsNativeApi {
         throw knowsBalance ? HostPaymentRequestError.insufficientBalance : HostPaymentRequestError.rejected
     }
 
-    /// Blanket consent to a privacy-leaking spend, shown for every preset but `minPrivacy` and never
-    /// allowlisted: after it the worker may use anything spendable on-chain.
+    /// Warns whenever private vouchers alone cannot pay — a voucher still gaining privacy or a coin
+    /// loaded just to be unloaded gives up privacy — unless the preset is `minPrivacy`. Not allowlisted.
     func awaitPrivacyConsentIfNeeded(amount: Balance) async throws {
-        guard PaymentPrivacyGate.requiresPrivacyConfirmation(strategy: recyclingStrategy.strategy) else { return }
+        guard recyclingStrategy.strategy != .minPrivacy else { return }
+
+        let coinageService = try requirePaymentsSupport().coinageService
+        guard try await !coinageService.canExecuteExternalPaymentPrivately(amount: amount) else { return }
 
         guard await paymentPrivacyConfirmer.confirmGainingPrivacySpend(amount: amount) else {
             throw HostPaymentRequestError.rejected
@@ -217,6 +229,17 @@ private extension HostPaymentTopUpError {
         case let .notFound(paymentId): self = .notFound(paymentId)
         case .unknown,
              .none: self = .unknown(reason: unknownReason)
+        }
+    }
+}
+
+private extension HostPaymentStatus {
+    init(status: ExternalPaymentStatus) {
+        switch status {
+        case .processing: self = .processing
+        case .completed: self = .completed
+        case let .partiallyCompleted(settled): self = .partiallyClaimed(settledInPlanks: settled)
+        case let .failed(reason): self = .failed(reason: reason)
         }
     }
 }

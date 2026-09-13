@@ -3,13 +3,14 @@ import Coinage
 
 enum TransferPreviewValidation {
     case coinage(TransferPreview)
-    /// External payments carry the strategy-driven consent flag: any preset but minPrivacy confirms.
-    case externalPayment(ExternalPaymentPreview, requiresPrivacyConfirmation: Bool)
+    /// External payments carry the amount (the preview holds only what is spent) and whether the
+    /// plan gives up privacy the user must confirm first.
+    case externalPayment(ExternalPaymentPreview, amount: BigUInt, requiresPrivacyConfirmation: Bool)
 
     var fullAmount: BigUInt {
         switch self {
         case let .coinage(preview): preview.fullAmount
-        case let .externalPayment(preview, _): preview.fullAmount
+        case let .externalPayment(_, amount, _): amount
         }
     }
 
@@ -17,7 +18,7 @@ enum TransferPreviewValidation {
     var requiresPrivacyConfirmation: Bool {
         switch self {
         case let .coinage(preview): preview.scope == .withConfirmation
-        case let .externalPayment(_, requiresPrivacyConfirmation): requiresPrivacyConfirmation
+        case let .externalPayment(_, _, requiresPrivacyConfirmation): requiresPrivacyConfirmation
         }
     }
 }

@@ -5,7 +5,7 @@ import SubstrateSdk
 @testable import Coinage
 
 /// Scripted planner: answers from `handler` when set, else from a FIFO queue, else `defaultResult`.
-/// Records every `(amount, mustInclude)` it was asked to plan.
+/// Records every amount it was asked to plan. `canPayPrivately` answers `privateAnswer`.
 final class StubExternalPaymentPlanner: ExternalPaymentPlanning, @unchecked Sendable {
     struct Failure: LocalizedError, Equatable {
         let message: String
@@ -17,12 +17,14 @@ final class StubExternalPaymentPlanner: ExternalPaymentPlanning, @unchecked Send
         var errorDescription: String? { message }
     }
 
-    typealias Handler = @Sendable (Balance, [Voucher]) -> Result<ExternalPaymentPreview, Error>
+    typealias Handler = @Sendable (Balance) -> Result<ExternalPaymentPreview, Error>
 
     private struct State {
         var queue: [Result<ExternalPaymentPreview, Error>] = []
         var defaultResult: Result<ExternalPaymentPreview, Error>
-        var calls: [(amount: Balance, mustInclude: [Voucher])] = []
+        var calls: [Balance] = []
+        var privateCalls: [Balance] = []
+        var privateAnswer: Result<Bool, Error> = .success(true)
         var handler: Handler?
         var blockUntilCancelled = false
     }
@@ -45,35 +47,42 @@ final class StubExternalPaymentPlanner: ExternalPaymentPlanning, @unchecked Send
         state.withLock { $0.handler = handler }
     }
 
+    func setPrivateAnswer(_ answer: Result<Bool, Error>) {
+        state.withLock { $0.privateAnswer = answer }
+    }
+
     /// Every plan call suspends until the surrounding task is cancelled.
     func blockUntilCancelled() {
         state.withLock { $0.blockUntilCancelled = true }
     }
 
-    var calls: [(amount: Balance, mustInclude: [Voucher])] {
-        state.withLock { $0.calls }
-    }
+    var calls: [Balance] { state.withLock { $0.calls } }
+    var privateCalls: [Balance] { state.withLock { $0.privateCalls } }
 
-    var amounts: [Balance] { calls.map(\.amount) }
-
-    func plan(
-        amount: Balance,
-        context _: DenominationBreakdownContext,
-        mustInclude: [Voucher]
-    ) async throws -> ExternalPaymentPreview {
+    func plan(amount: Balance, context _: DenominationBreakdownContext) async throws -> ExternalPaymentPreview {
         let (result, blocks) = state.withLock { state -> (Result<ExternalPaymentPreview, Error>, Bool) in
-            state.calls.append((amount, mustInclude))
+            state.calls.append(amount)
             if let handler = state.handler {
-                return (handler(amount, mustInclude), state.blockUntilCancelled)
+                return (handler(amount), state.blockUntilCancelled)
             }
             let next = state.queue.isEmpty ? state.defaultResult : state.queue.removeFirst()
             return (next, state.blockUntilCancelled)
         }
 
         if blocks {
-            try await Task.sleep(for: .seconds(60))
+            while !Task.isCancelled {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            throw CancellationError()
         }
 
         return try result.get()
+    }
+
+    func canPayPrivately(amount: Balance, context _: DenominationBreakdownContext) async throws -> Bool {
+        try state.withLock { state in
+            state.privateCalls.append(amount)
+            return try state.privateAnswer.get()
+        }
     }
 }

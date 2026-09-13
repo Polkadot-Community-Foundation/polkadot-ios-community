@@ -33,15 +33,24 @@ enum ExternalPaymentTestFactory {
         denomination.valueInPlanks(for: exponent)
     }
 
+    /// In a recycler with enough members and age to be usable under every preset.
     static func voucher(index: UInt64, exponent: Int16 = 3, inRecycler: Bool = true) -> Voucher {
         Voucher(
             exponent: exponent,
             derivationIndex: index,
             allocatedAt: Date(timeIntervalSince1970: 0),
             readyAt: .distantPast,
-            remoteState: inRecycler ? .inRecycler(Voucher.Recycler(index: 1, membersCount: 8)) : .unlocated,
+            remoteState: inRecycler
+                ? .inRecycler(Voucher.Recycler(index: 1, membersCount: 64, enteredAt: Date(timeIntervalSince1970: 0)))
+                : .unlocated,
             publicKey: Data(repeating: UInt8(truncatingIfNeeded: index), count: 32)
         )
+    }
+
+    /// In a nearly empty ring it just entered: gaining privacy under `balanced` and `maxPrivacy`.
+    static func gainingVoucher(index: UInt64, exponent: Int16 = 3) -> Voucher {
+        voucher(index: index, exponent: exponent)
+            .adjusting(state: .inRecycler(Voucher.Recycler(index: 1, membersCount: 1)))
     }
 
     static func tracked(_ voucher: Voucher, state: CoinageAssetState = freeState) -> TrackedVoucher {
@@ -63,30 +72,32 @@ enum ExternalPaymentTestFactory {
     }
 
     static func payment(
-        origin: String = "getcash.dot",
+        productId: String = "getcash.dot",
         paymentId: String = "0xaa",
         amount: Balance = planks(3),
         settled: Balance = 0,
         stage: ExternalPayment.Stage = .plan,
+        plannedVoucherIndices: [DerivationIndex] = [],
         createdAt: Date = Date()
     ) -> ExternalPayment {
         ExternalPayment(
-            origin: origin,
+            productId: productId,
             paymentId: paymentId,
             amountInPlanks: amount,
             destination: destination,
             settledInPlanks: settled,
             stage: stage,
+            plannedVoucherIndices: plannedVoucherIndices,
             createdAt: createdAt
         )
     }
 
-    static func selection(
-        vouchers: [Voucher] = [],
-        coins: [Coin] = [],
-        amount: Balance = planks(3)
-    ) -> ExternalPaymentPreview.Selection {
-        ExternalPaymentPreview.Selection(vouchers: vouchers, coins: coins, fullAmount: amount)
+    static func privatePreview(_ vouchers: [Voucher]) -> ExternalPaymentPreview {
+        .private(vouchers: vouchers.map { tracked($0) })
+    }
+
+    static func lowPrivacyPreview(vouchers: [Voucher], coins: [Coin] = []) -> ExternalPaymentPreview {
+        .lowPrivacy(vouchers: vouchers.map { tracked($0) }, coins: coins.map { tracked($0) })
     }
 
     static func recycleGroupId(for payment: ExternalPayment) -> CoinageTxGroupId {
@@ -94,7 +105,7 @@ enum ExternalPaymentTestFactory {
     }
 
     static func unloadGroupId(for payment: ExternalPayment) -> CoinageTxGroupId {
-        "external-payment:\(payment.id)"
+        payment.id
     }
 
     static func makeStateFactory(
@@ -121,18 +132,19 @@ enum ExternalPaymentTestFactory {
     }
 
     static func makeHarness(
-        store: InMemoryExternalPaymentStore = InMemoryExternalPaymentStore()
+        store: InMemoryExternalPaymentStore = InMemoryExternalPaymentStore(),
+        vouchers: [Voucher] = []
     ) -> ExternalPaymentHarness {
         let txService = StubGroupTxService()
         let recycler = StubCoinageRecyclingService()
         let planner = StubExternalPaymentPlanner()
         let coins = StubCoinService()
-        let vouchers = StubVoucherService()
+        let voucherService = StubVoucherService(vouchers: vouchers)
 
         let machineFactory = ExternalPaymentStateMachineFactory(
             instanceId: 0,
             planner: planner,
-            voucherService: vouchers,
+            voucherService: voucherService,
             recycler: recycler,
             voucherKeyFactory: StubVoucherKeyFactory(),
             voucherMinter: StubVoucherMinter(),
@@ -158,7 +170,7 @@ enum ExternalPaymentTestFactory {
             recycler: recycler,
             planner: planner,
             coins: coins,
-            vouchers: vouchers,
+            vouchers: voucherService,
             service: service
         )
     }

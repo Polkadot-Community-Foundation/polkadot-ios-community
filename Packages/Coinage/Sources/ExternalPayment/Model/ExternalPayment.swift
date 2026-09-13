@@ -10,15 +10,12 @@ public struct ExternalPayment: Equatable {
         case offboardVouchers = 2
         case completed = 3
         case failed = 4
-        /// Legacy (pre-v2 builds persisted a wakeup stage). Never written any more; restored as `plan`.
-        case rescheduled = 5
-        case partiallyCompleted = 6
+        case partiallyCompleted = 5
 
         public var isTerminal: Bool {
             switch self {
             case .completed,
                  .failed,
-                 .rescheduled,
                  .partiallyCompleted:
                 true
             case .plan,
@@ -29,83 +26,57 @@ public struct ExternalPayment: Equatable {
         }
     }
 
-    /// Storage identifier, always ``identifier(origin:paymentId:)`` for new records. Legacy rows
-    /// carry a bare UUID; the format is opaque to the state machine.
+    /// Storage identifier, always ``identifier(productId:paymentId:)``.
     public let id: String
-    public let origin: String
+    /// The product that owns `paymentId`; the in-app pay flow uses ``ExternalPayment/nativeProductId``.
+    public let productId: String
     public let paymentId: String
     public let amountInPlanks: Balance
     public let destination: AccountId
     /// Value delivered to `destination` by finalized unloads; set on completion and partial completion.
     public var settledInPlanks: Balance
     public var stage: Stage
+    /// Vouchers the current stage carries: the exact vouchers while onboarding, the vouchers to unload
+    /// while offboarding. Persisted so a relaunch resumes without re-planning.
+    public var plannedVoucherIndices: [DerivationIndex]
     public var failureReason: String?
-    public var readyAt: Date
     public let createdAt: Date
     public var updatedAt: Date
 
     public init(
-        origin: String,
+        productId: String,
         paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId,
         settledInPlanks: Balance = 0,
         stage: Stage = .plan,
+        plannedVoucherIndices: [DerivationIndex] = [],
         failureReason: String? = nil,
-        readyAt: Date = .init(),
         createdAt: Date = .init(),
         updatedAt: Date = .init()
     ) {
-        self.init(
-            id: Self.identifier(origin: origin, paymentId: paymentId),
-            origin: origin,
-            amountInPlanks: amountInPlanks,
-            destination: destination,
-            settledInPlanks: settledInPlanks,
-            stage: stage,
-            failureReason: failureReason,
-            readyAt: readyAt,
-            createdAt: createdAt,
-            updatedAt: updatedAt
-        )
-    }
-
-    /// Storage-side initializer: rebuilds the payment from its persisted identifier.
-    public init(
-        id: String,
-        origin: String,
-        amountInPlanks: Balance,
-        destination: AccountId,
-        settledInPlanks: Balance = 0,
-        stage: Stage = .plan,
-        failureReason: String? = nil,
-        readyAt: Date = .init(),
-        createdAt: Date = .init(),
-        updatedAt: Date = .init()
-    ) {
-        self.id = id
-        self.origin = origin
-        paymentId = Self.paymentId(fromIdentifier: id, origin: origin)
+        id = Self.identifier(productId: productId, paymentId: paymentId)
+        self.productId = productId
+        self.paymentId = paymentId
         self.amountInPlanks = amountInPlanks
         self.destination = destination
         self.settledInPlanks = settledInPlanks
         self.stage = stage
+        self.plannedVoucherIndices = plannedVoucherIndices
         self.failureReason = failureReason
-        self.readyAt = readyAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 }
 
 public extension ExternalPayment {
-    /// Identity is `(origin, paymentId)`: the same product-supplied id under two origins is two payments.
-    static func identifier(origin: String, paymentId: String) -> String {
-        "\(origin):\(paymentId)"
-    }
+    /// The product id the wallet's own pay flow registers under.
+    static let nativeProductId = "native-payment"
 
-    static func paymentId(fromIdentifier id: String, origin: String) -> String {
-        let prefix = "\(origin):"
-        return id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : id
+    /// Identity is `(productId, paymentId)`: the same product-supplied id under two products is two
+    /// payments. The prefix keeps the id unique among durability group ids as well.
+    static func identifier(productId: String, paymentId: String) -> String {
+        "external-payment:\(productId):\(paymentId)"
     }
 }
 

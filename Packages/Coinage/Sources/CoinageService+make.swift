@@ -318,6 +318,13 @@ public extension CoinageService {
             instanceId: instanceId,
             coinService: coinService,
             voucherService: voucherService,
+            assetClassifier: ExternalPaymentAssetClassifier(
+                settings: recyclingStrategySettings,
+                strategyResolver: recyclingStrategyResolver,
+                ringCapacityProvider: ringCapacityProvider,
+                preClassificator: preClassificator,
+                logger: logger
+            ),
             recycler: recyclingService,
             voucherKeyFactory: voucherKeypairFactory,
             voucherMinter: coinageMinter,

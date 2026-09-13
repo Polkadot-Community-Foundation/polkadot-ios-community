@@ -1,61 +1,33 @@
-import BigInt
 import Foundation
 
-/// The result of external payment planning, doubling as a preview before execution.
-public enum ExternalPaymentPreview {
-    /// Enough spendable vouchers to cover the amount.
-    case ready(Selection)
-
-    /// Not enough spendable vouchers, but spendable coins cover the deficit once recycled.
-    case loadCoins(Selection)
-
-    /// Permanent failure — what is spendable on-chain cannot cover the amount.
+/// What an external payment would spend, in the order the planner prefers: private vouchers alone,
+/// then any on-chain voucher plus coins recycled for the shortfall.
+public enum ExternalPaymentPreview: Equatable {
+    /// Private vouchers cover the amount; nothing gives up privacy.
+    case `private`(vouchers: [TrackedVoucher])
+    /// Vouchers still gaining privacy and/or coins loaded only to be unloaded: `vouchers` are
+    /// offboarded as they are, `coins` (possibly none) are recycled first.
+    case lowPrivacy(vouchers: [TrackedVoucher], coins: [TrackedCoin])
+    /// What the chain would accept cannot cover the amount.
     case notEnoughBalance
-}
 
-// MARK: - Selection
-
-public extension ExternalPaymentPreview {
-    /// Pre-computed selection of vouchers/coins.
-    struct Selection {
-        /// Vouchers selected for this payment (offboarding candidates for `.ready`; the exact
-        /// vouchers that must join the recycled ones for `.loadCoins`).
-        public let vouchers: [Voucher]
-        /// Coins selected for recycling (empty for `.ready`).
-        public let coins: [Coin]
-        /// The originally requested transfer amount.
-        public let fullAmount: BigUInt
-
-        public init(vouchers: [Voucher], coins: [Coin], fullAmount: BigUInt) {
-            self.vouchers = vouchers
-            self.coins = coins
-            self.fullAmount = fullAmount
-        }
+    public var isPrivate: Bool {
+        if case .private = self { return true }
+        return false
     }
-}
 
-// MARK: - Convenience
-
-public extension ExternalPaymentPreview {
-    var selection: Selection? {
+    public var vouchers: [TrackedVoucher] {
         switch self {
-        case let .ready(selection),
-             let .loadCoins(selection):
-            selection
+        case let .private(vouchers),
+             let .lowPrivacy(vouchers, _):
+            vouchers
         case .notEnoughBalance:
-            nil
+            []
         }
     }
 
-    var fullAmount: BigUInt { selection?.fullAmount ?? .zero }
-
-    var isExecutable: Bool {
-        switch self {
-        case .ready,
-             .loadCoins:
-            true
-        case .notEnoughBalance:
-            false
-        }
+    public var coins: [TrackedCoin] {
+        if case let .lowPrivacy(_, coins) = self { return coins }
+        return []
     }
 }

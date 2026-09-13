@@ -11,30 +11,41 @@ struct ExternalPaymentStateTests {
 
     // MARK: - Plan
 
-    @Test func planReadyMovesToOffboarding() async {
-        let planner =
-            StubExternalPaymentPlanner(defaultResult: .success(.ready(Factory.selection(vouchers: [voucher]))))
+    @Test func privatePlanMovesToOffboarding() async {
+        let planner = StubExternalPaymentPlanner(defaultResult: .success(Factory.privatePreview([voucher])))
         let factory = Factory.makeStateFactory(planner: planner)
 
         let next = await PlanPaymentState(payment: Factory.payment()).transit(with: factory)
+        let memo = await next.memo()
 
-        #expect(await next.memo().stage == .offboardVouchers)
-        #expect(!next.isTerminal)
-        #expect(planner.calls.first?.mustInclude.isEmpty == true)
+        #expect(memo.stage == .offboardVouchers)
+        #expect(memo.plannedVoucherIndices == [1])
     }
 
-    @Test func planLoadCoinsMovesToOnboardingWithExactVouchers() async {
-        let selection = Factory.selection(vouchers: [voucher], coins: [coin], amount: Factory.planks(4))
-        let planner = StubExternalPaymentPlanner(defaultResult: .success(.loadCoins(selection)))
+    @Test func lowPrivacyPlanWithoutCoinsMovesToOffboarding() async {
+        let planner =
+            StubExternalPaymentPlanner(defaultResult: .success(Factory.lowPrivacyPreview(vouchers: [voucher])))
+        let factory = Factory.makeStateFactory(planner: planner)
+
+        let memo = await PlanPaymentState(payment: Factory.payment()).transit(with: factory).memo()
+
+        #expect(memo.stage == .offboardVouchers)
+        #expect(memo.plannedVoucherIndices == [1])
+    }
+
+    @Test func lowPrivacyPlanWithCoinsMovesToOnboardingWithExactVouchers() async {
+        let preview = Factory.lowPrivacyPreview(vouchers: [voucher], coins: [coin])
+        let planner = StubExternalPaymentPlanner(defaultResult: .success(preview))
         let recycler = StubCoinageRecyclingService()
         let payment = Factory.payment(amount: Factory.planks(4))
-        recycler.script(groupId: Factory.recycleGroupId(for: payment), statuses: [])
         let factory = Factory.makeStateFactory(planner: planner, recycler: recycler)
 
         let next = await PlanPaymentState(payment: payment).transit(with: factory)
-        #expect(await next.memo().stage == .onboardCoins)
+        let memo = await next.memo()
+        #expect(memo.stage == .onboardCoins)
+        #expect(memo.plannedVoucherIndices == [1])
 
-        // Driving the onboarding state proves it carries the exact vouchers and coins of the plan.
+        // Driving the onboarding state proves it carries the coins of the plan.
         _ = await next.transit(with: factory)
         #expect(recycler.submissions == [.init(coins: [coin], groupId: Factory.recycleGroupId(for: payment))])
     }
@@ -46,7 +57,7 @@ struct ExternalPaymentStateTests {
         let memo = await PlanPaymentState(payment: Factory.payment()).transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
-        #expect(memo.failureReason == "Insufficient balance")
+        #expect(memo.failureReason == "insufficient balance")
     }
 
     @Test func planThrowFailsWithoutRetry() async {
@@ -61,21 +72,9 @@ struct ExternalPaymentStateTests {
         #expect(memo.failureReason == "rpc")
     }
 
-    @Test func cancellationKeepsTheStage() async {
-        let planner = StubExternalPaymentPlanner(defaultResult: .failure(CancellationError()))
-        let factory = Factory.makeStateFactory(planner: planner)
-
-        let next = await PlanPaymentState(payment: Factory.payment()).transit(with: factory)
-        let memo = await next.memo()
-
-        #expect(next.isTerminal)
-        #expect(memo.stage == .plan)
-        #expect(memo.failureReason == nil)
-    }
-
     // MARK: - Onboard coins
 
-    @Test func onboardWaitsForRecyclingThenOffboardsWhenSufficient() async {
+    @Test func onboardWaitsForRecyclingThenOffboardsExactPlusRecycled() async {
         let exact = Factory.voucher(index: 1, exponent: 2)
         let recycled = Factory.voucher(index: 2, exponent: 3)
         let payment = Factory.payment(amount: Factory.planks(3) + Factory.planks(2))
@@ -86,6 +85,7 @@ struct ExternalPaymentStateTests {
             statuses: [.pending, .allRecycled(vouchers: [Factory.tracked(recycled)], finalized: false)]
         )
         let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.pendingSuccess])
         let factory = Factory.makeStateFactory(
             planner: StubExternalPaymentPlanner(),
             recycler: recycler,
@@ -93,10 +93,12 @@ struct ExternalPaymentStateTests {
             vouchers: [exact, recycled]
         )
 
-        let next = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVouchers: [exact])
+        let next = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVoucherIndices: [1])
             .transit(with: factory)
+        let memo = await next.memo()
 
-        #expect(await next.memo().stage == .offboardVouchers)
+        #expect(memo.stage == .offboardVouchers)
+        #expect(memo.plannedVoucherIndices == [1, 2])
         #expect(recycler.submissions == [.init(coins: [coin], groupId: groupId)])
         _ = await next.transit(with: factory)
         #expect(txService.registrations == [Factory.unloadGroupId(for: payment)])
@@ -105,29 +107,41 @@ struct ExternalPaymentStateTests {
     @Test func onboardFailsWhenRecycledVouchersStillFallShort() async {
         let payment = Factory.payment(amount: Factory.planks(5))
         let recycler = StubCoinageRecyclingService()
+        let groupId = Factory.recycleGroupId(for: payment)
         recycler.script(
-            groupId: Factory.recycleGroupId(for: payment),
+            groupId: groupId,
             statuses: [.allRecycled(
                 vouchers: [Factory.tracked(Factory.voucher(index: 2, exponent: 2))],
                 finalized: true
             )]
         )
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), recycler: recycler)
+        let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.finalizedSuccess])
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(), recycler: recycler, txService: txService, vouchers: [voucher]
+        )
 
-        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVouchers: [voucher])
+        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVoucherIndices: [1])
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
-        #expect(memo.failureReason == "insufficient after recycling")
+        #expect(memo.failureReason == "insufficient balance after recycling")
     }
 
     @Test func onboardFailsOnIncompleteRecyclingWithoutRetry() async {
         let payment = Factory.payment()
         let recycler = StubCoinageRecyclingService()
-        recycler.script(groupId: Factory.recycleGroupId(for: payment), statuses: [.pending, .incomplete])
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), recycler: recycler)
+        let groupId = Factory.recycleGroupId(for: payment)
+        recycler.script(groupId: groupId, statuses: [.pending, .incomplete])
+        let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.failure])
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            recycler: recycler,
+            txService: txService
+        )
 
-        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVouchers: [])
+        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVoucherIndices: [])
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -138,10 +152,17 @@ struct ExternalPaymentStateTests {
     @Test func onboardFailsWhenTheStreamEndsWithoutAVerdict() async {
         let payment = Factory.payment()
         let recycler = StubCoinageRecyclingService()
-        recycler.script(groupId: Factory.recycleGroupId(for: payment), statuses: [.pending])
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), recycler: recycler)
+        let groupId = Factory.recycleGroupId(for: payment)
+        recycler.script(groupId: groupId, statuses: [.pending])
+        let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.pending])
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            recycler: recycler,
+            txService: txService
+        )
 
-        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVouchers: [voucher])
+        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVoucherIndices: [1])
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -152,16 +173,27 @@ struct ExternalPaymentStateTests {
         recycler.setError(StubExternalPaymentPlanner.Failure("recycle"))
         let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), recycler: recycler)
 
-        let memo = await OnboardCoinsPaymentState(payment: Factory.payment(), coins: [coin], exactVouchers: [voucher])
+        let memo = await OnboardCoinsPaymentState(payment: Factory.payment(), coins: [coin], exactVoucherIndices: [1])
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
         #expect(memo.failureReason == "recycle")
     }
 
-    @Test func onboardReentryRejoinsTheGroupAndReplansAroundRecycledVouchers() async {
+    @Test func onboardFailsWhenNothingWasRegistered() async {
+        // Every coin's preparation failed: the recycler submitted nothing and no group exists.
+        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner())
+
+        let memo = await OnboardCoinsPaymentState(payment: Factory.payment(), coins: [coin], exactVoucherIndices: [1])
+            .transit(with: factory).memo()
+
+        #expect(memo.stage == .failed)
+        #expect(memo.failureReason == "recycling submission failed")
+    }
+
+    @Test func onboardReentryRejoinsTheGroupAndOffboardsThePersistedSelection() async {
         let recycled = Factory.voucher(index: 2)
-        let payment = Factory.payment()
+        let payment = Factory.payment(amount: Factory.planks(3) + Factory.planks(3))
         let recycler = StubCoinageRecyclingService()
         let groupId = Factory.recycleGroupId(for: payment)
         recycler.markExisting(groupId)
@@ -169,29 +201,45 @@ struct ExternalPaymentStateTests {
             groupId: groupId,
             statuses: [.allRecycled(vouchers: [Factory.tracked(recycled)], finalized: true)]
         )
+        let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.finalizedSuccess])
         let planner = StubExternalPaymentPlanner()
-        planner.setHandler { amount, mustInclude in
-            mustInclude.map(\.derivationIndex) == [2]
-                ? .success(.ready(Factory.selection(vouchers: mustInclude, amount: amount)))
-                : .failure(StubExternalPaymentPlanner.Failure("unexpected plan"))
-        }
-        let factory = Factory.makeStateFactory(planner: planner, recycler: recycler)
+        let factory = Factory.makeStateFactory(
+            planner: planner, recycler: recycler, txService: txService, vouchers: [voucher, recycled]
+        )
 
-        let next = await OnboardCoinsPaymentState(payment: payment, coins: [], exactVouchers: []).transit(with: factory)
+        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [], exactVoucherIndices: [1])
+            .transit(with: factory).memo()
 
-        #expect(await next.memo().stage == .offboardVouchers)
+        #expect(memo.stage == .offboardVouchers)
+        #expect(memo.plannedVoucherIndices == [1, 2])
         #expect(recycler.submissions.isEmpty)
-        #expect(planner.calls.count == 1)
+        #expect(planner.calls.isEmpty)
+    }
+
+    @Test func onboardReentryWithoutARegisteredGroupPlansAgain() async {
+        let planner = StubExternalPaymentPlanner()
+        let factory = Factory.makeStateFactory(planner: planner)
+
+        let memo = await OnboardCoinsPaymentState(payment: Factory.payment(), coins: [], exactVoucherIndices: [1])
+            .transit(with: factory).memo()
+
+        #expect(memo.stage == .plan)
+        #expect(planner.calls.isEmpty)
     }
 
     // MARK: - Offboard vouchers
 
     @Test func offboardSuccessCompletesWithFullSettlement() async {
         let txService = StubGroupTxService()
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            txService: txService,
+            vouchers: [voucher]
+        )
         let payment = Factory.payment()
 
-        let memo = await OffboardVouchersPaymentState(payment: payment, vouchers: [voucher]).transit(with: factory)
+        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1]).transit(with: factory)
             .memo()
 
         #expect(memo.stage == .completed)
@@ -210,7 +258,7 @@ struct ExternalPaymentStateTests {
         )
         let payment = Factory.payment(amount: Factory.planks(3) + Factory.planks(2))
 
-        let next = await OffboardVouchersPaymentState(payment: payment, vouchers: vouchers).transit(with: factory)
+        let next = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1, 2]).transit(with: factory)
         let memo = await next.memo()
 
         #expect(next.isTerminal)
@@ -222,9 +270,13 @@ struct ExternalPaymentStateTests {
     @Test func offboardFailedOutcomeIsAVerdict() async {
         let txService = StubGroupTxService()
         txService.setOutcome(.failure)
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            txService: txService,
+            vouchers: [voucher]
+        )
 
-        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), vouchers: [voucher])
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -234,46 +286,63 @@ struct ExternalPaymentStateTests {
     @Test func offboardSubmissionErrorFailsWithoutRetry() async {
         let txService = StubGroupTxService()
         txService.setSubmitError(StubExternalPaymentPlanner.Failure("submit"))
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            txService: txService,
+            vouchers: [voucher]
+        )
 
-        let next = await OffboardVouchersPaymentState(payment: Factory.payment(), vouchers: [voucher])
-            .transit(with: factory)
-        let memo = await next.memo()
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
+            .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
         #expect(memo.failureReason == "submit")
     }
 
-    @Test func offboardEmptyPlanFailsInsteadOfReplanning() async {
+    @Test func offboardWithUnknownVouchersFails() async {
         let txService = StubGroupTxService()
         let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
 
-        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), vouchers: []).transit(with: factory)
-            .memo()
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
+            .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
         #expect(txService.registrations.isEmpty)
     }
 
-    @Test func offboardRejoinsPendingGroupWithoutRegisteringAgain() async {
+    @Test func offboardRejoinsARegisteredGroupWithoutRegisteringAgain() async {
         let txService = StubGroupTxService()
         let payment = Factory.payment()
         txService.seedGroup(Factory.unloadGroupId(for: payment), statuses: [.finalizedSuccess])
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
+        let factory = Factory.makeStateFactory(
+            planner: StubExternalPaymentPlanner(),
+            txService: txService,
+            vouchers: [voucher]
+        )
 
-        let memo = await OffboardVouchersPaymentState(payment: payment, vouchers: []).transit(with: factory).memo()
+        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1]).transit(with: factory)
+            .memo()
 
         #expect(memo.stage == .completed)
         #expect(txService.registrations.isEmpty)
     }
 
-    @Test func memoRestoreMapsLegacyAndMidFlightStages() async {
+    @Test func memoRestoreCarriesTheStageAndItsVouchers() async {
         let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner())
 
-        #expect(await factory.stateFromMemo(payment: Factory.payment(stage: .rescheduled)).memo().stage == .plan)
-        #expect(await factory.stateFromMemo(payment: Factory.payment(stage: .onboardCoins)).memo()
-            .stage == .onboardCoins)
-        #expect(await factory.stateFromMemo(payment: Factory.payment(stage: .offboardVouchers)).memo()
-            .stage == .offboardVouchers)
+        let onboard = await factory.stateFromMemo(payment: Factory.payment(
+            stage: .onboardCoins,
+            plannedVoucherIndices: [3]
+        )).memo()
+        let offboard = await factory.stateFromMemo(payment: Factory.payment(
+            stage: .offboardVouchers,
+            plannedVoucherIndices: [4]
+        )).memo()
+
+        #expect(onboard.stage == .onboardCoins)
+        #expect(onboard.plannedVoucherIndices == [3])
+        #expect(offboard.stage == .offboardVouchers)
+        #expect(offboard.plannedVoucherIndices == [4])
+        #expect(await factory.stateFromMemo(payment: Factory.payment(stage: .plan)).memo().stage == .plan)
     }
 }

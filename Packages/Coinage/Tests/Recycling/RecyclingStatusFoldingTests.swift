@@ -22,13 +22,13 @@ struct RecyclingStatusFoldingTests {
 
     private let vouchers = StubVoucherService(vouchers: [Factory.voucher(index: 1), Factory.voucher(index: 2)])
 
-    @Test func emptyOrLiveIsPending() async throws {
+    @Test func emptyOrUnincludedIsPending() async throws {
         #expect(try await RecyclingStatusFolder.fold(entries: [], voucherService: vouchers) == .pending)
         let mixed = [entry(status: .finalizedSuccess, mintedIndex: 1), entry(status: .pending, mintedIndex: 2)]
         #expect(try await RecyclingStatusFolder.fold(entries: mixed, voucherService: vouchers) == .pending)
     }
 
-    @Test func allExecutedIsAllRecycledWithMintedVouchers() async throws {
+    @Test func bestBlockInclusionIsAllRecycledWithTheMintedVouchers() async throws {
         let entries = [entry(status: .pendingSuccess, mintedIndex: 1), entry(status: .finalizedSuccess, mintedIndex: 2)]
 
         let status = try await RecyclingStatusFolder.fold(entries: entries, voucherService: vouchers)
@@ -49,8 +49,19 @@ struct RecyclingStatusFoldingTests {
         #expect(status == .allRecycled(vouchers: [Factory.tracked(Factory.voucher(index: 1))], finalized: true))
     }
 
-    @Test func aFailureWithNothingLiveIsIncomplete() async throws {
-        let entries = [entry(status: .failure, mintedIndex: 1), entry(status: .finalizedSuccess, mintedIndex: 2)]
+    @Test func aMintedVoucherNotYetSeenInItsRecyclerKeepsPending() async throws {
+        let notLocated = StubVoucherService(vouchers: [Factory.voucher(index: 1, inRecycler: false)])
+        let entries = [entry(status: .finalizedSuccess, mintedIndex: 1)]
+
+        #expect(try await RecyclingStatusFolder.fold(entries: entries, voucherService: notLocated) == .pending)
+        #expect(try await RecyclingStatusFolder.fold(
+            entries: [entry(status: .finalizedSuccess, mintedIndex: 9)],
+            voucherService: vouchers
+        ) == .pending)
+    }
+
+    @Test func aFailureIsIncomplete() async throws {
+        let entries = [entry(status: .failure, mintedIndex: 1), entry(status: .pending, mintedIndex: 2)]
 
         #expect(try await RecyclingStatusFolder.fold(entries: entries, voucherService: vouchers) == .incomplete)
     }

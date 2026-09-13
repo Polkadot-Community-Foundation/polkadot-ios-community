@@ -3,45 +3,29 @@ import Testing
 @testable import Coinage
 
 struct ExternalPaymentModelTests {
-    private typealias Factory = ExternalPaymentTestFactory
+    @Test func identityIsScopedByProduct() {
+        let one = ExternalPaymentTestFactory.payment(productId: "getcash.dot", paymentId: "0xaa")
+        let other = ExternalPaymentTestFactory.payment(productId: "other.dot", paymentId: "0xaa")
 
-    @Test func identityIsOriginScoped() {
-        let first = Factory.payment(origin: "getcash.dot", paymentId: "0x01")
-        let second = Factory.payment(origin: "other.dot", paymentId: "0x01")
-
-        #expect(first.id == "getcash.dot:0x01")
-        #expect(first.id != second.id)
-        #expect(first.paymentId == second.paymentId)
-    }
-
-    @Test func paymentIdIsRecoveredFromIdentifier() {
-        let restored = ExternalPayment(
-            id: "getcash.dot:0x01", origin: "getcash.dot", amountInPlanks: 1, destination: Factory.destination
-        )
-        let legacy = ExternalPayment(
-            id: "6F1E4A0C-LEGACY", origin: "5Recipient", amountInPlanks: 1, destination: Factory.destination
-        )
-
-        #expect(restored.paymentId == "0x01")
-        #expect(legacy.paymentId == "6F1E4A0C-LEGACY")
-        #expect(legacy.settledInPlanks == 0)
+        #expect(one.id == "external-payment:getcash.dot:0xaa")
+        #expect(one.id != other.id)
+        #expect(one.productId == "getcash.dot")
+        #expect(one.paymentId == "0xaa")
     }
 
     @Test func terminalStages() {
-        let terminal: Set<ExternalPayment.Stage> = [.completed, .failed, .rescheduled, .partiallyCompleted]
-
-        for stage in [ExternalPayment.Stage.plan, .onboardCoins, .offboardVouchers, .completed, .failed,
-                      .rescheduled, .partiallyCompleted] {
-            #expect(stage.isTerminal == terminal.contains(stage), "\(stage)")
-        }
+        #expect(ExternalPayment.Stage.completed.isTerminal)
+        #expect(ExternalPayment.Stage.failed.isTerminal)
+        #expect(ExternalPayment.Stage.partiallyCompleted.isTerminal)
+        #expect(!ExternalPayment.Stage.plan.isTerminal)
+        #expect(!ExternalPayment.Stage.onboardCoins.isTerminal)
+        #expect(!ExternalPayment.Stage.offboardVouchers.isTerminal)
     }
 
-    @Test func legacyRescheduledRowRestoresAsPlan() async {
-        let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner())
-
-        let restored = factory.stateFromMemo(payment: Factory.payment(stage: .rescheduled))
-
-        #expect(!restored.isTerminal)
-        #expect(await restored.memo().stage == .plan)
+    @Test func nonTerminalStagesPrecedeTerminalOnes() {
+        // The store's non-terminal query is `stage < completed`.
+        let terminal = ExternalPayment.Stage.completed.rawValue
+        #expect([ExternalPayment.Stage.plan, .onboardCoins, .offboardVouchers].allSatisfy { $0.rawValue < terminal })
+        #expect([ExternalPayment.Stage.failed, .partiallyCompleted].allSatisfy { $0.rawValue >= terminal })
     }
 }

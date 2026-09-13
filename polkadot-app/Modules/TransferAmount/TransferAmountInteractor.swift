@@ -100,11 +100,11 @@ extension TransferAmountInteractor: TransferAmountInteractorInputProtocol {
             return .coinage(preview)
         case .externalPayment:
             let preview = try await coinageService.previewExternalPayment(for: planks)
+            // Same rule as product payments: warn unless the plan is private or the preset is minPrivacy.
             return .externalPayment(
                 preview,
-                requiresPrivacyConfirmation: PaymentPrivacyGate.requiresPrivacyConfirmation(
-                    strategy: recyclingStrategy.strategy
-                )
+                amount: planks,
+                requiresPrivacyConfirmation: recyclingStrategy.strategy != .minPrivacy && !preview.isPrivate
             )
         }
     }
@@ -118,8 +118,8 @@ extension TransferAmountInteractor: TransferAmountInteractorInputProtocol {
                 switch validation {
                 case let .coinage(preview):
                     try await confirmCoinageTransfer(preview: preview)
-                case let .externalPayment(preview, _):
-                    try await confirmExternalPayment(preview: preview)
+                case let .externalPayment(_, amount, _):
+                    try await confirmExternalPayment(amount: amount)
                 }
             } catch {
                 logger?.error("Did fail transfer: \(error)")
@@ -183,22 +183,22 @@ private extension TransferAmountInteractor {
 // MARK: - External Payment
 
 private extension TransferAmountInteractor {
-    /// Reaches here only after the presenter's privacy confirmation when the preset requires one.
-    func confirmExternalPayment(preview: ExternalPaymentPreview) async throws {
-        let origin = try recipient.accountId.toAddress(using: .genericFormat)
+    /// Reaches here only after the presenter's privacy confirmation when the plan requires one.
+    func confirmExternalPayment(amount: BigUInt) async throws {
+        let productId = ExternalPayment.nativeProductId
         let paymentId = try Data.randomOrError(of: 32).toHex(includePrefix: true)
 
         try await coinageService.initiateExternalPayment(
-            origin: origin,
+            productId: productId,
             paymentId: paymentId,
-            amountInPlanks: preview.fullAmount,
+            amountInPlanks: amount,
             destination: recipient.accountId
         )
 
         // Completion and failure are observed by the presenter through the
         // lifecycle stream — initiation success is enough to return here.
         lifecycleReporter.start(
-            with: .externalPayment(origin: origin, paymentId: paymentId, amountInPlanks: preview.fullAmount)
+            with: .externalPayment(productId: productId, paymentId: paymentId, amountInPlanks: amount)
         )
     }
 }

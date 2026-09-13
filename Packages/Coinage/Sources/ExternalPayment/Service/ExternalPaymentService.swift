@@ -5,6 +5,7 @@ import Foundation
 import KeyDerivation
 import SDKLogger
 import StateMachine
+import StructuredConcurrency
 import SubstrateSdk
 import SubstrateOperation
 
@@ -13,6 +14,7 @@ struct ExternalPaymentDependency {
     let instanceId: CoinageInstanceId
     let coinService: CoinServiceProtocol
     let voucherService: VoucherServiceProtocol
+    let assetClassifier: ExternalPaymentAssetClassifier
     let recycler: CoinageRecyclingServicing
     let voucherKeyFactory: any VoucherKeyDeriving
     let voucherMinter: any VoucherMinting
@@ -22,41 +24,13 @@ struct ExternalPaymentDependency {
     let originFactory: OriginCreating
     let quotaTracker: any UnloadQuotaTracking
     let blockNumberProvider: BlockInfoProviding
-
-    init(
-        instanceId: CoinageInstanceId,
-        coinService: CoinServiceProtocol,
-        voucherService: VoucherServiceProtocol,
-        recycler: CoinageRecyclingServicing,
-        voucherKeyFactory: any VoucherKeyDeriving,
-        voucherMinter: any VoucherMinting,
-        recyclerLoader: RecyclerReadinessLoading,
-        extrinsicMonitor: ExtrinsicSubmitMonitorFactoryProtocol,
-        durability: any CoinageTxServicing,
-        originFactory: OriginCreating,
-        quotaTracker: any UnloadQuotaTracking,
-        blockNumberProvider: BlockInfoProviding
-    ) {
-        self.instanceId = instanceId
-        self.coinService = coinService
-        self.voucherService = voucherService
-        self.recycler = recycler
-        self.voucherKeyFactory = voucherKeyFactory
-        self.voucherMinter = voucherMinter
-        self.recyclerLoader = recyclerLoader
-        self.extrinsicMonitor = extrinsicMonitor
-        self.durability = durability
-        self.originFactory = originFactory
-        self.quotaTracker = quotaTracker
-        self.blockNumberProvider = blockNumberProvider
-    }
 }
 
 /// Manages the lifecycle of external payments.
 ///
-/// Previews payments via the planner, initiates by persisting to the store, and processes
-/// non-terminal payments sequentially via the state machine. Every run ends in a persisted verdict:
-/// there is no retry and no reschedule — the product gets a terminal answer from one pass.
+/// Previews payments via the planner, registers them one at a time, and processes non-terminal
+/// payments sequentially via the state machine. Every run ends in a persisted verdict: there is no
+/// retry and no reschedule — the product gets a terminal answer from one pass.
 final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendable {
     let store: ExternalPaymentStoring
     let planner: ExternalPaymentPlanning
@@ -64,7 +38,8 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
     let context: ExternalPaymentContext
     let logger: SDKLoggerProtocol?
 
-    private let registrar: ExternalPaymentRegistrar
+    /// Serializes check-then-save so two racing initiations for the same identity cannot both succeed.
+    private let registrationQueue = SerialOperationQueue()
     private var observeTask: Task<Void, Never>?
 
     convenience init(
@@ -74,7 +49,8 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
     ) {
         let planner = ExternalPaymentPlanner(
             coinService: dependency.coinService,
-            voucherService: dependency.voucherService
+            voucherService: dependency.voucherService,
+            classifier: dependency.assetClassifier
         )
         let stateMachineFactory = ExternalPaymentStateMachineFactory(
             instanceId: dependency.instanceId,
@@ -106,18 +82,24 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
         self.stateMachineFactory = stateMachineFactory
         self.logger = logger
         context = ExternalPaymentContext(logger: logger)
-        registrar = ExternalPaymentRegistrar(store: store)
     }
 
     func previewPayment(
         for amount: Balance,
         context: DenominationBreakdownContext
     ) async throws -> ExternalPaymentPreview {
-        try await planner.plan(amount: amount, context: context, mustInclude: [])
+        try await planner.plan(amount: amount, context: context)
+    }
+
+    func canExecuteExternalPaymentPrivately(
+        amount: Balance,
+        context: DenominationBreakdownContext
+    ) async throws -> Bool {
+        try await planner.canPayPrivately(amount: amount, context: context)
     }
 
     func initiatePayment(
-        origin: String,
+        productId: String,
         paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
@@ -127,24 +109,30 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
         }
 
         let payment = ExternalPayment(
-            origin: origin,
+            productId: productId,
             paymentId: paymentId,
             amountInPlanks: amountInPlanks,
             destination: destination
         )
 
-        try await registrar.register(payment)
+        try await registrationQueue.run { [store] in
+            guard try await store.fetchPayment(byId: payment.id) == nil else {
+                throw ExternalPaymentError.alreadyExists
+            }
+
+            try await store.save(payment: payment)
+        }
     }
 
     func subscribePaymentStatus(
-        origin: String,
+        productId: String,
         paymentId: String
-    ) throws -> AnyAsyncSequence<ExternalPaymentStatus> {
-        let id = ExternalPayment.identifier(origin: origin, paymentId: paymentId)
+    ) -> AnyAsyncSequence<ExternalPaymentStatus> {
+        let id = ExternalPayment.identifier(productId: productId, paymentId: paymentId)
 
         return store.observePayment(id: id)
             .map { payment -> ExternalPaymentStatus in
-                guard let payment else { return .failed(reason: "unknown payment") }
+                guard let payment else { throw ExternalPaymentError.notFound }
                 return payment.status
             }
             .removeDuplicates()
@@ -154,37 +142,13 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
     func setup(with context: DenominationBreakdownContext) {
         startObservation(with: context)
     }
-
-    func throttle() {
-        observeTask?.cancel()
-        observeTask = nil
-        Task { [context] in await context.cancelAll() }
-    }
-}
-
-// MARK: - Registration
-
-/// Serializes check-then-save so two racing initiations for the same identity cannot both succeed.
-private actor ExternalPaymentRegistrar {
-    private let store: ExternalPaymentStoring
-
-    init(store: ExternalPaymentStoring) {
-        self.store = store
-    }
-
-    func register(_ payment: ExternalPayment) async throws {
-        guard try await store.fetchPayment(byId: payment.id) == nil else {
-            throw ExternalPaymentError.alreadyExists
-        }
-
-        try await store.save(payment: payment)
-    }
 }
 
 // MARK: - Processing
 
 private extension ExternalPaymentService {
     func startObservation(with denominationContext: DenominationBreakdownContext) {
+        observeTask?.cancel()
         observeTask = Task { [store, context, logger, weak self] in
             do {
                 for try await payments in store.observeNonTerminalPayments() {
@@ -232,8 +196,7 @@ private extension ExternalPayment {
         switch stage {
         case .plan,
              .onboardCoins,
-             .offboardVouchers,
-             .rescheduled:
+             .offboardVouchers:
             .processing
         case .completed:
             .completed

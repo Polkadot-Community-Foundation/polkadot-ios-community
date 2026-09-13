@@ -66,11 +66,18 @@ extension ExternalPaymentStateFactory {
     }
 
     func makeOnboardCoinsState(payment: ExternalPayment, coins: [Coin], exactVouchers: [Voucher]) -> ErasedState {
-        AnyStateMachineState(OnboardCoinsPaymentState(payment: payment, coins: coins, exactVouchers: exactVouchers))
+        AnyStateMachineState(OnboardCoinsPaymentState(
+            payment: payment,
+            coins: coins,
+            exactVoucherIndices: exactVouchers.map(\.derivationIndex)
+        ))
     }
 
     func makeOffboardVouchersState(payment: ExternalPayment, vouchers: [Voucher]) -> ErasedState {
-        AnyStateMachineState(OffboardVouchersPaymentState(payment: payment, vouchers: vouchers))
+        AnyStateMachineState(OffboardVouchersPaymentState(
+            payment: payment,
+            voucherIndices: vouchers.map(\.derivationIndex)
+        ))
     }
 
     func makeCompletedState(payment: ExternalPayment) -> ErasedState {
@@ -90,33 +97,23 @@ extension ExternalPaymentStateFactory {
         return AnyStateMachineState(PartiallyCompletedPaymentState(payment: payment, reason: reason))
     }
 
-    /// Cancellation is not a verdict: keep `stage` so the next launch resumes the payment.
-    func makeInterruptedState(payment: ExternalPayment, stage: ExternalPayment.Stage) -> ErasedState {
-        AnyStateMachineState(InterruptedPaymentState(payment: payment, stage: stage))
-    }
-
-    /// Failure verdict, except for cancellation, which keeps the stage for the next launch.
-    func makeFailedState(payment: ExternalPayment, stage: ExternalPayment.Stage, error: Error) -> ErasedState {
-        error is CancellationError
-            ? makeInterruptedState(payment: payment, stage: stage)
-            : makeFailedState(payment: payment, reason: error.localizedDescription)
-    }
-
-    /// Restores a state from a persisted ``ExternalPayment`` memo.
+    /// Restores a state from a persisted ``ExternalPayment`` memo. Mid-flight stages carry their
+    /// vouchers in the memo; the states re-join the durability groups they registered.
     func stateFromMemo(payment: ExternalPayment) -> ErasedState {
         switch payment.stage {
-        case .plan,
-             .rescheduled:
+        case .plan:
             makePlanState(payment: payment)
         case .onboardCoins:
-            // The first run's exact selection is not persisted: the state re-joins the recycling group
-            // it registered (or re-plans if nothing was registered) and re-plans around the recycled
-            // vouchers once they land.
-            makeOnboardCoinsState(payment: payment, coins: [], exactVouchers: [])
+            AnyStateMachineState(OnboardCoinsPaymentState(
+                payment: payment,
+                coins: [],
+                exactVoucherIndices: payment.plannedVoucherIndices
+            ))
         case .offboardVouchers:
-            // Re-enter offboarding with no plan-carried vouchers: the service re-joins the durability
-            // group this payment already registered and awaits its real outcome.
-            makeOffboardVouchersState(payment: payment, vouchers: [])
+            AnyStateMachineState(OffboardVouchersPaymentState(
+                payment: payment,
+                voucherIndices: payment.plannedVoucherIndices
+            ))
         case .completed:
             makeCompletedState(payment: payment)
         case .failed:

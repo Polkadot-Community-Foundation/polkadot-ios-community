@@ -62,18 +62,4 @@ struct ExternalPaymentContextTests {
 
         #expect(await context.currentPaymentId == "a")
     }
-
-    @Test func cancelAllClearsCurrentAndQueue() async {
-        let context = ExternalPaymentContext()
-        let starts = Starts()
-
-        await context.scheduleIfNeeded(paymentId: "a", onExecute: starts.execute("a"))
-        await context.scheduleIfNeeded(paymentId: "b", onExecute: starts.execute("b"))
-        await context.cancelAll()
-
-        #expect(await context.currentPaymentId == nil)
-
-        await context.scheduleIfNeeded(paymentId: "c", onExecute: starts.execute("c"))
-        #expect(starts.ids == ["a", "c"])
-    }
 }

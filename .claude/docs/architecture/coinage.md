@@ -62,48 +62,27 @@ Transfer plans determine how coins are spent:
 
 ## External Payments (offramp)
 
-`Packages/Coinage/Sources/ExternalPayment/` moves CASH out of the wallet on behalf of a product
-(`getcash` withdraw) or the in-app pay deeplink. Persisted as `ExternalPayment` rows
-(`CDExternalPayment`, `ExternalPaymentMapper`, CoreData v47 adds `settledInPlanks`) and driven by a
-persist-per-transition state machine: `Plan → OffboardVouchers` when spendable vouchers cover the
-amount, `Plan → OnboardCoins → OffboardVouchers` when coins must be recycled first, ending in
-`Completed / PartiallyCompleted / Failed`.
+`Packages/Coinage/Sources/ExternalPayment/` moves CASH to a destination account for a product
+(`getcash` withdraw) or the in-app pay flow (`ExternalPayment.nativeProductId`). Rows are
+`ExternalPayment` (`CDExternalPayment`, CoreData v47) keyed `external-payment:<productId>:<paymentId>`;
+registration goes through a `SerialOperationQueue` and throws `alreadyExists` on replay.
 
-- **Identity** is `(origin, paymentId)`; the record id is `"<origin>:<paymentId>"`
-  (`ExternalPayment.identifier(origin:paymentId:)`), so the same product-supplied id under two origins
-  is two payments and the durability group ids stay unique. Registration (`initiatePayment`) validates
-  uniqueness through a serialized registrar and throws `ExternalPaymentError.alreadyExists`.
-- **Consent happens before registration, not in the worker.** The caller (host API or the in-app
-  flow) shows the gaining-privacy sheet whenever the recycling strategy is not `minPrivacy`
-  (`PaymentPrivacyGate`). Because the user has consented, the worker may spend anything spendable
-  on-chain: the planner is **structural** (`TrackedVoucher.isSelectable`, `TrackedCoin.isSelectable`)
-  and reads no strategy buckets, verdicts or `readyAt`. There is no persisted spend scope.
-- **Planning** (`ExternalPaymentPlanner.plan(amount:context:mustInclude:)`): `mustInclude` vouchers
-  first, then spendable vouchers largest-first → `.ready(Selection)`; else the deficit from spendable
-  coins → `.loadCoins(Selection)` (the selection carries the exact vouchers the coins top up); else
-  `.notEnoughBalance`.
-- **Onboarding** recycles the chosen coins under the payment's own group
-  (`external-payment:<id>:recycle`) and awaits `CoinageRecyclingServicing.observeRecycling(groupId:)`:
-  `pending` keeps waiting, `allRecycled(vouchers:finalized:)` (best-block inclusion is enough) checks
-  that `exactVouchers + recycled` cover the amount and moves to offboarding, `incomplete` or a
-  shortfall fails the payment. `recycleCoins(_:groupId:)` re-joins a group that already has entries,
-  so a relaunch never recycles twice; the re-entered state (exact selection unknown) re-plans with
-  the recycled vouchers as `mustInclude`.
-- **Offboarding** submits the plan straight to `OffboardVouchersForPaymentService` under
-  `external-payment:<id>` (re-joining an existing group on relaunch) and awaits one verdict:
-  `.success` completes with `settledInPlanks = amount`; `.partialSuccess` persists the delivered
-  value as `partiallyCompleted` and is terminal; `.failed`, a submission error and any thrown error
-  persist `failed`. There are no retries, rounds or reschedules.
-- **Cancellation is the one non-verdict.** `CancellationError` (the observation task is cancelled by
-  `throttle()`) persists the stage unchanged via `InterruptedPaymentState`; the next `setup` re-runs the
-  row. Every other thrown error fails the payment in that run.
-- **Status semantics** (`subscribePaymentStatus(origin:paymentId:)`): unknown id →
-  `.failed("unknown payment")` once, then end; `partiallyCompleted` → `.partiallyCompleted(settledInPlanks:)`
-  (the host reports `PartiallyClaimed` with the value); legacy `rescheduled` rows report `.processing`
-  and resume as `plan`; duplicates collapse; the stream ends after the first terminal status.
-- Tests: `Packages/Coinage/Tests/ExternalPayment/` (real service + state machine over an in-memory
-  store, a scripted recycler and a group-aware durability double) and
-  `Tests/Recycling/RecyclingStatusFoldingTests.swift`; mutation sweep
+- **Planner** (`ExternalPaymentPlanner`): private vouchers alone → `.private`; else every on-chain
+  voucher, private first then largest → `.lowPrivacy(vouchers, coins: [])`; else coins for the
+  shortfall with all vouchers offboarded as they are → `.lowPrivacy(vouchers, coins)`; else
+  `.notEnoughBalance`. "Private" is what the balance calls usable (`ExternalPaymentAssetClassifier`).
+  `canPayPrivately` is the first step alone, so the warning and the plan cannot disagree. Callers
+  warn when it is false and the preset is not `minPrivacy`; private coins never skip the warning.
+- **Worker** (persist-per-transition, one run per payment, no retries): `Plan` → `OffboardVouchers`,
+  or `Plan` → `OnboardCoins` → `OffboardVouchers`. Onboarding recycles under `<id>:recycle`, awaits
+  `CoinageRecyclingServicing.observeRecycling` (`pending | allRecycled(vouchers:finalized:) | incomplete`;
+  best-block inclusion is enough), checks exact + recycled vouchers cover the amount and hands them to
+  offboarding. Offboarding submits under `<id>`: success completes, `partialSuccess` is terminal
+  (`partiallyCompleted` with `settledInPlanks`), everything else fails. Each stage persists its
+  vouchers (`plannedVoucherIndices`) and re-joins its durability group on relaunch; an onboarding row
+  whose group was never registered goes back to `Plan`.
+- **Status**: unknown id → the stream throws `notFound`; duplicates collapse; ends after the first
+  terminal status. Tests: `Packages/Coinage/Tests/ExternalPayment/`, sweep
   `Packages/Coinage/Tools/external_payment_mutation_sweep.py`.
 
 ## Seams

@@ -102,8 +102,13 @@ enum RecyclingStatusFolder {
             guard case let .recyclerVoucher(index, _) = output else { return nil }
             return index
         })
-        let vouchers = try await voucherService.fetchAllTracked()
-            .filter { mintedIndices.contains($0.voucher.derivationIndex) }
+        let vouchers = try await voucherService.fetchTracked(derivationIndices: mintedIndices)
+
+        // Arrival is read at the best head while the recycler location lags behind it, and an unload
+        // needs the latter.
+        guard vouchers.count == mintedIndices.count, vouchers.allSatisfy(\.voucher.isInRecycler) else {
+            return .pending
+        }
 
         return .allRecycled(
             vouchers: vouchers,

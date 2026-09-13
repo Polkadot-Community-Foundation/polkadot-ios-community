@@ -2,7 +2,7 @@ import Foundation
 
 // Built from individual Firebase RemoteConfig keys:
 //   identity_backend_url, ipfs_gateway_url, game_dashboard_url, dot_ns_config, coinage_instance_id,
-//   funding_domain, funding_url, offramp_url
+//   funding_domain, funding_config { onrampUrl, offrampUrl }
 // Each field nil if the corresponding key is missing or empty.
 struct RemoteAppConfig {
     let identityBackendUrl: URL?
@@ -16,7 +16,10 @@ struct RemoteAppConfig {
     /// Legacy label of the funding product. Superseded by `fundingUrl`; kept one release as the
     /// allowlist-label fallback.
     let fundingDomain: String?
-    /// Full product URLs (host with TLD, optional path) the CASH card opens for top up and withdraw.
+    /// Full product URLs (host with TLD, optional path) the CASH card opens for top up and withdraw,
+    /// from the `funding_config` remote object. Not part of `isValid`: a payload without them keeps the rest of the
+    /// config usable and only the
+    /// CASH card entry points report unavailable.
     let fundingUrl: URL?
     let offrampUrl: URL?
 }
@@ -27,8 +30,6 @@ extension RemoteAppConfig {
             && ipfsGatewayUrl != nil
             && dotNsResolver != nil
             && coinageInstanceId != nil
-            && fundingUrl != nil
-            && offrampUrl != nil
 
         #if TESTNET_FEATURE
             result = result && gameDashboardUrl != nil

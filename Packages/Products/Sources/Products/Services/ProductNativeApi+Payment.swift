@@ -46,40 +46,36 @@ public enum HostPaymentRequestError: Error, Hashable {
 
 extension HostPaymentRequestError: HostCallCodedError {}
 
+/// Typed error for `host_payment_status_subscribe`, serialized to JS via `HostCallCodedError`.
+public enum HostPaymentStatusError: HostCallCodedError {
+    case notFound
+
+    public var code: String { "NotFound" }
+    public var message: String { "payment not found" }
+}
+
 // MARK: - Wire DTOs
 
-/// Decoded request for `paymentRequest`. Both byte fields are hex strings on the wire
-/// and must be exactly 32 bytes.
+/// Decoded request for `paymentRequest`. Byte fields are hex strings on the wire; the id is opaque
+/// to the host, so its length is not validated here (same as `paymentTopUp`).
 public struct PaymentRequestDto: Decodable {
-    public let id: PaymentRequestId
+    @HexCodable public var id: PaymentRequestId
     @StringCodable public var amount: Balance
-    public let destination: AccountId
+    @HexCodable public var destination: AccountId
 
     private enum CodingKeys: String, CodingKey {
-        case id
+        case id = "idHex"
         case amount
         case destination = "destinationHex"
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeFixedHexBytes(forKey: .id)
-        _amount = try container.decode(StringCodable<Balance>.self, forKey: .amount)
-        destination = try container.decodeFixedHexBytes(forKey: .destination)
     }
 }
 
 /// Decoded request for `paymentStatusSubscribe`.
 public struct PaymentStatusSubscribeDto: Decodable {
-    public let paymentId: PaymentRequestId
+    @HexCodable public var id: PaymentRequestId
 
     private enum CodingKeys: String, CodingKey {
-        case paymentId
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        paymentId = try container.decodeFixedHexBytes(forKey: .paymentId)
+        case id = "idHex"
     }
 }
 
@@ -103,28 +99,6 @@ public struct HostPaymentStatusDto: Encodable {
             tag = "Failed"
             value = reason
         }
-    }
-}
-
-// MARK: - Fixed-length hex decoding
-
-enum PaymentWireBytes {
-    static let length = 32
-}
-
-private extension KeyedDecodingContainer {
-    func decodeFixedHexBytes(forKey key: Key) throws -> Data {
-        let bytes = try decode(HexCodable<Data>.self, forKey: key).wrappedValue
-
-        guard bytes.count == PaymentWireBytes.length else {
-            throw DecodingError.dataCorruptedError(
-                forKey: key,
-                in: self,
-                debugDescription: "expected \(PaymentWireBytes.length) bytes, got \(bytes.count)"
-            )
-        }
-
-        return bytes
     }
 }
 
