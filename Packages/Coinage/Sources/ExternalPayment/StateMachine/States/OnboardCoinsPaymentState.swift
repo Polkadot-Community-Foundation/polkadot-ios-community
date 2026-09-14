@@ -8,8 +8,8 @@ import SubstrateSdk
 /// thrown error fail the payment — there are no retries.
 ///
 /// The exact vouchers are persisted with the stage, so a relaunch (`coins` empty) re-joins the group
-/// and continues with the same selection. A relaunch that finds no group registered fails, as on
-/// Android: re-planning could spend the coins twice if the submission did land.
+/// and continues with the same selection. A relaunch that finds no group registered fails:
+/// re-planning could spend the coins twice if the submission did land.
 struct OnboardCoinsPaymentState: StateMachineState {
     typealias StateFactory = ExternalPaymentStateFactory
     typealias PersistentValue = ExternalPayment

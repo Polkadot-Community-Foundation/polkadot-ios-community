@@ -175,8 +175,8 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .completed }
-        #expect(harness.store.payment(id: payment.identifier)?.settledInPlanks == payment.amountInPlanks)
+        let completed = try await harness.store.awaitPayment(id: payment.identifier) { $0.stage == .completed }
+        #expect(completed.settledInPlanks == payment.amountInPlanks)
         #expect(harness.planner.calls.count == 1)
         #expect(harness.txService.registrations == [Factory.unloadGroupId(for: payment)])
     }
@@ -188,10 +188,10 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .failed }
+        let failed = try await harness.store.awaitPayment(id: payment.identifier) { $0.stage == .failed }
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.planner.calls.count == 1)
-        #expect(harness.store.payment(id: payment.identifier)?.failureReason == "rpc down")
+        #expect(failed.failureReason == "rpc down")
     }
 
     @Test func partialUnloadIsTerminalAndReportsTheSettledValue() async throws {
@@ -203,8 +203,8 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .partiallyCompleted }
-        let settled = try #require(harness.store.payment(id: payment.identifier)?.settledInPlanks)
+        let partial = try await harness.store.awaitPayment(id: payment.identifier) { $0.stage == .partiallyCompleted }
+        let settled = partial.settledInPlanks
         #expect([Factory.planks(3), Factory.planks(2)].contains(settled))
         #expect(harness.planner.calls.count == 1)
 
@@ -226,7 +226,7 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.all().allSatisfy { $0.stage == .failed } }
+        _ = try await harness.store.awaitPayments { $0.allSatisfy { $0.stage == .failed } }
         #expect(harness.planner.calls.count == 2)
     }
 }

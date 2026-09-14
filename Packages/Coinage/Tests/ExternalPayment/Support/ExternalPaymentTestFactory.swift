@@ -176,23 +176,4 @@ enum ExternalPaymentTestFactory {
             service: service
         )
     }
-
-    /// Polls until `condition` holds or `timeout` elapses; records an issue on timeout.
-    @discardableResult
-    static func waitUntil(
-        timeout: TimeInterval = 2,
-        _ condition: @escaping () -> Bool,
-        sourceLocation: SourceLocation = #_sourceLocation
-    ) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        let satisfied = condition()
-        if !satisfied {
-            Issue.record("condition not met within \(timeout)s", sourceLocation: sourceLocation)
-        }
-        return satisfied
-    }
 }
