@@ -8,10 +8,7 @@ ledger row, the submission watch, recovery, reorg handling and the block-body se
 *means* — which resources it locks and how its effect is observed on chain — belongs to the feature that
 registers it, behind one seam: `TxCompletionOracle`.
 
-Coinage (`Packages/Coinage/Sources/CoinageTx/`) is the first domain. Its public `CoinageTxServicing`
-API did not change when the engine was extracted; it now forwards to the engine and keeps only the
-coinage-shaped half. Android's counterpart is the `feature/transactions` durable engine
-(polkadot-android-community#84); the shapes match one to one.
+Coinage (`Packages/Coinage/Sources/CoinageTx/`) is the first domain.
 
 ## Key Components
 
@@ -34,7 +31,7 @@ coinage-shaped half. Android's counterpart is the `feature/transactions` durable
 
 ### App-side (`polkadot-app/Common/DurableTransactions/`)
 
-- `DurableTxCoreDataRepository` over `CDDurableTx` (UserDataModel 47, renamed from `CDCoinageTxEntry`)
+- `DurableTxCoreDataRepository` over `CDDurableTx`
   opens the one write transaction and hands `CoreDataRegistrationScope` to the domain hook.
 - `DurableTxRowObserving` lets a domain react to a status write in the same transaction (coinage
   touches its coin/voucher rows so snapshot subscribers re-emit).
@@ -43,7 +40,7 @@ coinage-shaped half. Android's counterpart is the `feature/transactions` durable
 
 ### Coinage's half (`Packages/Coinage/Sources/CoinageTx/`)
 
-- `CoinageTxService` — the unchanged `CoinageTxServicing` façade; registers asset rows inside the
+- `CoinageTxService` — the unchanged `CoinageTxServicing` facade; registers asset rows inside the
   engine's hook, maps engine errors to `CoinageTxError`.
 - `CoinageAssetLedgerProtocol` — asset rows keyed by the engine's ids, the four registration
   invariants, handoff marks. App implementation: `CoinageAssetLedgerCoreData`.
@@ -82,8 +79,7 @@ Three things about the shape are deliberate:
 
 `LedgerView` hands the oracle every transaction of its domain with the status the pass snapshotted, so a
 domain whose answers depend on other transactions (coinage: a finalized successor proves the minter ran)
-reads them there. Dependencies are therefore *implicit* — the engine stores no edges (decision D1 of the
-plan; explicit edges are a deferred, additive follow-up for a domain without its own resource graph).
+reads them there. Dependencies are therefore *implicit* — the engine stores no edges.
 
 ## The Ladder
 
