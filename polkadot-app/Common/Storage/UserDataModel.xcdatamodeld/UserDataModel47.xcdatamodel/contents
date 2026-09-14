@@ -274,9 +274,11 @@
         <attribute name="derivationIndex" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="exponent" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="handoffMark" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="hops" optional="YES" attributeType="Binary"/>
         <attribute name="identifier" attributeType="String"/>
         <attribute name="isOnchain" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="publicKey" optional="YES" attributeType="String"/>
+        <attribute name="recyclerFungibility" optional="YES" attributeType="Integer 16" usesScalarValueType="NO"/>
         <relationship name="coinageTxInputs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDCoinageTxInput" inverseName="coin" inverseEntity="CDCoinageTxInput"/>
         <relationship name="coinageTxOutput" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCoinageTxOutput" inverseName="coin" inverseEntity="CDCoinageTxOutput"/>
         <fetchIndex name="byCoinPublicKey">
@@ -289,9 +291,12 @@
         <attribute name="enteredAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="exponent" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="identifier" attributeType="String"/>
+        <attribute name="maxFungibilityCaptured" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="maxRecyclerFungibility" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="onChainState" optional="YES" attributeType="Integer 16" usesScalarValueType="YES"/>
         <attribute name="publicKey" optional="YES" attributeType="String"/>
         <attribute name="readyAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="recyclerFungibility" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="recyclerIndex" optional="YES" attributeType="Integer 64" defaultValueString="-1" usesScalarValueType="YES"/>
         <attribute name="recyclerMembers" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="coinageTxInputs" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDCoinageTxInput" inverseName="voucher" inverseEntity="CDCoinageTxInput"/>

@@ -16,8 +16,8 @@ protocol AssetDetailsViewProtocol: ControllerBackedProtocol {
 
     func didReceive(rampLoading action: RampAction, isLoading: Bool)
 
+    func didReceive(coinageBreakdown: CoinageBalanceBreakdownViewModel)
     #if TESTNET_FEATURE
-        func didReceive(coinageBreakdown: CoinageBalanceBreakdownViewModel)
         func didReceive(testnetTopUpLoading: Bool)
     #endif
 }
@@ -70,8 +70,12 @@ protocol AssetDetailsInteractorOutputProtocol: AnyObject {
 
     func didResolveRampProduct(_ action: RampAction, result: Result<ProductPage, Error>)
 
+    /// One call, because the presenter rebuilds the whole breakdown on receipt: delivering the
+    /// figures and the holdings separately would render the new totals beside the previous
+    /// holdings, which is the mismatch `CoinageSummary` exists to prevent.
+    func didReceive(coinageAmounts: CoinageAmounts, holdings: CoinageHoldings)
+    func didReceive(denominationContext: DenominationBreakdownContext)
     #if TESTNET_FEATURE
-        func didReceive(coins: [TrackedCoin], vouchers: [TrackedVoucher])
         func didCompleteTopUp(_ result: Result<Void, Error>)
     #endif
 }
