@@ -85,8 +85,14 @@ MUTANTS = [
      "        let available = exact + recycled",
      "        let available = recycled"),
     ("onboard: everything is unloaded after recycling instead of what the amount needs", ONBOARD_STATE,
-     "            return factory.makeOffboardVouchersState(payment: payment, vouchers: selected.map(\\.voucher))",
-     "            return factory.makeOffboardVouchersState(payment: payment, vouchers: available.map(\\.voucher))"),
+     "            return factory.makeOffboardVouchersState(payment: payment, offboarding: offboarding)",
+     "            return factory.makeOffboardVouchersState(\n"
+     "                payment: payment,\n"
+     "                offboarding: VoucherOffboarding(vouchers: available, surplus: 0)\n"
+     "            )"),
+    ("memo: the persisted surplus is dropped on restore", FACTORY,
+     "                surplus: payment.surplusInPlanks",
+     "                surplus: 0"),
     ("onboard: an unregistered group is awaited forever", ONBOARD_STATE,
      "            guard try await !factory.durability.getOperationGroupStatuses(groupId).isEmpty else {",
      "            guard false else {"),
@@ -139,8 +145,8 @@ MUTANTS = [
      "        let privateVouchers = buckets.usable\n",
      "        let privateVouchers = buckets.usable + buckets.gainingPrivacy\n"),
     ("planner: private vouchers are not preferred over gaining ones", PLANNER,
-     "            let selected = pick(from: onChainVouchers, target: amount, preferred: privateVouchers, context: context)",
-     "            let selected = pick(from: onChainVouchers, target: amount, preferred: [], context: context)"),
+     "                preferred: privateVouchers,",
+     "                preferred: [],"),
     ("planner: coins are recycled before gaining vouchers are spent", PLANNER,
      "        let onChainVouchers = buckets.usable + buckets.gainingPrivacy",
      "        let onChainVouchers = buckets.usable"),

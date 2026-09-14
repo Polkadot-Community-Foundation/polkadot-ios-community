@@ -255,7 +255,8 @@ struct ExternalPaymentStateTests {
         )
         let payment = Factory.payment()
 
-        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1]).transit(with: factory)
+        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1], surplus: 0)
+            .transit(with: factory)
             .memo()
 
         #expect(memo.stage == .completed)
@@ -274,7 +275,8 @@ struct ExternalPaymentStateTests {
         )
         let payment = Factory.payment(amount: Factory.planks(3) + Factory.planks(2))
 
-        let next = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1, 2]).transit(with: factory)
+        let next = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1, 2], surplus: 0)
+            .transit(with: factory)
         let memo = await next.memo()
 
         #expect(next.isTerminal)
@@ -292,7 +294,7 @@ struct ExternalPaymentStateTests {
             vouchers: [voucher]
         )
 
-        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1], surplus: 0)
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -308,7 +310,7 @@ struct ExternalPaymentStateTests {
             vouchers: [voucher]
         )
 
-        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1], surplus: 0)
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -319,7 +321,7 @@ struct ExternalPaymentStateTests {
         let txService = StubGroupTxService()
         let factory = Factory.makeStateFactory(planner: StubExternalPaymentPlanner(), txService: txService)
 
-        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1])
+        let memo = await OffboardVouchersPaymentState(payment: Factory.payment(), voucherIndices: [1], surplus: 0)
             .transit(with: factory).memo()
 
         #expect(memo.stage == .failed)
@@ -336,7 +338,8 @@ struct ExternalPaymentStateTests {
             vouchers: [voucher]
         )
 
-        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1]).transit(with: factory)
+        let memo = await OffboardVouchersPaymentState(payment: payment, voucherIndices: [1], surplus: 0)
+            .transit(with: factory)
             .memo()
 
         #expect(memo.stage == .completed)

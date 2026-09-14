@@ -24,6 +24,7 @@ struct ExternalPaymentMapperTests {
 
         payment.stage = .offboardVouchers
         payment.plannedVoucherIndices = [7, 42]
+        payment.surplusInPlanks = 250
         try await store.save(payment: payment)
 
         let fetched = try #require(try await store.fetchPayment(byId: payment.id))
@@ -33,6 +34,7 @@ struct ExternalPaymentMapperTests {
         #expect(fetched.amountInPlanks == 1_500)
         #expect(fetched.stage == .offboardVouchers)
         #expect(fetched.plannedVoucherIndices == [7, 42])
+        #expect(fetched.surplusInPlanks == 250)
         #expect(fetched.settledInPlanks == 0)
     }
 

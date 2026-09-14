@@ -37,11 +37,12 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
 
-        guard case let .unloadVouchers(vouchers) = preview else {
+        guard case let .unloadVouchers(offboarding) = preview else {
             Issue.record("expected unloadVouchers: \(preview)")
             return
         }
-        #expect(indices(vouchers) == [2])
+        #expect(indices(offboarding.vouchers) == [2])
+        #expect(offboarding.surplus == 0)
         #expect(try await planner.canPayPrivately(amount: Factory.planks(3), context: Factory.denomination))
     }
 
@@ -56,12 +57,13 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: amount, context: Factory.denomination)
 
-        guard case let .unloadVouchers(vouchers) = preview else {
+        guard case let .unloadVouchers(offboarding) = preview else {
             Issue.record("expected unloadVouchers: \(preview)")
             return
         }
-        #expect(indices(vouchers).first == 1)
-        #expect(indices(vouchers).count == 2)
+        #expect(indices(offboarding.vouchers).first == 1)
+        #expect(indices(offboarding.vouchers).count == 2)
+        #expect(offboarding.surplus == 0)
         #expect(try await !planner.canPayPrivately(amount: amount, context: Factory.denomination))
     }
 
@@ -132,13 +134,14 @@ struct ExternalPaymentPlannerTests {
             )
         ].map { Factory.tracked($0) }
 
-        let selected = try planner.pickOffboarding(
+        let picked = try planner.pickOffboarding(
             from: vouchers,
             target: Factory.planks(3) + 1,
             context: Factory.denomination
         )
 
-        #expect(indices(selected) == [2, 3])
+        #expect(indices(picked.vouchers) == [2, 3])
+        #expect(picked.surplus == Factory.planks(2) - 1)
         #expect(throws: ExternalPaymentPlannerError.self) {
             try planner.pickOffboarding(from: vouchers, target: Factory.planks(4), context: Factory.denomination)
         }
