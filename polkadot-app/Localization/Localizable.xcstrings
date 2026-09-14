@@ -3554,13 +3554,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Waiting for network connection..."
+            "value": "Configuring application..."
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Esperando la conexión a la red..."
+            "value": "Configurando la aplicación..."
           }
         }
       }
