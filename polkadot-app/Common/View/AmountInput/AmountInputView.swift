@@ -4,10 +4,6 @@ import DesignSystem
 import PolkadotUI
 
 class AmountInputView: UIControl {
-    let iconView: AssetView = .create { view in
-        view.isUserInteractionEnabled = false
-    }
-
     let symbolLabel: Label = .create { label in
         label.typography = .displayExtraLarge
         label.textColor = .fgTertiary
@@ -65,10 +61,6 @@ class AmountInputView: UIControl {
         }
     }
 
-    var hasIcon: Bool {
-        !iconView.isHidden
-    }
-
     var hasSymbolImage: Bool {
         !symbolImageView.isHidden
     }
@@ -101,13 +93,6 @@ class AmountInputView: UIControl {
     func bind(assetViewModel: AssetAmountViewModel) {
         symbolLabel.text = assetViewModel.symbol
         isSymbolInFront = assetViewModel.isSymbolInFront
-
-        if let iconViewModel = assetViewModel.assetViewModel {
-            iconView.isHidden = false
-            iconView.bind(viewModel: iconViewModel)
-        } else {
-            iconView.isHidden = true
-        }
 
         setNeedsLayout()
     }
@@ -142,10 +127,6 @@ class AmountInputView: UIControl {
     private func calculateAvailableWidth(for fontName: String) -> CGFloat {
         var availableWidth = bounds.width
 
-        if hasIcon {
-            availableWidth = max(availableWidth - iconView.prefererredSize - horizontalSpacing, 0)
-        }
-
         // The mark scales with the font the estimation is about to pick, so reserve it at the
         // largest it can get. Reserving the drawn width instead would make the two depend on
         // each other and the amount jitter as it grows.
@@ -173,35 +154,19 @@ class AmountInputView: UIControl {
         return min(totalWidth, bounds.width)
     }
 
-    private func layoutIconIfNeeded(for totalWidth: CGFloat) {
-        guard hasIcon else {
-            return
-        }
-
-        let iconSize = iconView.prefererredSize
-
-        iconView.frame = CGRect(
-            x: bounds.midX - totalWidth / 2.0,
-            y: bounds.midY - iconSize / 2.0,
-            width: iconSize,
-            height: iconSize
-        )
-    }
-
     private func layoutSymbolImageIfNeeded(for totalWidth: CGFloat, font: UIFont) {
         guard hasSymbolImage else {
             return
         }
 
         let size = symbolImageSize(for: font)
-        let iconWidth = hasIcon ? iconView.prefererredSize + horizontalSpacing : 0
 
         // The digits are centred on midY, so their line box is too, and the mark
         // sits on the baseline of that box.
         let baseline = bounds.midY - font.lineHeight / 2.0 + font.ascender
 
         symbolImageView.frame = CGRect(
-            x: bounds.midX - totalWidth / 2.0 + iconWidth,
+            x: bounds.midX - totalWidth / 2.0,
             y: baseline - size.height,
             width: size.width,
             height: size.height
@@ -282,7 +247,6 @@ class AmountInputView: UIControl {
 
         let layoutWidth = calculateLayoutWidth(for: font)
 
-        layoutIconIfNeeded(for: layoutWidth)
         layoutSymbolImageIfNeeded(for: layoutWidth, font: font)
         layoutSymbol(for: layoutWidth, font: font)
         layoutTextField(for: layoutWidth, font: font)
@@ -307,7 +271,6 @@ class AmountInputView: UIControl {
     }
 
     private func configureContentViewIfNeeded() {
-        addSubview(iconView)
         addSubview(symbolImageView)
         addSubview(textField)
         addSubview(symbolLabel)
@@ -334,17 +297,11 @@ private extension AmountInputView {
 
     /// Everything drawn between the leading edge of the content and the digits.
     func leadingContentWidth(for font: UIFont) -> CGFloat {
-        var width: CGFloat = 0
-
-        if hasIcon {
-            width += iconView.prefererredSize + horizontalSpacing
+        guard hasSymbolImage else {
+            return 0
         }
 
-        if hasSymbolImage {
-            width += symbolImageSize(for: font).width + horizontalSpacing
-        }
-
-        return width
+        return symbolImageSize(for: font).width + horizontalSpacing
     }
 }
 
