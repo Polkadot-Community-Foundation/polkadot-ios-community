@@ -24,19 +24,30 @@ public struct DSProportionalBar: View {
         }
     }
 
+    /// Outline and clip shape of the bar as a whole.
+    public enum CornerStyle: Equatable {
+        case capsule
+        /// Prefer this over ``capsule`` for a bar that can be about as wide as it is tall, where a
+        /// capsule would round into a circle.
+        case rounded(radius: CGFloat)
+    }
+
     private let segments: [Segment]
     private let height: CGFloat
+    private let cornerStyle: CornerStyle
     private let outlineColor: Color
     private let outlineWidth: CGFloat
 
     public init(
         segments: [Segment],
         height: CGFloat,
+        cornerStyle: CornerStyle = .capsule,
         outlineColor: Color,
         outlineWidth: CGFloat
     ) {
         self.segments = segments
         self.height = height
+        self.cornerStyle = cornerStyle
         self.outlineColor = outlineColor
         self.outlineWidth = outlineWidth
     }
@@ -54,9 +65,9 @@ public struct DSProportionalBar: View {
                 Spacer(minLength: 0)
             }
             .frame(width: geometry.size.width, height: height)
-            .clipShape(Capsule())
+            .clipShape(outline)
             .overlay(
-                Capsule().stroke(outlineColor, lineWidth: outlineWidth)
+                outline.stroke(outlineColor, lineWidth: outlineWidth)
             )
         }
         .frame(height: height)
@@ -81,6 +92,15 @@ public extension DSProportionalBar {
 }
 
 private extension DSProportionalBar {
+    var outline: AnyShape {
+        switch cornerStyle {
+        case .capsule:
+            AnyShape(Capsule())
+        case let .rounded(radius):
+            AnyShape(RoundedRectangle(cornerRadius: radius))
+        }
+    }
+
     @ViewBuilder
     static func view(for fill: Segment.Fill) -> some View {
         switch fill {
@@ -107,11 +127,16 @@ private extension DSProportionalBar {
             )
 
             DSProportionalBar(
-                segments: [.init(share: 0, fill: .solid(.fgStaticWhite))],
-                height: 20,
+                segments: [
+                    .init(share: 0.4, fill: .solid(.fgStaticWhite)),
+                    .init(share: 0.6, fill: .stripes(color: .fgError, background: .fgStaticWhite))
+                ],
+                height: 21,
+                cornerStyle: .rounded(radius: 5.5),
                 outlineColor: .strokeTertiary,
                 outlineWidth: 1
             )
+            .frame(width: 21)
         }
         .padding()
         .background(Color.bgSurfaceContainer)
