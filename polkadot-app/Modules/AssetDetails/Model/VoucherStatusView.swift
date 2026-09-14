@@ -6,7 +6,7 @@ import SwiftUI
 /// A voucher's recycler status as one bar: a solid head for the anonymity its recycler can ever
 /// reach, running straight into a barber pole covering the part still being earned.
 ///
-/// Both lengths are inverted scores, so the bar reaches `1 − √(fungibility/100)` of the column and
+/// Both lengths are inverted scores, so the bar reaches `1 − fungibility/100` of the column and
 /// shrinks towards nothing as the recycler fills. Neither part has a floor of its own — a ring that
 /// can reach full anonymity shows no head at all, and one already at its ceiling shows no pole.
 struct VoucherStatusView: View {
@@ -46,7 +46,7 @@ extension VoucherStatusView {
         let solidShare: CGFloat
     }
 
-    /// Sizes the bar to `1 − √(current/100)` of the column, with the head at `1 − √(max/100)`.
+    /// Sizes the bar to `1 − current/100` of the column, with the head at `1 − max/100`.
     ///
     /// A bar that would round away is widened to a square floor rather than vanishing, and the two
     /// parts keep their ratio when that happens — the floor buys visibility, it must not

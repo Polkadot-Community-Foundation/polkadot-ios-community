@@ -20,8 +20,15 @@ struct VoucherStatusLayoutTests {
 
     @Test("Bar length tracks the current score")
     func lengthFollowsCurrentScore() {
-        // 1 - sqrt(0.25) = 0.5
-        #expect(layout(max: 25, current: 25).barWidth == 100)
+        // 1 - 0.25
+        #expect(layout(max: 25, current: 25).barWidth == 150)
+    }
+
+    /// The point of the linear scale: a barely started ring reads as barely started. Under the
+    /// square root this drew at 90% of the column, which looked like real progress.
+    @Test("A 1% ring draws a 99% bar")
+    func lowScoreIsNearlyFull() {
+        #expect(layout(max: 100, current: 1).barWidth == 198)
     }
 
     @Test("A longer bar means a less fungible voucher")
@@ -46,14 +53,14 @@ struct VoucherStatusLayoutTests {
         #expect(layout(max: 100, current: 100).barWidth == minimum)
     }
 
-    /// Head 1 - sqrt(0.96) = 0.020204, total 1 - sqrt(0.84) = 0.083485. Unfloored the bar would be
-    /// 16.7pt of the 200pt column, so the floor widens it and both parts scale with it.
+    /// Head 1 - 0.96 = 0.04, total 1 - 0.92 = 0.08. Unfloored the bar would be 16pt of the 200pt
+    /// column, so the floor widens it and both parts scale with it.
     @Test("Floor preserves the ratio between the two parts")
     func floorKeepsRatio() {
-        let result = layout(max: 96, current: 84)
+        let result = layout(max: 96, current: 92)
 
         #expect(result.barWidth == minimum)
-        #expect(abs(result.solidShare - 0.242_009) < 0.000_01)
+        #expect(abs(result.solidShare - 0.5) < 0.000_01)
     }
 
     // MARK: - The split
@@ -78,10 +85,10 @@ struct VoucherStatusLayoutTests {
 
     @Test("Head takes its share of the bar")
     func headShare() {
-        // head 1 - sqrt(0.75) = 0.133975, total 1 - sqrt(0.25) = 0.5
+        // head 1 - 0.75 = 0.25, total 1 - 0.25 = 0.75
         let result = layout(max: 75, current: 25)
 
-        #expect(abs(result.solidShare - 0.267_949) < 0.000_01)
+        #expect(abs(result.solidShare - 1.0 / 3) < 0.000_01)
     }
 
     /// The frozen ceiling and the live score are read at different times, so the pair can invert.

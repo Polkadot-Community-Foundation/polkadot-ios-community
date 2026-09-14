@@ -62,15 +62,18 @@ enum CoinageStatusMetrics {
     /// Thinner, so the stacked pair keeps some colour inside its frame.
     static let thinFrameWidth: CGFloat = 0.75
 
-    /// Fraction of the column a score occupies: `1 − √(score/100)`.
+    /// Fraction of the column a score occupies: `1 − score/100`.
     ///
     /// Inverted on purpose — a highly fungible holding draws a *short* bar, and a poorly
     /// fungible one stretches across the column.
+    ///
+    /// Linear, so the bar is the score. An earlier square root pulled the low end in hard, which
+    /// read as progress that had not happened: a ring 1% of the way drew a bar 10% short of full.
     static func fraction(forScore score: UInt8) -> CGFloat {
         let scale = CGFloat(CoinageConstants.fullFungibility)
         let clamped = min(max(CGFloat(score), 0), scale)
 
-        return 1 - (clamped / scale).squareRoot()
+        return 1 - clamped / scale
     }
 
     /// Inner dots drawn inside a provenance circle: one per sibling of the hop, capped so a
