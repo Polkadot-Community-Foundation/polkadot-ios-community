@@ -8,8 +8,8 @@ import SubstrateSdk
 /// thrown error fail the payment — there are no retries.
 ///
 /// The exact vouchers are persisted with the stage, so a relaunch (`coins` empty) re-joins the group
-/// and continues with the same selection. A relaunch that finds no group registered goes back to
-/// planning: the crash happened before anything was submitted.
+/// and continues with the same selection. A relaunch that finds no group registered fails, as on
+/// Android: re-planning could spend the coins twice if the submission did land.
 struct OnboardCoinsPaymentState: StateMachineState {
     typealias StateFactory = ExternalPaymentStateFactory
     typealias PersistentValue = ExternalPayment
@@ -32,9 +32,10 @@ struct OnboardCoinsPaymentState: StateMachineState {
             try await factory.recycler.recycleCoins(coins, groupId: groupId)
 
             guard try await !factory.durability.getOperationGroupStatuses(groupId).isEmpty else {
-                return coins.isEmpty
-                    ? factory.makePlanState(payment: payment)
-                    : factory.makeFailedState(payment: payment, reason: "recycling submission failed")
+                return factory.makeFailedState(
+                    payment: payment,
+                    reason: coins.isEmpty ? "recycling group not found" : "recycling submission failed"
+                )
             }
 
             for try await status in factory.recycler.observeRecycling(groupId: groupId) {

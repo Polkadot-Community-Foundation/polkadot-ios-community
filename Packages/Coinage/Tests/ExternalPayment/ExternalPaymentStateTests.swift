@@ -233,14 +233,15 @@ struct ExternalPaymentStateTests {
         #expect(planner.calls.isEmpty)
     }
 
-    @Test func onboardReentryWithoutARegisteredGroupPlansAgain() async {
+    @Test func onboardReentryWithoutARegisteredGroupFailsInsteadOfReplanning() async {
         let planner = StubExternalPaymentPlanner()
         let factory = Factory.makeStateFactory(planner: planner)
 
         let memo = await OnboardCoinsPaymentState(payment: Factory.payment(), coins: [], exactVoucherIndices: [1])
             .transit(with: factory).memo()
 
-        #expect(memo.stage == .plan)
+        #expect(memo.stage == .failed)
+        #expect(memo.failureReason == "recycling group not found")
         #expect(planner.calls.isEmpty)
     }
 

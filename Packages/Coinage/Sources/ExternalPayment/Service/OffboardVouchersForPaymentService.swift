@@ -190,11 +190,19 @@ private extension OffboardVouchersForPaymentService {
 
 private extension OffboardVouchersForPaymentService {
     /// What the finalized groups delivered to the destination: each group's voucher inputs minus the
-    /// surplus vouchers it minted back. Read from the tracked vouchers because entries carry only
-    /// derivation indices.
+    /// surplus vouchers it minted back. Only the vouchers the entries name are read, by public key.
     func settledValue(of entries: [CoinageTxEntry]) async throws -> Balance {
-        let exponents = try await Dictionary(
-            voucherService.fetchAllTracked().map { ($0.voucher.derivationIndex, $0.voucher.exponent) },
+        let inputKeys = entries.flatMap(\.inputs).compactMap { input -> (DerivationIndex, PublicKey)? in
+            guard case let .recyclerVoucher(index, key) = input else { return nil }
+            return (index, key)
+        }
+        let outputKeys = entries.flatMap(\.outputs).compactMap { output -> (DerivationIndex, PublicKey)? in
+            guard case let .recyclerVoucher(index, key) = output else { return nil }
+            return (index, key)
+        }
+        let vouchers = try await voucherService.fetchVouchers(publicKeys: Set((inputKeys + outputKeys).map(\.1)))
+        let exponents = Dictionary(
+            vouchers.map { ($0.derivationIndex, $0.exponent) },
             uniquingKeysWith: { first, _ in first }
         )
 
