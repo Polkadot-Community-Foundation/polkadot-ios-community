@@ -9,6 +9,13 @@ enum SearchAccountViewFactory {
         for chainAsset: ChainAsset,
         coinageServicing: CoinageServicing
     ) -> SearchAccountViewProtocol? {
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
+
+        guard let ownAccountId = try? walletRepo.main().getRawPublicKey() else {
+            assertionFailure()
+            return nil
+        }
+
         let logger = Logger.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let chainRegistry = ChainRegistryFacade.sharedRegistry
@@ -35,10 +42,11 @@ enum SearchAccountViewFactory {
         let accountSearching: any AccountSearching<
             RecentContactModelWithUsername,
             ContactSearchPayload
-        > = RecipientAccountSearchProvider(
-            recentRecipientsProvider: recentRecipientsProvider,
+        > = AccountSearchProvider(
+            recentRowsStream: { recentRecipientsProvider.subscribe() },
             localContactSearch: localContactSearch,
             remoteContactSearch: RemoteContactOperationFactory(),
+            ownAccountId: ownAccountId,
             logger: logger
         )
 

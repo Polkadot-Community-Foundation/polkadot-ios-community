@@ -17,11 +17,12 @@ enum SearchContactViewFactory {
         )
 
         let accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload> =
-            ChatAccountSearchProvider(
-                recentChatsProvider: recentChatsProvider,
+            AccountSearchProvider(
+                recentRowsStream: { recentChatsProvider.subscribe() },
                 localContactSearch: localContactSearch,
                 remoteContactSearch: RemoteContactOperationFactory(),
-                ownAccountId: ownAccountId
+                ownAccountId: ownAccountId,
+                logger: Logger.shared
             )
 
         let interactor = SearchContactInteractor(

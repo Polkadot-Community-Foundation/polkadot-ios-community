@@ -37,9 +37,6 @@ final class RecentRecipientsProvider: @unchecked Sendable {
                 onUpdate: { rows in
                     continuation.yield(rows)
                 },
-                onFailure: { error in
-                    continuation.yield(with: .failure(error))
-                },
                 updateState: { changes in
                     cacheLock.withLock { cache in
                         let merged = changes.mergeToDict(cache.mapValues(\.payload))
@@ -100,20 +97,17 @@ private extension RecentRecipientsProvider {
 private final class RecentRecipientsProviderDelegate: RecentContactsServiceDelegate {
     private let logger: LoggerProtocol
     private let onUpdate: ([SearchRow<RecentContactModelWithUsername>]) -> Void
-    private let onFailure: (Error) -> Void
     private let updateState: ([DataProviderChange<RecentContactModelWithUsername>])
         -> [SearchRow<RecentContactModelWithUsername>]
 
     init(
         logger: LoggerProtocol,
         onUpdate: @escaping ([SearchRow<RecentContactModelWithUsername>]) -> Void,
-        onFailure: @escaping (Error) -> Void,
         updateState: @escaping ([DataProviderChange<RecentContactModelWithUsername>])
             -> [SearchRow<RecentContactModelWithUsername>]
     ) {
         self.logger = logger
         self.onUpdate = onUpdate
-        self.onFailure = onFailure
         self.updateState = updateState
     }
 
@@ -125,6 +119,5 @@ private final class RecentRecipientsProviderDelegate: RecentContactsServiceDeleg
 
     func recentContactServiceDidFail(error: Error) {
         logger.error("Recent recipients provider failed: \(error)")
-        onFailure(error)
     }
 }
