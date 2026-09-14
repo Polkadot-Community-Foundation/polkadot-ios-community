@@ -34,6 +34,15 @@ actor MockChainLivenessAnchorProvider: ChainLivenessAnchorProviding {
         resumed.forEach { $0.resume() }
     }
 
+    /// Waits until at least `count` fetches have been recorded, so a test never reads the call
+    /// log before the spawned probe tasks have reached it.
+    func waitForCallCount(atLeast count: Int, timeout: Duration = .seconds(5)) async {
+        let deadline = ContinuousClock.now + timeout
+        while fetchAnchorCalls.count < count, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     func fetchAnchor(
         for target: ChainConnectionTarget,
         slotCount: Int
