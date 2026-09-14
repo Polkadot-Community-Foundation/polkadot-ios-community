@@ -2,6 +2,7 @@ import Foundation
 import PolkadotUI
 import UIKit
 import UIKit_iOS
+import UIKitExt
 
 @MainActor
 enum TransferPrivacyViewFactory {
