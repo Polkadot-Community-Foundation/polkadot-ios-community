@@ -119,6 +119,9 @@ extension VoucherLocationService {
         let memberReqs = try memberRequests(vouchers)
         guard !memberReqs.isEmpty else { return }
 
+        // A runtime constant rather than storage, so it is read once per subscription, not per emission.
+        let keysPerPage = try await runtimeService.fetchRingKeysPageSize()
+
         // Ring capacity is chain config keyed by denomination and cannot change within a session, so
         // it is resolved once per tracked set rather than per emission. A denomination that fails to
         // resolve simply has no fungibility written until it does.
@@ -154,7 +157,8 @@ extension VoucherLocationService {
                 return resolvedLocationsStream(
                     positions: positions,
                     vouchers: vouchers,
-                    capacities: capacities
+                    capacities: capacities,
+                    keysPerPage: keysPerPage
                 )
             }
             .removeDuplicates { $0 == $1 }
@@ -171,7 +175,8 @@ extension VoucherLocationService {
     private func resolvedLocationsStream(
         positions: [DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>],
         vouchers: [Voucher],
-        capacities: [Int16: Int]
+        capacities: [Int16: Int],
+        keysPerPage: Int
     ) -> AnyAsyncSequence<[DerivationIndex: VoucherLocationUpdate]> {
         let voucherByIndex = Dictionary(uniqueKeysWithValues: vouchers.map { ($0.derivationIndex, $0) })
         let recyclers = Self.recyclers(positions: positions, voucherByIndex: voucherByIndex)
@@ -180,7 +185,7 @@ extension VoucherLocationService {
         let requests = ringStatusRequests(for: rings) + unloadedCountRequests(for: rings)
 
         guard !requests.isEmpty else {
-            let resolved = Self.resolveLocations(positions: positions, statuses: [:])
+            let resolved = Self.resolveLocations(positions: positions, statuses: [:], keysPerPage: keysPerPage)
             return AsyncJustSequence(Self.updates(
                 locations: resolved,
                 unloadedCounts: [:],
@@ -208,7 +213,11 @@ extension VoucherLocationService {
                 let unloadedCounts = recyclers.compactMapValues { snapshot.unloadedCounts[$0] }
 
                 return Self.updates(
-                    locations: Self.resolveLocations(positions: positions, statuses: statuses),
+                    locations: Self.resolveLocations(
+                        positions: positions,
+                        statuses: statuses,
+                        keysPerPage: keysPerPage
+                    ),
                     unloadedCounts: unloadedCounts,
                     voucherByIndex: voucherByIndex,
                     capacities: capacities
@@ -358,6 +367,7 @@ extension VoucherLocationService {
     static func resolveLocations(
         positions: [DerivationIndex: UncertainStorage<MembersPallet.RingPosition?>],
         statuses: [DerivationIndex: UncertainStorage<MembersPallet.RingKeysStatus?>],
+        keysPerPage: Int,
         observedAt: Date = .now
     ) -> [DerivationIndex: Voucher.OnChainState] {
         positions.reduce(into: [:]) { resolved, entry in
@@ -386,7 +396,7 @@ extension VoucherLocationService {
                 // The ring status was delivered empty (ring retracted): fall back to onboarding.
                 resolved[derivationIndex] = .onboarding
             case let .defined(.some(status))?:
-                guard status.includesKey(from: position) else { return }
+                guard status.includesKey(from: position, keysPerPage: keysPerPage) else { return }
                 resolved[derivationIndex] = .inRecycler(
                     Voucher.Recycler(index: ringIndex, membersCount: status.included, enteredAt: observedAt)
                 )
