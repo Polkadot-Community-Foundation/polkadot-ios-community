@@ -75,8 +75,9 @@ extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
 
         let isValidAddress = (try? query.toAccountId(using: chainAsset.chain.chainFormat)) != nil
 
+        stateLock.withLock { $0.query = query }
+
         guard isValidAddress || query.count <= Self.maximumPrefixCount else {
-            stateLock.withLock { $0.query = query }
             emit(
                 SearchAccountResult(
                     query: query,
@@ -89,14 +90,14 @@ extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
             return
         }
 
-        stateLock.withLock { $0.query = query }
+        let pastedAddressContact = SearchAccountResult.Contact(username: nil, address: query)
 
         emit(
             SearchAccountResult(
                 query: query,
                 loader: isValidAddress ? .unchanged : .start,
                 recent: [],
-                contacts: [],
+                contacts: isValidAddress ? [pastedAddressContact] : [],
                 global: []
             )
         )
@@ -152,7 +153,7 @@ private extension SearchAccountInteractor {
     }
 
     func loadIdleState() {
-        Task { [weak self] in
+        Task { [weak self, logger] in
             do {
                 guard let self else { return }
                 let sections = try await accountSearching.search(query: nil)
@@ -163,7 +164,7 @@ private extension SearchAccountInteractor {
                     contacts: mapToContacts(sections.contacts),
                     global: []
                 )
-                await emit(result)
+                emit(result)
             } catch {
                 logger.error("Load idle state failed: \(error)")
             }
@@ -178,7 +179,7 @@ private extension SearchAccountInteractor {
             return
         }
 
-        searchTask = Task { [weak self] in
+        searchTask = Task { [weak self, logger] in
             do {
                 guard let self else { return }
                 let sections = try await accountSearching.search(query: query)
@@ -204,7 +205,7 @@ private extension SearchAccountInteractor {
                     contacts: mapToContacts(sections.contacts),
                     global: mapToContacts(sections.global)
                 )
-                await emit(result)
+                emit(result)
             } catch {
                 guard !Task.isCancelled else { return }
                 logger.error("Search failed: \(error)")

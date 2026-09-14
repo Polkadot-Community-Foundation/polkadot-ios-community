@@ -28,6 +28,7 @@ enum SearchAccountViewFactory {
         let recentRecipientsProvider = RecentRecipientsProvider(
             service: recentContactsService,
             chainFormat: chainAsset.chain.chainFormat,
+            chainAssetId: chainAsset.chainAssetId,
             logger: logger
         )
 

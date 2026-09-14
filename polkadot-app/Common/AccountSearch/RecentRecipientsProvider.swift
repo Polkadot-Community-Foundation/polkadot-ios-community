@@ -7,26 +7,30 @@ import StructuredConcurrency
 import SDKLogger
 import Operation_iOS
 
-final class RecentRecipientsProvider {
+final class RecentRecipientsProvider: @unchecked Sendable {
     private let service: RecentContactsManaging
     private let chainFormat: ChainFormat
+    private let chainAssetId: ChainAssetId
     private let logger: LoggerProtocol
 
     init(
         service: RecentContactsManaging,
         chainFormat: ChainFormat,
+        chainAssetId: ChainAssetId,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.service = service
         self.chainFormat = chainFormat
+        self.chainAssetId = chainAssetId
         self.logger = logger
     }
 
     func subscribe() -> AnyAsyncSequence<[SearchRow<RecentContactModelWithUsername>]> {
         AsyncThrowingStream { continuation in
             let holder = AnyObjectHolder<AnyObject>()
-            let lock = OSAllocatedUnfairLock()
-            var cachedState: [String: SearchRow<RecentContactModelWithUsername>] = [:]
+            let cacheLock = OSAllocatedUnfairLock(
+                initialState: [String: SearchRow<RecentContactModelWithUsername>]()
+            )
 
             let delegate = RecentRecipientsProviderDelegate(
                 logger: self.logger,
@@ -37,10 +41,10 @@ final class RecentRecipientsProvider {
                     continuation.yield(with: .failure(error))
                 },
                 updateState: { changes in
-                    lock.withLock {
-                        let merged = changes.mergeToDict(cachedState.mapValues(\.payload))
+                    cacheLock.withLock { cache in
+                        let merged = changes.mergeToDict(cache.mapValues(\.payload))
                         let rows = self.makeRows(from: merged)
-                        cachedState = rows.reduce(into: [:]) { result, row in
+                        cache = rows.reduce(into: [:]) { result, row in
                             result[row.payload.identifier] = row
                         }
                         return rows
@@ -50,14 +54,10 @@ final class RecentRecipientsProvider {
 
             holder.set(delegate)
 
-            DispatchQueue.main.async {
-                self.service.setup(delegate)
-            }
+            self.service.setup(delegate, chainAssetID: self.chainAssetId)
 
             continuation.onTermination = { @Sendable _ in
-                DispatchQueue.main.async {
-                    self.service.setup(nil)
-                }
+                self.service.setup(nil, chainAssetID: self.chainAssetId)
                 holder.set(nil)
             }
         }

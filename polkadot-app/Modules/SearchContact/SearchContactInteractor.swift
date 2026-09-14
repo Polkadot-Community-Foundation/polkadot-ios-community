@@ -9,8 +9,6 @@ final class SearchContactInteractor {
     private let accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload>
     private let chatOpenResolver: ChatOpenModelResolving
     private let searchRunner = SearchRunner()
-    private var searchTask: Task<Void, Never>?
-    private var sourcesChangedTask: Task<Void, Never>?
     private let stateLock: OSAllocatedUnfairLock<State>
 
     init(
@@ -23,8 +21,8 @@ final class SearchContactInteractor {
     }
 
     deinit {
-        cancelSearchTask()
-        cancelSourcesChangedTask()
+        replaceSearchTask(with: nil)
+        replaceSourcesChangedTask(with: nil)
     }
 }
 
@@ -32,32 +30,26 @@ extension SearchContactInteractor: SearchContactInteractorInputProtocol {
     func setup() {
         accountSearching.setup()
         subscribeToSourcesChanged()
+        loadIdleSections()
     }
 
     func search(username: String) {
-        cancelSearchTask()
-
         guard !username.isEmpty else {
-            searchTask = Task { [weak self] in
-                guard !Task.isCancelled else { return }
-                await self?.emitEmptyResult(for: username)
-            }
+            loadIdleSections()
             return
         }
 
-        searchTask = Task { [weak self, weak presenter, searchRunner] in
+        let task = Task { [weak self, weak presenter, searchRunner] in
             let stateStream = searchRunner.run {
-                do {
-                    return try await self?.makeSearchResult(for: username)
-                } catch {
-                    return nil
-                }
+                await self?.makeSearchResult(for: username)
             }
             for await state in stateStream {
                 guard !Task.isCancelled else { return }
                 await presenter?.didReceive(searchState: state, for: username)
             }
         }
+
+        replaceSearchTask(with: task)
     }
 
     func decide(on payload: ContactSearchPayload) {
@@ -82,49 +74,68 @@ extension SearchContactInteractor: SearchContactInteractorInputProtocol {
 private extension SearchContactInteractor {
     struct State {
         var currentQuery: String?
+        var searchTask: Task<Void, Never>?
+        var sourcesChangedTask: Task<Void, Never>?
     }
 
     func subscribeToSourcesChanged() {
-        sourcesChangedTask = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             do {
                 for try await _ in accountSearching.sourcesChanged() {
                     guard !Task.isCancelled else { return }
                     let query = stateLock.withLock { $0.currentQuery }
                     if let query, !query.isEmpty {
-                        await performSearch(for: query)
+                        search(username: query)
+                    } else {
+                        loadIdleSections()
                     }
                 }
             } catch {
                 // Subscription ended
             }
         }
+
+        replaceSourcesChangedTask(with: task)
     }
 
-    func cancelSearchTask() {
-        searchTask?.cancel()
-        searchTask = nil
+    /// Swaps the stored handle under the lock and cancels the displaced task outside it,
+    /// so two concurrent callers cannot both install a task and leak one uncancelled.
+    func replaceSearchTask(with task: Task<Void, Never>?) {
+        let previous = stateLock.withLock { state in
+            let previous = state.searchTask
+            state.searchTask = task
+            return previous
+        }
+
+        previous?.cancel()
     }
 
-    func cancelSourcesChangedTask() {
-        sourcesChangedTask?.cancel()
-        sourcesChangedTask = nil
+    func replaceSourcesChangedTask(with task: Task<Void, Never>?) {
+        let previous = stateLock.withLock { state in
+            let previous = state.sourcesChangedTask
+            state.sourcesChangedTask = task
+            return previous
+        }
+
+        previous?.cancel()
     }
 
-    @MainActor
-    func emitEmptyResult(for query: String) {
-        stateLock.withLock { $0.currentQuery = query }
-        Task {
+    func loadIdleSections() {
+        let task = Task { [weak self, weak presenter] in
+            guard let self else { return }
+            stateLock.withLock { $0.currentQuery = "" }
             do {
                 let sections = try await accountSearching.search(query: nil)
-                await presenter?.didReceive(
-                    searchState: .result(.sections(sections)),
-                    for: query
-                )
+                guard !Task.isCancelled else { return }
+                await presenter?.didReceive(searchState: .result(.sections(sections)), for: "")
             } catch {
+                guard !Task.isCancelled else { return }
                 await presenter?.didReceive(error: error)
             }
         }
+
+        replaceSearchTask(with: task)
     }
 
     func makeSearchResult(for query: String) async -> SearchContactSearchResult? {
@@ -137,10 +148,5 @@ private extension SearchContactInteractor {
             guard !Task.isCancelled else { return nil }
             return .error(error)
         }
-    }
-
-    @MainActor
-    func performSearch(for query: String) {
-        search(username: query)
     }
 }
