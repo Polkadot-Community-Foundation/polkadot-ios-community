@@ -34,12 +34,8 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
 
     private var recoveryStateTask: Task<Void, Error>?
 
-    enum TopUpProductError: Error {
-        case unresolvedHost
-    }
-
-    private let hostProvider: ProductHostProviding
-    private var topUpProductTask: Task<Void, Never>?
+    private let fundingDomainProvider: FundingDomainProviding
+    private var rampProductTasks: [RampAction: Task<Void, Never>] = [:]
 
     #if TESTNET_FEATURE
         var backgroundExecutor: BackgroundExecuting?
@@ -55,7 +51,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         coinageService: CoinageServicing,
         coinageBackupSyncService: any CoinageBackupSyncServicing,
         balanceSyncStateStorage: BalanceSyncStateStoring,
-        hostProvider: ProductHostProviding,
+        fundingDomainProvider: FundingDomainProviding,
         eventCenter: EventCenterProtocol = EventCenter.shared
     ) {
         self.priceLocalSubscriptionFactory = priceLocalSubscriptionFactory
@@ -65,7 +61,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         self.coinageBackupSyncService = coinageBackupSyncService
         self.balanceSyncStateStorage = balanceSyncStateStorage
         self.eventCenter = eventCenter
-        self.hostProvider = hostProvider
+        self.fundingDomainProvider = fundingDomainProvider
     }
 
     deinit {
@@ -73,7 +69,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         balanceSubscriptionTask?.cancel()
         recoveryStateTask?.cancel()
         priceSubscriptionTask?.cancel()
-        topUpProductTask?.cancel()
+        rampProductTasks.values.forEach { $0.cancel() }
     }
 }
 
@@ -110,19 +106,14 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
         fiatOnrampTrackingService.removeFailedTransactions()
     }
 
-    func openTopUpProduct() {
-        topUpProductTask?.cancel()
-        topUpProductTask = Task { [weak presenter, hostProvider] in
+    func openRampProduct(_ action: RampAction) {
+        rampProductTasks[action]?.cancel()
+        rampProductTasks[action] = Task { [weak presenter, fundingDomainProvider] in
             do {
-                guard
-                    let host = try await hostProvider.resolveHost(label: AppConfig.DotNs.dotNsGetSome)
-                else {
-                    throw TopUpProductError.unresolvedHost
-                }
-
-                await presenter?.didResolveTopUpProduct(.success(ProductPage(host: host)))
+                let page = try await action.resolvePage(using: fundingDomainProvider)
+                await presenter?.didResolveRampProduct(action, result: .success(page))
             } catch {
-                await presenter?.didResolveTopUpProduct(.failure(error))
+                await presenter?.didResolveRampProduct(action, result: .failure(error))
             }
         }
     }
@@ -325,7 +316,7 @@ extension AssetDetailsInteractor: AppEventVisiting {
     }
 }
 
-extension AssetDetailsInteractor.TopUpProductError: ErrorContentConvertible {
+extension FundingDomainError: ErrorContentConvertible {
     func toErrorContent() -> ErrorContent {
         ErrorContent(
             title: String(localized: .Common.error),

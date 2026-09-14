@@ -47,6 +47,8 @@ protocol AssetDetailsViewModelProtocol: Observation.Observable {
 
     var isTopUpInProgress: Bool { get set }
     var onTopUp: (() -> Void)? { get set }
+    var isWithdrawInProgress: Bool { get set }
+    var onWithdraw: (() -> Void)? { get set }
 
     var coinageBreakdown: CoinageBalanceBreakdownViewModel? { get set }
     /// Set only in builds that carry the debug affordances; nil elsewhere, which is what hides the
@@ -76,6 +78,8 @@ class AssetDetailsViewModel: AssetDetailsViewModelProtocol {
 
     var isTopUpInProgress: Bool = false
     var onTopUp: (() -> Void)?
+    var isWithdrawInProgress: Bool = false
+    var onWithdraw: (() -> Void)?
 
     var coinageBreakdown: CoinageBalanceBreakdownViewModel?
     var onMakeAllVouchersReady: (() -> Void)?

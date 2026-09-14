@@ -107,29 +107,37 @@ struct AssetDetailsView: View {
     }
 
     private func actions() -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
-                    viewModel.onSendMoney?()
-                }
-                .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
-
-                topUpButton()
+        HStack(spacing: 12) {
+            DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
+                viewModel.onSendMoney?()
             }
+            .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
+
+            circleButton(.iconArrowUpRight24, isLoading: viewModel.isWithdrawInProgress) {
+                viewModel.onWithdraw?()
+            }
+            .accessibilityId(AccessibilityID.Wallet.withdrawButton)
+
+            circleButton(.add24, isLoading: viewModel.isTopUpInProgress) {
+                viewModel.onTopUp?()
+            }
+            .accessibilityId(AccessibilityID.Wallet.addFundsButton)
         }
     }
 
-    private func topUpButton() -> some View {
-        Button {
-            viewModel.onTopUp?()
-        } label: {
+    private func circleButton(
+        _ icon: ImageResource,
+        isLoading: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             Group {
-                if viewModel.isTopUpInProgress {
+                if isLoading {
                     ProgressView()
                         .progressViewStyle(.circular)
                         .tint(.fgPrimaryInverted)
                 } else {
-                    Image(.add24)
+                    Image(icon)
                         .renderingMode(.template)
                 }
             }
@@ -137,8 +145,7 @@ struct AssetDetailsView: View {
             .foregroundStyle(Color.fgPrimaryInverted)
             .background(.bgActionPrimary, in: Circle())
         }
-        .disabled(viewModel.isTopUpInProgress)
-        .accessibilityId(AccessibilityID.Wallet.addFundsButton)
+        .disabled(isLoading)
     }
 
     #if TESTNET_FEATURE
