@@ -18,6 +18,23 @@
         }
       }
     },
+    "action.send.cash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send CASH"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar CASH"
+          }
+        }
+      }
+    },
     "Chat.contactAddedYou": {
       "extractionState": "manual",
       "localizations": {
@@ -252,23 +269,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recuperar Polkadot ID"
-          }
-        }
-      }
-    },
-    "action.send.cash": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send CASH"
-          }
-        },
-        "es-ES": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enviar CASH"
           }
         }
       }
