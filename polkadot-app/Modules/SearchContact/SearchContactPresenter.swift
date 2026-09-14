@@ -104,7 +104,7 @@ private extension SearchContactPresenter {
     }
 
     func buildViewSections(
-        from sections: AccountSearchSections<Chat.RemoteContact, Chat.RemoteContact>
+        from sections: AccountSearchSections<ContactSearchPayload, ContactSearchPayload>
     ) -> [SearchContactViewLayout.ViewModel.Section] {
         [
             makeViewSection(
@@ -128,7 +128,7 @@ private extension SearchContactPresenter {
     func makeViewSection(
         id: String,
         title: String,
-        rows: [SearchRow<Chat.RemoteContact>]
+        rows: [SearchRow<ContactSearchPayload>]
     ) -> SearchContactViewLayout.ViewModel.Section? {
         guard !rows.isEmpty else { return nil }
 
@@ -144,19 +144,19 @@ private extension SearchContactPresenter {
         )
     }
 
-    func makeListConfiguration(for contact: Chat.RemoteContact) -> SearchContactListConfiguration {
-        let prefix = String(contact.username.prefix(1))
+    func makeListConfiguration(for payload: ContactSearchPayload) -> SearchContactListConfiguration {
+        let prefix = String(payload.username.prefix(1))
         let avatarViewModel = AvatarViewModel.colored(
             text: prefix,
-            colorSeed: contact.accountId.toHex()
+            colorSeed: payload.accountId.toHex()
         )
         return SearchContactListConfiguration(
-            userName: contact.username,
+            userName: payload.username,
             avatarViewModel: avatarViewModel
         )
     }
 
-    func findContact(by identifier: String) -> Chat.RemoteContact? {
+    func findContact(by identifier: String) -> ContactSearchPayload? {
         let sections = currentSearch.sections
         return sections.recent.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
             ?? sections.contacts.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
@@ -167,7 +167,7 @@ private extension SearchContactPresenter {
         let query: String
         let state: SearchContactSearchState
 
-        var sections: AccountSearchSections<Chat.RemoteContact, Chat.RemoteContact> {
+        var sections: AccountSearchSections<ContactSearchPayload, ContactSearchPayload> {
             guard case let .result(.sections(sections)) = state else {
                 return AccountSearchSections(recent: [], contacts: [], global: [])
             }

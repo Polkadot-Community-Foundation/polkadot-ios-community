@@ -7,8 +7,8 @@ import Operation_iOS
 import SDKLogger
 
 final class ChatAccountSearchProvider: AccountSearching {
-    typealias RecentPayload = Chat.RemoteContact
-    typealias MatchPayload = Chat.RemoteContact
+    typealias RecentPayload = ContactSearchPayload
+    typealias MatchPayload = ContactSearchPayload
 
     private let recentChatsProvider: RecentChatsProvider
     private let localContactSearch: LocalContactSearching
@@ -80,7 +80,7 @@ final class ChatAccountSearchProvider: AccountSearching {
 
 private extension ChatAccountSearchProvider {
     struct State {
-        var recentChats: [SearchRow<Chat.RemoteContact>] = []
+        var recentChats: [SearchRow<ContactSearchPayload>] = []
     }
 
     func subscribeToRecentChats() {
@@ -99,7 +99,7 @@ private extension ChatAccountSearchProvider {
     }
 
     /// A nil prefix fetches every stored contact, otherwise only the ones whose username matches it.
-    func fetchLocalContacts(matching usernamePrefix: String?) async throws -> [SearchRow<Chat.RemoteContact>] {
+    func fetchLocalContacts(matching usernamePrefix: String?) async throws -> [SearchRow<ContactSearchPayload>] {
         let repository =
             if let usernamePrefix {
                 localContactSearch.searchContacts(usernamePrefix: usernamePrefix)
@@ -111,48 +111,42 @@ private extension ChatAccountSearchProvider {
             .fetchAllOperation(with: RepositoryFetchOptions())
             .asyncExecute()
 
-        return contacts.compactMap { contact -> SearchRow<Chat.RemoteContact>? in
+        return contacts.compactMap { contact -> SearchRow<ContactSearchPayload>? in
             guard !contact.isBlocked else {
                 logger.debug("Dropped blocked contact: \(contact.username)")
                 return nil
             }
-            do {
-                let remote = try Chat.RemoteContact(contact: contact)
-                return SearchRow(
-                    accountId: contact.accountId,
-                    username: Username(value: contact.username),
-                    matchTerms: [contact.username],
-                    payload: remote
-                )
-            } catch {
-                logger.error("Failed to convert contact \(contact.username): \(error)")
-                return nil
-            }
+            return SearchRow(
+                accountId: contact.accountId,
+                username: Username(value: contact.username),
+                matchTerms: [contact.username],
+                payload: .local(contact)
+            )
         }
     }
 
-    func fetchGlobalContacts(query: String) async -> [SearchRow<Chat.RemoteContact>] {
+    func fetchGlobalContacts(query: String) async -> [SearchRow<ContactSearchPayload>] {
         do {
             if let accountId = try? query.toAccountId(),
                let account = try? await remoteContactSearch.fetch(by: accountId) {
                 try Task.checkCancellation()
-                return [makeRow(accountId: accountId, contact: account)]
+                return [makeRow(contact: account)]
             }
             let contacts = try await remoteContactSearch.search(by: query).asyncExecute()
             try Task.checkCancellation()
-            return contacts.map { makeRow(accountId: $0.accountId, contact: $0) }
+            return contacts.map { makeRow(contact: $0) }
         } catch {
             logger.debug("Global contact search tolerance - continuing without global results: \(error)")
             return []
         }
     }
 
-    func makeRow(accountId: AccountId, contact: Chat.RemoteContact) -> SearchRow<Chat.RemoteContact> {
+    func makeRow(contact: Chat.RemoteContact) -> SearchRow<ContactSearchPayload> {
         SearchRow(
-            accountId: accountId,
+            accountId: contact.accountId,
             username: Username(value: contact.username),
             matchTerms: [contact.username],
-            payload: contact
+            payload: .remote(contact)
         )
     }
 }

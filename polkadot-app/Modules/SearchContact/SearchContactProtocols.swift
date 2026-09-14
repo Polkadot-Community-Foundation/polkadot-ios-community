@@ -15,7 +15,7 @@ protocol SearchContactPresenterProtocol: AnyObject {
 protocol SearchContactInteractorInputProtocol: AnyObject {
     func setup()
     func search(username: String)
-    func decide(on contact: Chat.RemoteContact)
+    func decide(on payload: ContactSearchPayload)
 }
 
 @MainActor

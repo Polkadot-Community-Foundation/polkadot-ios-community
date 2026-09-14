@@ -16,7 +16,7 @@ enum SearchContactViewFactory {
             chatProvider: ChatContactDataProviderFactory()
         )
 
-        let accountSearching: any AccountSearching<Chat.RemoteContact, Chat.RemoteContact> =
+        let accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload> =
             ChatAccountSearchProvider(
                 recentChatsProvider: recentChatsProvider,
                 localContactSearch: localContactSearch,

@@ -6,7 +6,7 @@ import os
 final class SearchContactInteractor {
     weak var presenter: SearchContactInteractorOutputProtocol?
 
-    private let accountSearching: any AccountSearching<Chat.RemoteContact, Chat.RemoteContact>
+    private let accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload>
     private let chatOpenResolver: ChatOpenModelResolving
     private let searchRunner = SearchRunner()
     private var searchTask: Task<Void, Never>?
@@ -14,7 +14,7 @@ final class SearchContactInteractor {
     private let stateLock: OSAllocatedUnfairLock<State>
 
     init(
-        accountSearching: any AccountSearching<Chat.RemoteContact, Chat.RemoteContact>,
+        accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload>,
         chatOpenResolver: ChatOpenModelResolving = ChatOpenModelResolver()
     ) {
         self.accountSearching = accountSearching
@@ -60,13 +60,20 @@ extension SearchContactInteractor: SearchContactInteractorInputProtocol {
         }
     }
 
-    func decide(on contact: Chat.RemoteContact) {
-        Task { [weak self, chatOpenResolver] in
-            do {
-                let openModel = try await chatOpenResolver.resolveOpenModel(for: contact)
-                await self?.presenter?.didReceive(resolution: openModel)
-            } catch {
-                await self?.presenter?.didReceive(error: error)
+    func decide(on payload: ContactSearchPayload) {
+        switch payload {
+        case let .local(contact):
+            Task { [weak self] in
+                await self?.presenter?.didReceive(resolution: .existingChat(.person(contact.accountId)))
+            }
+        case let .remote(contact):
+            Task { [weak self, chatOpenResolver] in
+                do {
+                    let openModel = try await chatOpenResolver.resolveOpenModel(for: contact)
+                    await self?.presenter?.didReceive(resolution: openModel)
+                } catch {
+                    await self?.presenter?.didReceive(error: error)
+                }
             }
         }
     }

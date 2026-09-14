@@ -186,7 +186,7 @@ private extension SearchAccountInteractor {
 
                 let globalContacts = sections.global.compactMap { row -> (AccountId, Chat.RemoteContact)? in
                     switch row.payload {
-                    case let .remote(contact, _):
+                    case let .remote(contact):
                         (row.accountId, contact)
                     case .local:
                         nil
@@ -214,8 +214,11 @@ private extension SearchAccountInteractor {
     }
 
     func mapToContacts(_ rows: [SearchRow<ContactSearchPayload>]) -> [SearchAccountResult.Contact] {
-        rows.map { row in
-            SearchAccountResult.Contact(username: row.username?.value, address: row.payload.address)
+        rows.compactMap { row in
+            guard let address = try? row.accountId.toAddress(using: chainAsset.chain.chainFormat) else {
+                return nil
+            }
+            return SearchAccountResult.Contact(username: row.username?.value, address: address)
         }
     }
 

@@ -7,19 +7,6 @@ import os
 import Operation_iOS
 import SDKLogger
 
-enum ContactSearchPayload {
-    case local(Chat.Contact, AccountAddress)
-    case remote(Chat.RemoteContact, AccountAddress)
-
-    var address: AccountAddress {
-        switch self {
-        case let .local(_, address),
-             let .remote(_, address):
-            address
-        }
-    }
-}
-
 final class RecipientAccountSearchProvider: AccountSearching {
     typealias RecentPayload = RecentContactModelWithUsername
     typealias MatchPayload = ContactSearchPayload
@@ -27,7 +14,6 @@ final class RecipientAccountSearchProvider: AccountSearching {
     private let recentRecipientsProvider: RecentRecipientsProvider
     private let localContactSearch: LocalContactSearching
     private let remoteContactSearch: RemoteContactOperationMaking
-    private let chainFormat: ChainFormat
     private let logger: LoggerProtocol
     private let stateLock: OSAllocatedUnfairLock<State>
     private let sourcesChangedNotifier = SourcesChangedNotifier()
@@ -37,13 +23,11 @@ final class RecipientAccountSearchProvider: AccountSearching {
         recentRecipientsProvider: RecentRecipientsProvider,
         localContactSearch: LocalContactSearching,
         remoteContactSearch: RemoteContactOperationMaking,
-        chainFormat: ChainFormat,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.recentRecipientsProvider = recentRecipientsProvider
         self.localContactSearch = localContactSearch
         self.remoteContactSearch = remoteContactSearch
-        self.chainFormat = chainFormat
         self.logger = logger
         stateLock = OSAllocatedUnfairLock(initialState: State())
     }
@@ -126,16 +110,12 @@ private extension RecipientAccountSearchProvider {
             .fetchAllOperation(with: RepositoryFetchOptions())
             .asyncExecute()
 
-        return contacts.compactMap { contact -> SearchRow<ContactSearchPayload>? in
-            guard let address = try? contact.accountId.toAddress(using: chainFormat) else {
-                logger.error("Failed to convert accountId to address for contact \(contact.username)")
-                return nil
-            }
-            return SearchRow(
+        return contacts.map { contact in
+            SearchRow(
                 accountId: contact.accountId,
                 username: Username(value: contact.username),
                 matchTerms: [contact.username],
-                payload: .local(contact, address)
+                payload: .local(contact)
             )
         }
     }
@@ -145,11 +125,11 @@ private extension RecipientAccountSearchProvider {
             if let accountId = try? query.toAccountId(),
                let account = try? await remoteContactSearch.fetch(by: accountId) {
                 try Task.checkCancellation()
-                return makeRemoteRow(accountId: accountId, contact: account).map { [$0] } ?? []
+                return [makeRemoteRow(contact: account)]
             }
             let contacts = try await remoteContactSearch.search(by: query).asyncExecute()
             try Task.checkCancellation()
-            return contacts.compactMap { makeRemoteRow(accountId: $0.accountId, contact: $0) }
+            return contacts.map { makeRemoteRow(contact: $0) }
         } catch {
             logger.debug("Global contact search tolerance - continuing without global results: \(error)")
             return []
@@ -157,18 +137,13 @@ private extension RecipientAccountSearchProvider {
     }
 
     func makeRemoteRow(
-        accountId: AccountId,
         contact: Chat.RemoteContact
-    ) -> SearchRow<ContactSearchPayload>? {
-        guard let address = try? accountId.toAddress(using: chainFormat) else {
-            logger.error("Failed to convert accountId to address")
-            return nil
-        }
-        return SearchRow(
-            accountId: accountId,
+    ) -> SearchRow<ContactSearchPayload> {
+        SearchRow(
+            accountId: contact.accountId,
             username: Username(value: contact.username),
             matchTerms: [contact.username],
-            payload: .remote(contact, address)
+            payload: .remote(contact)
         )
     }
 }

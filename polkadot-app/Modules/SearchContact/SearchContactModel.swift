@@ -1,7 +1,7 @@
 import Foundation
 
 enum SearchContactSearchResult {
-    case sections(AccountSearchSections<Chat.RemoteContact, Chat.RemoteContact>)
+    case sections(AccountSearchSections<ContactSearchPayload, ContactSearchPayload>)
     case error(Error)
 }
 

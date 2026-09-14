@@ -38,7 +38,6 @@ enum SearchAccountViewFactory {
             recentRecipientsProvider: recentRecipientsProvider,
             localContactSearch: localContactSearch,
             remoteContactSearch: RemoteContactOperationFactory(),
-            chainFormat: chainAsset.chain.chainFormat,
             logger: logger
         )
 
