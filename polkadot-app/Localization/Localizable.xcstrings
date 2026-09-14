@@ -2004,13 +2004,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Coins show one circle per past payment, oldest first. Dots are the other coins that moved with it: more dots, easier to trace."
+            "value": "Coins show one circle per past payment. Dots represent other coins that moved with the payment."
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Las monedas muestran un círculo por cada pago anterior, del más antiguo al más reciente. Los puntos son las otras monedas que se movieron con ella: más puntos, más fácil de rastrear."
+            "value": "Las monedas muestran un círculo por cada pago anterior. Los puntos representan otras monedas que se movieron con el pago."
           }
         }
       }
@@ -2021,13 +2021,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A single block means no past payments at all. The longer it is, the easier the coin is to trace."
+            "value": "A single block means no past payments at all. The shorter it is, the more fungible the coin."
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un solo bloque significa que no hay pagos anteriores. Cuanto más largo sea, más fácil es rastrear la moneda."
+            "value": "Un solo bloque significa que no hay pagos anteriores. Cuanto más corto sea, más fungible es la moneda."
           }
         }
       }
@@ -2055,13 +2055,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vouchers are coins that are loading. The block is how traceable they will still be at best; the striped part is how much loading is left."
+            "value": "Coins that gain privacy. The solid block is how fungible they will be at best; the striped part is the current level."
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Los vales son monedas que están cargando. El bloque indica qué tan rastreables seguirán siendo en el mejor de los casos; la parte rayada indica cuánta carga queda."
+            "value": "Monedas que ganan privacidad. El bloque sólido indica qué tan fungibles serán en el mejor de los casos; la parte rayada muestra el nivel actual."
           }
         }
       }
@@ -2072,13 +2072,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Loading"
+            "value": "Reloading"
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cargando"
+            "value": "Recargando"
           }
         }
       }
