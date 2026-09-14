@@ -26,8 +26,6 @@ public struct ExternalPayment: Equatable {
         }
     }
 
-    /// Storage identifier, always ``identifier(productId:paymentId:)``.
-    public let id: String
     /// The product that owns `paymentId`; the in-app pay flow uses ``ExternalPayment/nativeProductId``.
     public let productId: String
     public let paymentId: String
@@ -59,7 +57,6 @@ public struct ExternalPayment: Equatable {
         createdAt: Date = .init(),
         updatedAt: Date = .init()
     ) {
-        id = Self.identifier(productId: productId, paymentId: paymentId)
         self.productId = productId
         self.paymentId = paymentId
         self.amountInPlanks = amountInPlanks
@@ -86,5 +83,6 @@ public extension ExternalPayment {
 }
 
 extension ExternalPayment: Operation_iOS.Identifiable {
-    public var identifier: String { id }
+    /// Storage identifier, derived from the identity rather than stored.
+    public var identifier: String { Self.identifier(productId: productId, paymentId: paymentId) }
 }

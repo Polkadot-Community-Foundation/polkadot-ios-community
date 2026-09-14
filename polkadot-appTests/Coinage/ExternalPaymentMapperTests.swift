@@ -27,8 +27,8 @@ struct ExternalPaymentMapperTests {
         payment.surplusInPlanks = 250
         try await store.save(payment: payment)
 
-        let fetched = try #require(try await store.fetchPayment(byId: payment.id))
-        #expect(fetched.id == "external-payment:getcash.dot:0xab")
+        let fetched = try #require(try await store.fetchPayment(byId: payment.identifier))
+        #expect(fetched.identifier == "external-payment:getcash.dot:0xab")
         #expect(fetched.productId == "getcash.dot")
         #expect(fetched.paymentId == "0xab")
         #expect(fetched.amountInPlanks == 1_500)
@@ -56,7 +56,7 @@ struct ExternalPaymentMapperTests {
         payment.plannedVoucherIndices = []
         try await store.save(payment: payment)
 
-        let fetched = try #require(try await store.fetchPayment(byId: payment.id))
+        let fetched = try #require(try await store.fetchPayment(byId: payment.identifier))
         #expect(fetched.stage == .partiallyCompleted)
         #expect(fetched.settledInPlanks == 3)
         #expect(fetched.plannedVoucherIndices.isEmpty)

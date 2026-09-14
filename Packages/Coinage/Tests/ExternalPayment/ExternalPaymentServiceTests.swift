@@ -175,8 +175,8 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.id)?.stage == .completed }
-        #expect(harness.store.payment(id: payment.id)?.settledInPlanks == payment.amountInPlanks)
+        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .completed }
+        #expect(harness.store.payment(id: payment.identifier)?.settledInPlanks == payment.amountInPlanks)
         #expect(harness.planner.calls.count == 1)
         #expect(harness.txService.registrations == [Factory.unloadGroupId(for: payment)])
     }
@@ -188,10 +188,10 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.id)?.stage == .failed }
+        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .failed }
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.planner.calls.count == 1)
-        #expect(harness.store.payment(id: payment.id)?.failureReason == "rpc down")
+        #expect(harness.store.payment(id: payment.identifier)?.failureReason == "rpc down")
     }
 
     @Test func partialUnloadIsTerminalAndReportsTheSettledValue() async throws {
@@ -203,8 +203,8 @@ struct ExternalPaymentServiceTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { harness.store.payment(id: payment.id)?.stage == .partiallyCompleted }
-        let settled = try #require(harness.store.payment(id: payment.id)?.settledInPlanks)
+        await Factory.waitUntil { harness.store.payment(id: payment.identifier)?.stage == .partiallyCompleted }
+        let settled = try #require(harness.store.payment(id: payment.identifier)?.settledInPlanks)
         #expect([Factory.planks(3), Factory.planks(2)].contains(settled))
         #expect(harness.planner.calls.count == 1)
 

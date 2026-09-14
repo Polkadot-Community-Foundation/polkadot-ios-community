@@ -52,7 +52,7 @@ MUTANTS = [
      '        "external-payment:\\(productId):\\(paymentId)"',
      '        "external-payment:\\(paymentId)"'),
     ("register: a known (productId, paymentId) is registered again", SERVICE,
-     "            guard try await store.fetchPayment(byId: payment.id) == nil else {\n"
+     "            guard try await store.fetchPayment(byId: payment.identifier) == nil else {\n"
      "                throw ExternalPaymentError.alreadyExists\n"
      "            }\n",
      ""),

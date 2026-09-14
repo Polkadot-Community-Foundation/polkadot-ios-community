@@ -17,7 +17,7 @@ struct ExternalPaymentRestartTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { store.payment(id: payment.id)?.stage == .completed }
+        await Factory.waitUntil { store.payment(id: payment.identifier)?.stage == .completed }
         #expect(harness.txService.registrations == [Factory.unloadGroupId(for: payment)])
         #expect(harness.recycler.submissions.isEmpty)
     }
@@ -41,7 +41,7 @@ struct ExternalPaymentRestartTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { store.payment(id: payment.id)?.stage == .completed }
+        await Factory.waitUntil { store.payment(id: payment.identifier)?.stage == .completed }
         #expect(harness.recycler.submissions.isEmpty)
         #expect(harness.planner.calls.isEmpty)
         #expect(harness.txService.registrations == [Factory.unloadGroupId(for: payment)])
@@ -55,7 +55,7 @@ struct ExternalPaymentRestartTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { store.payment(id: payment.id)?.stage == .completed }
+        await Factory.waitUntil { store.payment(id: payment.identifier)?.stage == .completed }
         #expect(harness.txService.registrations.isEmpty)
         #expect(harness.planner.calls.isEmpty)
     }
@@ -67,7 +67,7 @@ struct ExternalPaymentRestartTests {
 
         harness.service.setup(with: Factory.denomination)
 
-        await Factory.waitUntil { store.payment(id: payment.id)?.stage == .completed }
+        await Factory.waitUntil { store.payment(id: payment.identifier)?.stage == .completed }
         #expect(harness.txService.registrations == [Factory.unloadGroupId(for: payment)])
         #expect(harness.planner.calls.isEmpty)
     }

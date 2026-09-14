@@ -16,7 +16,7 @@ final class InMemoryExternalPaymentStore: ExternalPaymentStoring, @unchecked Sen
     init(seed: [ExternalPayment] = []) {
         payments.withLock { table in
             for payment in seed {
-                table[payment.id] = payment
+                table[payment.identifier] = payment
             }
         }
         publish()
@@ -24,7 +24,7 @@ final class InMemoryExternalPaymentStore: ExternalPaymentStoring, @unchecked Sen
 
     func save(payment: ExternalPayment) async throws {
         if let saveError { throw saveError }
-        payments.withLock { $0[payment.id] = payment }
+        payments.withLock { $0[payment.identifier] = payment }
         publish()
     }
 
@@ -34,7 +34,7 @@ final class InMemoryExternalPaymentStore: ExternalPaymentStoring, @unchecked Sen
 
     func observePayment(id: String) -> AnyAsyncSequence<ExternalPayment?> {
         subject
-            .map { $0.first { $0.id == id } }
+            .map { $0.first { $0.identifier == id } }
             .eraseToAnyAsyncSequence()
     }
 

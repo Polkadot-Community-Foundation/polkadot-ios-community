@@ -92,7 +92,7 @@ private extension OffboardVouchersForPaymentService {
     }
 
     func groupId(for payment: ExternalPayment) -> CoinageTxGroupId {
-        payment.id
+        payment.identifier
     }
 
     /// Registers the whole payment as one atomic durability group, or re-joins the group a prior

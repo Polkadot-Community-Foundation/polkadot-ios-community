@@ -20,7 +20,7 @@ struct OnboardCoinsPaymentState: StateMachineState {
     let isTerminal = false
 
     static func recyclingGroupId(for payment: ExternalPayment) -> CoinageTxGroupId {
-        "\(payment.id):recycle"
+        "\(payment.identifier):recycle"
     }
 
     func transit(
@@ -46,7 +46,7 @@ struct OnboardCoinsPaymentState: StateMachineState {
                     return factory.makeFailedState(payment: payment, reason: "recycling incomplete")
                 case let .allRecycled(recycled, finalized):
                     factory.logger?.debug(
-                        "Payment \(payment.id): \(recycled.count) vouchers recycled, finalized \(finalized)"
+                        "Payment \(payment.identifier): \(recycled.count) vouchers recycled, finalized \(finalized)"
                     )
                     return try await offboard(recycled: recycled, factory: factory)
                 }

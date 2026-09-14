@@ -116,7 +116,7 @@ final class ExternalPaymentService: ExternalPaymentServicing, @unchecked Sendabl
         )
 
         try await registrationQueue.run { [store] in
-            guard try await store.fetchPayment(byId: payment.id) == nil else {
+            guard try await store.fetchPayment(byId: payment.identifier) == nil else {
                 throw ExternalPaymentError.alreadyExists
             }
 
@@ -153,9 +153,12 @@ private extension ExternalPaymentService {
             do {
                 for try await payments in store.observeNonTerminalPayments() {
                     for payment in payments.sorted(by: { $0.createdAt < $1.createdAt }) {
-                        await context.scheduleIfNeeded(paymentId: payment.id) { [weak self] in
+                        await context.scheduleIfNeeded(paymentId: payment.identifier) { [weak self] in
                             Task { [weak self] in
-                                await self?.processPayment(id: payment.id, denominationContext: denominationContext)
+                                await self?.processPayment(
+                                    id: payment.identifier,
+                                    denominationContext: denominationContext
+                                )
                             }
                         }
                     }

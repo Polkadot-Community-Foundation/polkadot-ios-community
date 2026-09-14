@@ -7,8 +7,8 @@ struct ExternalPaymentModelTests {
         let one = ExternalPaymentTestFactory.payment(productId: "getcash.dot", paymentId: "0xaa")
         let other = ExternalPaymentTestFactory.payment(productId: "other.dot", paymentId: "0xaa")
 
-        #expect(one.id == "external-payment:getcash.dot:0xaa")
-        #expect(one.id != other.id)
+        #expect(one.identifier == "external-payment:getcash.dot:0xaa")
+        #expect(one.identifier != other.identifier)
         #expect(one.productId == "getcash.dot")
         #expect(one.paymentId == "0xaa")
     }

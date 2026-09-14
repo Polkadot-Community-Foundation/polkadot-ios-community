@@ -107,7 +107,7 @@ enum ExternalPaymentTestFactory {
     }
 
     static func unloadGroupId(for payment: ExternalPayment) -> CoinageTxGroupId {
-        payment.id
+        payment.identifier
     }
 
     static func makeStateFactory(

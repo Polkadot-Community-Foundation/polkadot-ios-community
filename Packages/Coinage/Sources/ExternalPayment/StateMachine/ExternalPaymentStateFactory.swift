@@ -86,14 +86,14 @@ extension ExternalPaymentStateFactory {
     }
 
     func makeFailedState(payment: ExternalPayment, reason: String) -> ErasedState {
-        logger?.error("Payment \(payment.id) failed: \(reason)")
+        logger?.error("Payment \(payment.identifier) failed: \(reason)")
         return AnyStateMachineState(FailedPaymentState(payment: payment, reason: reason))
     }
 
     func makePartiallyCompletedState(payment: ExternalPayment, reason: String) -> ErasedState {
         logger?
             .error(
-                "Payment \(payment.id) short: settled \(payment.settledInPlanks) of \(payment.amountInPlanks) (\(reason))"
+                "Payment \(payment.identifier) short: settled \(payment.settledInPlanks) of \(payment.amountInPlanks) (\(reason))"
             )
         return AnyStateMachineState(PartiallyCompletedPaymentState(payment: payment, reason: reason))
     }

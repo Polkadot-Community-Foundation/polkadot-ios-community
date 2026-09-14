@@ -17,7 +17,7 @@ struct PlanPaymentState: StateMachineState {
             let preview = try await factory.planner.plan(amount: payment.amountInPlanks, context: factory.context)
             factory.logger?
                 .debug(
-                    "Payment \(payment.id) planned: \(preview.vouchers.count) vouchers, \(preview.coins.count) coins"
+                    "Payment \(payment.identifier) planned: \(preview.vouchers.count) vouchers, \(preview.coins.count) coins"
                 )
 
             switch preview {

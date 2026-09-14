@@ -46,7 +46,7 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         from model: ExternalPayment,
         using _: NSManagedObjectContext
     ) throws {
-        entity.identifier = model.id
+        entity.identifier = model.identifier
         entity.productId = model.productId
         entity.paymentId = model.paymentId
         entity.amountInPlanks = String(model.amountInPlanks)
