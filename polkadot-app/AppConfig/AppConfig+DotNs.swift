@@ -37,7 +37,9 @@ extension AppConfig {
         /// `funding_domain` key while both are published.
         static var dotNsGetSome: String {
             let config = AppConfigProvider.shared.getRemoteConfig()
-            let fromUrl = config?.fundingUrl?.host().flatMap { ProductHost.name(fromDotDomain: $0) }
+            let fromUrl = config?.fundingUrl.flatMap { destination in
+                ProductHost.name(fromDotDomain: URL(string: destination)?.host() ?? destination)
+            }
             return fromUrl ?? config?.fundingDomain ?? ""
         }
 

@@ -16,12 +16,13 @@ struct RemoteAppConfig {
     /// Legacy label of the funding product. Superseded by `fundingUrl`; kept one release as the
     /// allowlist-label fallback.
     let fundingDomain: String?
-    /// Full product URLs (host with TLD, optional path) the CASH card opens for top up and withdraw,
-    /// from the `funding_config` remote object. Not part of `isValid`: a payload without them keeps the rest of the
+    /// Product destinations the CASH card opens for top up and withdraw, from the `funding_config`
+    /// remote object, as published: a dot-domain (`getcash.dot`) or a full URL with a path
+    /// (`https://getcash.dot/offramp`). Not part of `isValid`: a payload without them keeps the rest of the
     /// config usable and only the
     /// CASH card entry points report unavailable.
-    let fundingUrl: URL?
-    let offrampUrl: URL?
+    let fundingUrl: String?
+    let offrampUrl: String?
 }
 
 extension RemoteAppConfig {

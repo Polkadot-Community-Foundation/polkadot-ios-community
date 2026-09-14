@@ -1,9 +1,9 @@
 import Foundation
 import Products
 
-/// Resolves the funding product's entry pages from remote config: one URL for topping up, one for
-/// withdrawing. Both are full product URLs (host with TLD, optional path), so a product can serve
-/// each flow from a different page.
+/// Resolves the funding product's entry pages from remote config: one destination for topping up,
+/// one for withdrawing. A destination is either a dot-domain (`getcash.dot`) or a full URL whose
+/// path names the page (`https://getcash.dot/offramp`), exactly as published.
 protocol FundingDomainProviding: Sendable {
     func fundingPage() async throws -> ProductPage
     func offrampPage() async throws -> ProductPage
@@ -35,14 +35,15 @@ final class FundingDomainProvider: FundingDomainProviding, @unchecked Sendable {
 }
 
 private extension FundingDomainProvider {
-    /// Awaits the chain TLD through the host provider, then parses the URL into a page.
-    func page(for url: URL?) async throws -> ProductPage {
-        guard let url, let host = url.host() else {
+    /// Awaits the chain TLD through the host provider, then parses the destination into a page.
+    func page(for destination: String?) async throws -> ProductPage {
+        guard let destination, !destination.isEmpty else {
             throw FundingDomainError.unavailable
         }
 
+        let host = URL(string: destination)?.host() ?? destination
         guard try await hostProvider.resolveHost(rawString: host) != nil,
-              let page = hostProvider.page(url: url)
+              let page = hostProvider.page(navigationDestination: destination)
         else {
             throw FundingDomainError.unavailable
         }

@@ -108,8 +108,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             dotNsNameRegistry: dotNsNameRegistryAddress(),
             coinageInstanceId: coinageInstanceId(),
             fundingDomain: nonEmptyString(for: .fundingDomain),
-            fundingUrl: fundingConfigUrl(.onrampUrl),
-            offrampUrl: fundingConfigUrl(.offrampUrl)
+            fundingUrl: fundingConfigValue(.onrampUrl),
+            offrampUrl: fundingConfigValue(.offrampUrl)
         )
     }
 
@@ -162,12 +162,12 @@ private extension FirebaseApplicationService {
         return URL(string: value)
     }
 
-    /// One JSON object shared with Android: `{ "onrampUrl": "getcash.dot", "offrampUrl": "getcash.dot/offramp" }`.
-    /// The scheme is optional on the wire.
-    func fundingConfigUrl(_ field: String) -> URL? {
+    /// One JSON object shared with Android, passed through as published:
+    /// `{ "onrampUrl": "getcash.dot", "offrampUrl": "https://getcash.dot/offramp" }`.
+    func fundingConfigValue(_ field: String) -> String? {
         let json = remoteConfig[.fundingConfig].jsonValue as? [String: String]
         guard let value = json?[field], !value.isEmpty else { return nil }
-        return URL(string: value.contains("://") ? value : "https://" + value)
+        return value
     }
 
     func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {
