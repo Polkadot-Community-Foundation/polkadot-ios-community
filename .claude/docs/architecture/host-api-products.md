@@ -73,6 +73,14 @@ from Debug Settings prompts a restart alert: confirm terminates the app (`exit(0
 the next launch builds every surface against the new flag; cancel reverts the flag.
 There is no live runtime switching.
 
+**Rust is the default.** Read the flag only through
+`SettingsManagerProtocol.isTrUAPIRuntimeEnabled`
+(`Common/UserDefaults/SettingsManager+ProductRuntime.swift`), never through the generic
+`value(for:)` helper — that helper defaults every boolean setting to `false` and so
+silently selects native. An unset flag means rust in every build that ships the Debug
+Settings toggle (`TESTNET_FEATURE`: Debug, DevCI, Nightly, Safetynet); Release ships no
+toggle and stays on native, so the default there is deliberately still native.
+
 Layout under `polkadot-app/Modules/Products/`: `ProductRuntimeProtocol.swift` at the root
 defines the runtime protocols (+ the SPA factory protocol); `Chat/Native/`, `Chat/Rust/`,
 `SPA/Native/`, `SPA/Rust/` hold the per-surface, per-mode runtimes and scripts factories.
@@ -171,6 +179,7 @@ Rules:
 | Seam                          | Where                                    | When to touch                        |
 |-------------------------------|------------------------------------------|--------------------------------------|
 | Product container bridge      | `Packages/Products/`                     | Adding new JS↔Swift bridge methods   |
+| Payment approval              | `Modules/Products/PaymentRequest/`       | Changing who sees the payment sheet (allowlist lives in `ProductAutoAllowList`) |
 | Product module sub-modules    | `polkadot-app/Modules/Products/`         | Adding new product screens           |
 | Deep link handlers            | `AppConfig/AppConfig.swift`              | Adding product deep links            |
 | SPA module                    | `polkadot-app/Modules/SPA/`             | Smart Proposal Agent changes         |

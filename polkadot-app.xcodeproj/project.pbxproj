@@ -29,7 +29,6 @@
 		A57CAF662F45ECB70066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF652F45ECB70066D722 /* StructuredConcurrency */; };
 		A57CAF682F45ED940066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF672F45ED940066D722 /* StructuredConcurrency */; };
 		A5A948F02F4CA925001E514C /* Coinage in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948EF2F4CA925001E514C /* Coinage */; };
-		D0D0D0022FDA0000000D0002 /* DurableTransactions in Frameworks */ = {isa = PBXBuildFile; productRef = D0D0D0012FDA0000000D0001 /* DurableTransactions */; };
 		A5A948F22F4CA925001E5150 /* ExtrinsicServiceExt in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */; };
 		A5B2502E2F47481900E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502D2F47481900E46E09 /* KeyDerivation */; };
 		A5B250302F47482000E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502F2F47482000E46E09 /* KeyDerivation */; };
@@ -44,6 +43,7 @@
 		CC0CC0302FBA000100CCAA03 /* ChainRegistry in Frameworks */ = {isa = PBXBuildFile; productRef = CC0CC0402FBA000100CCAA04 /* ChainRegistry */; };
 		CC0CC0502FBA000100CCAA05 /* EventCenter in Frameworks */ = {isa = PBXBuildFile; productRef = CC0CC0602FBA000100CCAA06 /* EventCenter */; };
 		CC0CC0702FBA000100CCAA07 /* EventCenter in Frameworks */ = {isa = PBXBuildFile; productRef = CC0CC0802FBA000100CCAA08 /* EventCenter */; };
+		D0D0D0022FDA0000000D0002 /* DurableTransactions in Frameworks */ = {isa = PBXBuildFile; productRef = D0D0D0012FDA0000000D0001 /* DurableTransactions */; };
 		E9C7172E2ECDD6730014841F /* JailbreakDetection in Frameworks */ = {isa = PBXBuildFile; productRef = E9C7172D2ECDD6730014841F /* JailbreakDetection */; };
 		EA11ACCE000000000000B001 /* ExternalAccessibility in Frameworks */ = {isa = PBXBuildFile; productRef = EA11ACCE000000000000B002 /* ExternalAccessibility */; };
 /* End PBXBuildFile section */
@@ -1901,10 +1901,6 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Coinage;
 		};
-		D0D0D0012FDA0000000D0001 /* DurableTransactions */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = DurableTransactions;
-		};
 		A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ExtrinsicServiceExt;
@@ -1960,6 +1956,10 @@
 		CC0CC0802FBA000100CCAA08 /* EventCenter */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EventCenter;
+		};
+		D0D0D0012FDA0000000D0001 /* DurableTransactions */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DurableTransactions;
 		};
 		E9C7172D2ECDD6730014841F /* JailbreakDetection */ = {
 			isa = XCSwiftPackageProductDependency;

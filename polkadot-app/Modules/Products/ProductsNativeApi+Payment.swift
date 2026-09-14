@@ -23,41 +23,53 @@ extension ProductsNativeApi {
         let balanceService = try await coinageService.coinageBalanceService()
         return balanceService.balanceStream
             .map { balance in
-                PaymentBalance(available: balance.availablePrivate)
+                PaymentBalance(available: balance.total)
             }
             .eraseToAnyAsyncSequence()
     }
 
-    func requestPayment(amountInPlanks: String, destination: AccountId) async throws -> PaymentReceipt {
-        guard let amount = BigUInt(amountInPlanks) else {
-            throw ProductNativeApiError.invalidParam("amountInPlanks")
-        }
-
-        let externalPaymentService = try requirePaymentsSupport().externalPaymentService
+    func requestPayment(amount: Balance, destination: AccountId, id: PaymentRequestId) async throws {
+        let coinageService = try requirePaymentsSupport().coinageService
 
         try await checkSufficientBalance(amount: amount)
         try await awaitUserApproval(amount: amount, destination: destination)
+        try await awaitPrivacyConsentIfNeeded(amount: amount)
 
-        let paymentId = try await externalPaymentService.initiatePayment(
-            origin: productId,
-            amountInPlanks: amount,
-            destination: destination
-        )
-
-        return PaymentReceipt(paymentId: paymentId)
+        do {
+            try await coinageService.initiateExternalPayment(
+                productId: productId,
+                paymentId: id.toHex(includePrefix: true),
+                amountInPlanks: amount,
+                destination: destination
+            )
+        } catch ExternalPaymentError.alreadyExists {
+            throw HostPaymentRequestError.alreadyExists
+        }
     }
 
-    func subscribePaymentStatus(paymentId: String) async throws -> AnyAsyncSequence<HostPaymentStatus> {
-        let externalPaymentService = try requirePaymentsSupport().externalPaymentService
-        return try externalPaymentService.subscribePaymentStatus(paymentId: paymentId)
-            .map { status in
-                switch status {
-                case .processing: .processing
-                case .completed: .completed
-                case let .failed(reason): .failed(reason: reason)
+    func subscribePaymentStatus(id: PaymentRequestId) async throws -> AnyAsyncSequence<HostPaymentStatus> {
+        let coinageService = try requirePaymentsSupport().coinageService
+        let statuses = coinageService.subscribeExternalPaymentStatus(
+            productId: productId,
+            paymentId: id.toHex(includePrefix: true)
+        )
+
+        return AsyncThrowingStream<HostPaymentStatus, Error> { continuation in
+            let task = Task {
+                do {
+                    for try await status in statuses {
+                        continuation.yield(HostPaymentStatus(status: status))
+                    }
+                    continuation.finish()
+                } catch ExternalPaymentError.notFound {
+                    continuation.finish(throwing: HostPaymentStatusError.notFound)
+                } catch {
+                    continuation.finish(throwing: error)
                 }
             }
-            .eraseToAnyAsyncSequence()
+            continuation.onTermination = { _ in task.cancel() }
+        }
+        .eraseToAnyAsyncSequence()
     }
 
     /// Registers an idempotent top-up bound to `(productId, id)` and returns once initialization has
@@ -81,10 +93,9 @@ extension ProductsNativeApi {
                 paymentId: id.toHex(),
                 productId: productId
             )
-        } catch let error as IncomingPaymentError {
-            throw error.asHostTopUpError
         } catch {
-            throw HostPaymentTopUpError.unknown(reason: error.localizedDescription)
+            logger.error("Top-up could not be registered: \(error)")
+            throw HostPaymentTopUpError(error, unknownReason: Self.topUpRegistrationFailed)
         }
     }
 
@@ -100,12 +111,20 @@ extension ProductsNativeApi {
             )
             .map { HostPaymentTopUpStatus(status: $0) }
             .eraseToAnyAsyncSequence()
-        } catch let error as IncomingPaymentError {
-            throw error.asHostTopUpError
         } catch {
-            throw HostPaymentTopUpError.unknown(reason: error.localizedDescription)
+            logger.error("Top-up status could not be observed: \(error)")
+            throw HostPaymentTopUpError(error, unknownReason: Self.topUpStatusUnavailable)
         }
     }
+}
+
+// MARK: - Wire reasons
+
+private extension ProductsNativeApi {
+    /// What a third-party product is told on an unclassified failure. The real error is logged; a
+    /// CoreData or Keychain dump is not for product scripts.
+    static let topUpRegistrationFailed = "top-up could not be registered"
+    static let topUpStatusUnavailable = "top-up status is unavailable"
 }
 
 // MARK: - Payment Request Checks
@@ -120,46 +139,48 @@ private extension ProductsNativeApi {
         return paymentsSupport
     }
 
-    /// Validates spendable balance covers the requested amount.
-    ///
-    /// If the product has `balanceAccess` permission, returns `insufficientBalance`
-    /// (the product already knows balances). Otherwise returns `rejected`
-    /// to avoid leaking balance information.
+    /// Checks the amount against what is spendable on-chain right now (private plus gaining-privacy
+    /// funds; minting funds cannot be waited for). The permission is only read, never prompted: with
+    /// `balanceAccess` the product already knows balances and gets `insufficientBalance`; without it
+    /// the shortfall is reported as `rejected` so nothing leaks.
     func checkSufficientBalance(amount: Balance) async throws {
-        guard
-            try await permissionGuard.consumePermission(
-                productId: productId,
-                permission: .balanceAccess
-            ) else {
-            throw PaymentRequestError.rejected
-        }
-
         let coinageService = try requirePaymentsSupport().coinageService
         let balanceService = try await coinageService.coinageBalanceService()
 
-        var spendable = Balance(0)
+        var balance = CoinageBalance.empty
         for try await value in balanceService.balanceStream.prefix(1) {
-            spendable = value.availablePrivate
+            balance = value
         }
 
-        if spendable < amount {
-            throw PaymentRequestError.insufficientBalance
+        guard balance.availablePrivate + balance.gainingPrivacy.amount < amount else { return }
+
+        let knowsBalance = try await permissionGuard.check(productId: productId, permission: .balanceAccess)
+        throw knowsBalance ? HostPaymentRequestError.insufficientBalance : HostPaymentRequestError.rejected
+    }
+
+    /// Warns whenever private vouchers alone cannot pay — a voucher still gaining privacy or a coin
+    /// loaded just to be unloaded gives up privacy — unless the preset is `minPrivacy`. Not allowlisted.
+    func awaitPrivacyConsentIfNeeded(amount: Balance) async throws {
+        guard recyclingStrategy.strategy != .minPrivacy else { return }
+
+        let coinageService = try requirePaymentsSupport().coinageService
+        guard try await !coinageService.canExecuteExternalPaymentPrivately(amount: amount) else { return }
+
+        guard await paymentPrivacyConfirmer.confirmGainingPrivacySpend(amount: amount) else {
+            throw HostPaymentRequestError.rejected
         }
     }
 
-    /// Shows the payment request approval sheet and suspends until the user decides.
+    /// Auto-approved for allowlisted products; everyone else sees the payment request sheet.
     func awaitUserApproval(amount: Balance, destination: AccountId) async throws {
-        let context = PaymentRequestContext(
+        let decision = await paymentApprovalRequester.requestApproval(
             productId: productId,
-            amountInPlanks: amount,
+            amount: amount,
             destination: destination
         )
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            context.setContinuation(continuation)
-            Task { @MainActor [productsRouter] in
-                productsRouter.showPaymentRequest(context: context)
-            }
+        guard decision == .approved else {
+            throw HostPaymentRequestError.rejected
         }
     }
 }
@@ -168,7 +189,7 @@ private extension ProductsNativeApi {
 
 private extension ProductsNativeApi {
     /// Describes the product-facing source as the persisted bytes the claim is later resolved from —
-    /// the derivation **index** for a product account (never a derived key), the raw key otherwise.
+    /// the full derivation **path** for a product account (never a derived key), the raw key otherwise.
     /// Resolution + validation happen later, in `IncomingPaymentSourceResolver`.
     static func incomingPaymentDescriptor(
         from source: PaymentTopUpSource,
@@ -192,14 +213,29 @@ private extension ProductsNativeApi {
 
 // MARK: - Wire Mapping
 
-private extension IncomingPaymentError {
-    var asHostTopUpError: HostPaymentTopUpError {
-        switch self {
-        case .alreadyExists: .alreadyExists
-        case .invalidSource: .invalidSource
-        case .sourceBusy: .sourceBusy
-        case let .notFound(paymentId): .notFound(paymentId)
-        case let .unknown(reason): .unknown(reason: reason)
+private extension HostPaymentTopUpError {
+    /// The coded error for `error`; anything that is not a classified `IncomingPaymentError` becomes
+    /// `unknown` with the generic `unknownReason` rather than the error's own description.
+    init(_ error: any Error, unknownReason: String) {
+        switch error as? IncomingPaymentError {
+        case .alreadyExists: self = .alreadyExists
+        case .invalidSource: self = .invalidSource
+        case .sourceBusy: self = .sourceBusy
+        case .invalidAmount: self = .unknown(reason: "amount must be positive")
+        case let .notFound(paymentId): self = .notFound(paymentId)
+        case .unknown,
+             .none: self = .unknown(reason: unknownReason)
+        }
+    }
+}
+
+private extension HostPaymentStatus {
+    init(status: ExternalPaymentStatus) {
+        switch status {
+        case .processing: self = .processing
+        case .completed: self = .completed
+        case let .partiallyCompleted(settled): self = .partiallyClaimed(settledInPlanks: settled)
+        case let .failed(reason): self = .failed(reason: reason)
         }
     }
 }

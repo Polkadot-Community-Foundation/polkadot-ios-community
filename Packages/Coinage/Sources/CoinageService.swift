@@ -57,20 +57,27 @@ public protocol CoinageServicing: Actor {
     /// Suspends and waits if the service has not been configured with an asset yet.
     func coinageBalanceService() async throws -> CoinageBalanceServiceProtocol
 
-    /// Preview an external payment for UI validation (degraded privacy check).
+    /// Preview an external payment: what it would spend and whether that costs privacy.
     func previewExternalPayment(for amount: BigUInt) async throws -> ExternalPaymentPreview
 
-    /// Initiate an external payment. Saves to store and returns the payment id.
+    /// Whether private vouchers alone would pay `amount` — the check behind the privacy warning.
+    func canExecuteExternalPaymentPrivately(amount: BigUInt) async throws -> Bool
+
+    /// Register an external payment identified by `(productId, paymentId)`.
+    /// Throws `ExternalPaymentError.alreadyExists` on replay.
     func initiateExternalPayment(
-        origin: String,
+        productId: String,
+        paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
-    ) async throws -> String
+    ) async throws
 
-    /// Subscribe to the status of an external payment.
-    func subscribeExternalPaymentStatus(
+    /// Subscribe to the status of an external payment identified by `(productId, paymentId)`; the
+    /// stream fails with `ExternalPaymentError.notFound` for an unknown identity.
+    nonisolated func subscribeExternalPaymentStatus(
+        productId: String,
         paymentId: String
-    ) throws -> AnyAsyncSequence<ExternalPaymentStatus>
+    ) -> AnyAsyncSequence<ExternalPaymentStatus>
 
     /// Preview a transfer and compute both the full and non-degraded sendable amounts.
     func previewTransfer(for amount: BigUInt) async throws -> TransferPreview
@@ -215,8 +222,6 @@ public actor CoinageService {
     }
 }
 
-// MARK: - Incoming Payments
-
 // MARK: - CoinageServicing
 
 extension CoinageService: CoinageServicing {
@@ -227,22 +232,30 @@ extension CoinageService: CoinageServicing {
         return try await externalPaymentService.previewPayment(for: amount, context: context)
     }
 
+    public func canExecuteExternalPaymentPrivately(amount: BigUInt) async throws -> Bool {
+        let context = try await requireContext()
+        return try await externalPaymentService.canExecuteExternalPaymentPrivately(amount: amount, context: context)
+    }
+
     public func initiateExternalPayment(
-        origin: String,
+        productId: String,
+        paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
-    ) async throws -> String {
+    ) async throws {
         try await externalPaymentService.initiatePayment(
-            origin: origin,
+            productId: productId,
+            paymentId: paymentId,
             amountInPlanks: amountInPlanks,
             destination: destination
         )
     }
 
-    public func subscribeExternalPaymentStatus(
+    public nonisolated func subscribeExternalPaymentStatus(
+        productId: String,
         paymentId: String
-    ) throws -> AnyAsyncSequence<ExternalPaymentStatus> {
-        try externalPaymentService.subscribePaymentStatus(paymentId: paymentId)
+    ) -> AnyAsyncSequence<ExternalPaymentStatus> {
+        externalPaymentService.subscribePaymentStatus(productId: productId, paymentId: paymentId)
     }
 
     // MARK: Denomination Context

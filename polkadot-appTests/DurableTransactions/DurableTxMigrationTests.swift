@@ -4,7 +4,7 @@ import Testing
 
 @testable import polkadot_app
 
-/// UserDataModel 46 → 47: `CDCoinageTxEntry` becomes the domain-neutral `CDDurableTx` with a `domainId`,
+/// UserDataModel 47 → 48: `CDCoinageTxEntry` becomes the domain-neutral `CDDurableTx` with a `domainId`,
 /// and coinage's input/output rows keep pointing at it. A store with rows in it must come through the
 /// lightweight migration with the same ids, statuses and asset links.
 @Suite("Durable transaction store migration", .serialized)
@@ -12,22 +12,22 @@ struct DurableTxMigrationTests {
     private static let entryId = UUID().uuidString
     private static let coinKeyHex = "0x0102"
 
-    @Test("The current model is 47 and follows 46")
+    @Test("The current model is 48 and follows 47")
     func versionChain() {
-        #expect(UserStorageParams.modelVersion == .version47)
-        #expect(UserStorageVersion.version46.nextVersion() == .version47)
-        #expect(UserStorageVersion.version47.nextVersion() == nil)
+        #expect(UserStorageParams.modelVersion == .version48)
+        #expect(UserStorageVersion.version47.nextVersion() == .version48)
+        #expect(UserStorageVersion.version48.nextVersion() == nil)
     }
 
-    @Test("A 46 store with a coinage entry migrates to 47 keeping the row, its id and its asset links")
+    @Test("A 47 store with a coinage entry migrates to 48 keeping the row, its id and its asset links")
     func migratesEntryWithAssets() throws {
-        let storeURL = try makeStore46WithRows()
+        let storeURL = try makeStore47WithRows()
         defer { removeStore(at: storeURL) }
 
         let migrator = UserStorageMigrator(
             storeURL: storeURL,
             modelDirectory: UserStorageParams.modelDirectory,
-            model: .version46,
+            model: .version47,
             fileManager: .default
         )
         #expect(migrator.requiresMigration())
@@ -36,7 +36,7 @@ struct DurableTxMigrationTests {
 
         #expect(!migrator.requiresMigration())
 
-        let context = try open(storeURL, model: model(.version47))
+        let context = try open(storeURL, model: model(.version48))
         let request = NSFetchRequest<NSManagedObject>(entityName: "CDDurableTx")
         let rows = try context.fetch(request)
         try #require(rows.count == 1)
@@ -85,15 +85,15 @@ private extension DurableTxMigrationTests {
         return context
     }
 
-    /// A 46 store holding one coin, one entry consuming it (status pendingSuccess, sequence 7) and the
+    /// A 47 store holding one coin, one entry consuming it (status pendingSuccess, sequence 7) and the
     /// input row linking the two.
-    func makeStore46WithRows() throws -> URL {
+    func makeStore47WithRows() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("durable-migration-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let storeURL = directory.appendingPathComponent("UserDataModel_v2.sqlite")
 
-        let context = try open(storeURL, model: model(.version46))
+        let context = try open(storeURL, model: model(.version47))
 
         let coin = NSEntityDescription.insertNewObject(forEntityName: "CDCoin", into: context)
         coin.setValue("coin:0", forKey: "identifier")

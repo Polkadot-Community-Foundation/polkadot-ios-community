@@ -27,13 +27,33 @@ public protocol ClaimAssetServicing: Sendable {
 }
 
 public final class ClaimAssetService: ClaimAssetServicing, @unchecked Sendable {
-    /// How long to wait for funded asset to appear on each pass before claiming what is there.
-    private static let detectionTimeout: Duration = .seconds(30)
+    /// The pacing of one claim and the time it runs on. Injected so tests drive every timeout, delay,
+    /// and window from a test clock instead of waiting on the wall clock.
+    struct Timing: Sendable {
+        /// How long one pass waits for a fresh balance look before loading against the last one seen.
+        /// This is the only pacing between attempts, so a failing load retries at this cadence.
+        let detectionTimeout: Duration
+        /// How long a dropped balance subscription waits before it is opened again.
+        let resubscribeDelay: Duration
+        /// Paces the timeout and the delay above.
+        let clock: any Clock<Duration>
+        /// The wall-clock time the retry window is checked against. Kept as a date rather than a clock
+        /// instant so a window opened on one launch means the same thing on the next.
+        let now: @Sendable () -> Date
+
+        static let production = Timing(
+            detectionTimeout: .seconds(30),
+            resubscribeDelay: .seconds(1),
+            clock: ContinuousClock(),
+            now: { Date() }
+        )
+    }
 
     private let assetsTracking: any AssetsTracking
     private let voucherLoaderFactory: any VoucherLoaderFactoryProtocol
     private let voucherService: any VoucherServiceProtocol
     private let txService: any CoinageTxServicing
+    private let timing: Timing
     private let logger: SDKLoggerProtocol?
 
     init(
@@ -41,12 +61,14 @@ public final class ClaimAssetService: ClaimAssetServicing, @unchecked Sendable {
         voucherLoaderFactory: any VoucherLoaderFactoryProtocol,
         voucherService: any VoucherServiceProtocol,
         txService: any CoinageTxServicing,
+        timing: Timing = .production,
         logger: SDKLoggerProtocol?
     ) {
         self.assetsTracking = assetsTracking
         self.voucherLoaderFactory = voucherLoaderFactory
         self.voucherService = voucherService
         self.txService = txService
+        self.timing = timing
         self.logger = logger
     }
 
@@ -60,16 +82,15 @@ public final class ClaimAssetService: ClaimAssetServicing, @unchecked Sendable {
     ) -> AnyAsyncSequence<CoinageTransferDetection> {
         AsyncStream { continuation in
             let task = Task {
-                await self.runClaim(
+                let run = ClaimRun(
                     wallet: wallet,
                     amount: amount,
                     groupId: groupId,
                     retryUntil: retryUntil,
-                    instanceId: instanceId,
-                    context: context
-                ) { detection in
-                    continuation.yield(detection)
-                }
+                    context: context,
+                    report: { continuation.yield($0) }
+                )
+                await self.runClaim(run, instanceId: instanceId)
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
@@ -81,93 +102,115 @@ public final class ClaimAssetService: ClaimAssetServicing, @unchecked Sendable {
 // MARK: - Claim loop
 
 private extension ClaimAssetService {
-    func runClaim(
-        wallet: any WalletManaging,
-        amount: Balance,
-        groupId: CoinageTxGroupId,
-        retryUntil: Date,
-        instanceId: CoinageInstanceId,
-        context: DenominationBreakdownContext,
-        report: @Sendable (CoinageTransferDetection) -> Void
-    ) async {
-        report(.detecting)
+    /// One claim's fixed inputs, so the loop's helpers take the run rather than six parameters.
+    struct ClaimRun {
+        let wallet: any WalletManaging
+        let amount: Balance
+        let groupId: CoinageTxGroupId
+        let retryUntil: Date
+        let context: DenominationBreakdownContext
+        let report: @Sendable (CoinageTransferDetection) -> Void
+    }
 
-        guard let accountId = try? wallet.getRawPublicKey() else {
-            logger?.error("Claim asset: invalid wallet for group=\(groupId)")
-            report(.notClaimed)
+    func runClaim(_ run: ClaimRun, instanceId: CoinageInstanceId) async {
+        run.report(.detecting)
+
+        guard let accountId = try? run.wallet.getRawPublicKey() else {
+            logger?.error("Claim asset: invalid wallet for group=\(run.groupId)")
+            run.report(.notClaimed)
             return
         }
 
-        var settled: [CoinageTxEntry] = []
+        // Balance looks are consumed once, so a failing load cannot spin the loop off the same look.
+        let balanceLooks = AsyncBufferedChannel<Balance>()
+        let pump = Task { await self.pumpBalance(into: balanceLooks, instanceId: instanceId, accountId: accountId) }
+        defer { pump.cancel() }
 
-        logger?.debug(
-            "Will start claim for group=\(groupId) amount=\(amount)"
-        )
+        logger?.debug("Will start claim for group=\(run.groupId) amount=\(run.amount)")
+
+        do {
+            let settled = try await claimUntilDone(run, looks: balanceLooks.makeAsyncIterator())
+            let verdict = try await toVerdict(settled, amount: run.amount, context: run.context)
+
+            // A cancelled run has no last word: the record stays active for the next launch.
+            guard !Task.isCancelled else { return }
+
+            logger?.debug("Claiming completed: verdict=\(verdict) group=\(run.groupId)")
+            run.report(verdict)
+        } catch {
+            logger?.error("Claim asset: run ended without a verdict group=\(run.groupId): \(error)")
+        }
+    }
+
+    /// Loads against arriving balance until the amount is claimed, the remainder is unloadable, or
+    /// the window closes. Returns the group as it last settled. Throws when the group's value cannot
+    /// be read: that is never a shortfall.
+    func claimUntilDone(
+        _ run: ClaimRun,
+        looks: AsyncBufferedChannel<Balance>.Iterator
+    ) async throws -> [CoinageTxEntry] {
+        var settled: [CoinageTxEntry] = []
+        var lastSeen: Balance = 0
 
         while !Task.isCancelled {
-            logger?.debug("Awaiting known operations for group=\(groupId)")
+            settled = try await awaitKnownOperationsSettled(run)
 
-            // Await operations already registered under this group (resume-safe), reporting progress.
-            settled = await awaitKnownOperationsSettled(
-                groupId: groupId, amount: amount, context: context, report: report
-            )
+            let claimed = try await valueClaimed(settled.finalizedSuccess(), context: run.context)
+            guard let remaining = remainder(after: claimed, run: run) else { break }
 
-            logger?.debug("Awaiting claimed amount for group=\(groupId)")
+            lastSeen = await awaitBalance(looks, lastSeen: lastSeen, target: remaining)
+            let loadable = Swift.min(lastSeen, remaining)
 
-            let claimed = await valueClaimed(settled.finalizedSuccess(), context: context)
+            guard loadable > 0 else { continue }
 
-            logger?.debug("Received claimed amount=\(claimed), group=\(groupId)")
-
-            let remaining = amount > claimed ? amount - claimed : 0
-            if remaining == 0 {
-                logger?.debug("All claimed, exiting claim loop for group=\(groupId)")
-                break
-            }
-
-            logger?.debug("Waiting for remained amount=\(remaining) for group=\(groupId)")
-
-            // Detect the still-unloaded balance and load vouchers for the remainder.
-            let observed = await awaitBalance(instanceId: instanceId, accountId: accountId, target: remaining)
-            let loadable = Swift.min(observed, remaining)
-
-            logger?.debug("Loaded \(loadable) for group=\(groupId)")
-
-            if loadable > 0 {
-                report(.claiming)
-
-                logger?.debug("Claiming \(loadable) for group=\(groupId)")
-                _ = await load(wallet: wallet, amount: loadable, groupId: groupId, context: context)
-            } else if Date() >= retryUntil {
-                logger?.debug("Claim asset: window closed group=\(groupId) claimed<amount")
-                break
-            }
+            run.report(.claiming)
+            logger?.debug("Claiming \(loadable) for group=\(run.groupId)")
+            await load(wallet: run.wallet, amount: loadable, groupId: run.groupId, context: run.context)
         }
 
-        let verdict = await toVerdict(settled, amount: amount, context: context)
+        return settled
+    }
 
-        logger?.debug("Claming completed: verdict=\(verdict) group=\(groupId)")
+    /// What is still owed, or `nil` once nothing further will be attempted: the amount is covered, the
+    /// remainder is below the smallest denomination (nothing can ever load it, however much more
+    /// arrives), or the window closed. The window is checked before attempting: the funds are the
+    /// caller's own and nothing else will spend them, so a closed window is the end of it.
+    func remainder(after claimed: Balance, run: ClaimRun) -> Balance? {
+        let remaining = run.amount > claimed ? run.amount - claimed : 0
 
-        report(verdict)
+        logger?.debug("Claimed \(claimed) of \(run.amount), remaining \(remaining) for group=\(run.groupId)")
+
+        if remaining == 0 { return nil }
+
+        if run.context.breakdown(amountInPlanks: remaining).isEmpty {
+            logger?.debug("Claim asset: remainder \(remaining) is unloadable group=\(run.groupId)")
+            return nil
+        }
+
+        if timing.now() >= run.retryUntil {
+            logger?.debug("Claim asset: window closed group=\(run.groupId) claimed=\(claimed)")
+            return nil
+        }
+
+        return remaining
     }
 
     /// Reports the group on every ledger update until nothing in it is live, then returns what it
     /// settled on — mirrors `ClaimCoinsService.awaitKnownOperationsSettled`. An empty group returns
-    /// immediately (`allSatisfy` over no entries is `true`), the "not loaded yet" signal.
-    func awaitKnownOperationsSettled(
-        groupId: CoinageTxGroupId,
-        amount: Balance,
-        context: DenominationBreakdownContext,
-        report: @Sendable (CoinageTransferDetection) -> Void
-    ) async -> [CoinageTxEntry] {
+    /// immediately (`allSatisfy` over no entries is `true`), the "not loaded yet" signal. A stream
+    /// that fails settles on the last states seen; a valuation failure propagates.
+    func awaitKnownOperationsSettled(_ run: ClaimRun) async throws -> [CoinageTxEntry] {
         var last: [CoinageTxEntry] = []
         do {
-            for try await states in txService.subscribeOperationGroupStatuses(groupId) {
+            for try await states in txService.subscribeOperationGroupStatuses(run.groupId) {
                 last = states
-                await report(toProgress(states, amount: amount, context: context))
+                try await run.report(toProgress(states, amount: run.amount, context: run.context))
                 if states.allSatisfy({ !$0.status.isLive }) { break }
             }
+        } catch let error as ClaimValuationError {
+            throw error
         } catch {
-            logger?.error("Claim asset: group-status stream failed group=\(groupId): \(error)")
+            logger?.error("Claim asset: group-status stream failed group=\(run.groupId): \(error)")
         }
         return last
     }
@@ -179,14 +222,12 @@ private extension ClaimAssetService {
         amount: Balance,
         groupId: CoinageTxGroupId,
         context: DenominationBreakdownContext
-    ) async -> Bool {
+    ) async {
         do {
             let loader = try voucherLoaderFactory.makeLoader(for: wallet)
             _ = try await loader.load(amount: amount, breakdownContext: context, groupId: groupId)
-            return true
         } catch {
             logger?.error("Claim asset: voucher load failed group=\(groupId): \(error)")
-            return false
         }
     }
 }
@@ -194,12 +235,40 @@ private extension ClaimAssetService {
 // MARK: - Detection
 
 private extension ClaimAssetService {
-    /// The latest balance seen within ``detectionTimeout``, stopping early once it covers `target`.
-    func awaitBalance(instanceId: CoinageInstanceId, accountId: AccountId, target: Balance) async -> Balance {
-        let latest = OSAllocatedUnfairLock<Balance>(initialState: 0)
-        _ = try? await withTimeout(Self.detectionTimeout) { [assetsTracking] in
-            let stream = try await assetsTracking.track(instanceId: instanceId, accountId: accountId)
-            for try await balance in stream {
+    /// Feeds every balance look into `channel` until cancelled, reopening the subscription after
+    /// ``Timing/resubscribeDelay`` whenever it fails or ends. A tracker that cannot be opened at all
+    /// therefore feeds nothing, and the loop runs out its window on the last balance seen.
+    func pumpBalance(
+        into channel: AsyncBufferedChannel<Balance>,
+        instanceId: CoinageInstanceId,
+        accountId: AccountId
+    ) async {
+        while !Task.isCancelled {
+            do {
+                let stream = try await assetsTracking.track(instanceId: instanceId, accountId: accountId)
+                for try await balance in stream {
+                    channel.send(balance)
+                }
+            } catch {
+                logger?.error("Claim asset: balance tracking failed for instance=\(instanceId): \(error)")
+            }
+
+            guard await (try? timing.clock.sleep(for: timing.resubscribeDelay)) != nil else { break }
+        }
+        channel.finish()
+    }
+
+    /// The newest balance look within ``Timing/detectionTimeout``, stopping early once it covers
+    /// `target`; `lastSeen` when no fresh look arrives in time. The newest look wins outright even when
+    /// smaller: the account can be spent from elsewhere.
+    func awaitBalance(
+        _ looks: AsyncBufferedChannel<Balance>.Iterator,
+        lastSeen: Balance,
+        target: Balance
+    ) async -> Balance {
+        let latest = OSAllocatedUnfairLock<Balance>(initialState: lastSeen)
+        _ = try? await withTimeout(timing.detectionTimeout, clock: timing.clock) {
+            while let balance = await looks.next() {
                 latest.withLock { $0 = balance }
                 if balance >= target { break }
             }
@@ -218,11 +287,11 @@ private extension ClaimAssetService {
         _ states: [CoinageTxEntry],
         amount: Balance,
         context: DenominationBreakdownContext
-    ) async -> CoinageTransferDetection {
+    ) async throws -> CoinageTransferDetection {
         guard !states.isEmpty else { return .detecting }
         guard states.allSatisfy(\.status.isArrived) else { return .claiming }
 
-        let value = await valueClaimed(states, context: context)
+        let value = try await valueClaimed(states, context: context)
         guard value >= amount else { return .claiming }
 
         let finalized = states.allSatisfy { $0.status == .finalizedSuccess }
@@ -236,22 +305,25 @@ private extension ClaimAssetService {
         _ states: [CoinageTxEntry],
         amount: Balance,
         context: DenominationBreakdownContext
-    ) async -> CoinageTransferDetection {
-        let value = await valueClaimed(states.finalizedSuccess(), context: context)
-
-        if value >= amount, amount > 0 {
-            return .claimed(amount: value, finalized: true)
-        }
-        return value > 0 ? .claimedPartially(claimed: value) : .notClaimed
+    ) async throws -> CoinageTransferDetection {
+        let value = try await valueClaimed(states.finalizedSuccess(), context: context)
+        return .verdict(finalized: value, of: amount)
     }
 
     /// The planks loaded by `entries` — their output vouchers, fetched by key, valued against the
-    /// denomination context.
-    func valueClaimed(_ entries: [CoinageTxEntry], context: DenominationBreakdownContext) async -> Balance {
+    /// denomination context. A store that cannot be read is a `ClaimValuationError`, never zero.
+    func valueClaimed(
+        _ entries: [CoinageTxEntry],
+        context: DenominationBreakdownContext
+    ) async throws -> Balance {
         let outputKeys = entries.outputPublicKeys()
         guard !outputKeys.isEmpty else { return 0 }
 
-        let vouchers = await (try? voucherService.fetchVouchers(publicKeys: outputKeys)) ?? []
-        return vouchers.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.exponent) }
+        do {
+            let vouchers = try await voucherService.fetchVouchers(publicKeys: outputKeys)
+            return vouchers.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.exponent) }
+        } catch {
+            throw ClaimValuationError(underlying: error)
+        }
     }
 }
