@@ -11,3 +11,4 @@ BRAND_FIAT_SYMBOL = $
 BRAND_TERMS_HOST = parity.io
 BRAND_PRIVACY_HOST = parity.io
 BRAND_CONTACT_EMAIL = info@parity.io
+BRAND_LOGS_EMAIL = info@parity.io

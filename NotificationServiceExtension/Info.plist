@@ -18,6 +18,8 @@
 	<string>$(BRAND_DISPLAY_NAME)</string>
 	<key>BrandFiatSymbol</key>
 	<string>$(BRAND_FIAT_SYMBOL)</string>
+	<key>BrandLogsEmail</key>
+	<string>$(BRAND_LOGS_EMAIL)</string>
 	<key>BrandPrivacyHost</key>
 	<string>$(BRAND_PRIVACY_HOST)</string>
 	<key>BrandShareRoot</key>

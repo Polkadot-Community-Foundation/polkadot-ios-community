@@ -9,6 +9,8 @@ enum AppConfig {
 
     static var contactEmail: String { Brand.contactEmail }
 
+    static var logsEmail: String { Brand.logsEmail }
+
     static let timestampRefreshInterval: TimeInterval = 60
 
     #if TESTNET_FEATURE
