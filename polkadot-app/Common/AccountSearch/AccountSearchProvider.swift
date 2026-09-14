@@ -70,14 +70,15 @@ private extension AccountSearchProvider {
         for query: String?
     ) async throws -> (contacts: [SearchRow<MatchPayload>], global: [SearchRow<MatchPayload>]) {
         guard let query, !query.isEmpty else {
-            let contacts = try await fetchLocalContacts(matching: nil)
+            let contacts = try await fetchLocalContacts(matching: nil, accountId: nil)
             return (contacts: contacts, global: [])
         }
 
         let normalizedQuery = query.trimmingDot()
+        let accountId = try? normalizedQuery.toAccountId()
 
-        async let localRows = fetchLocalContacts(matching: normalizedQuery)
-        async let globalRows = fetchGlobalContacts(query: normalizedQuery)
+        async let localRows = fetchLocalContacts(matching: normalizedQuery, accountId: accountId)
+        async let globalRows = fetchGlobalContacts(query: normalizedQuery, accountId: accountId)
 
         let contacts = try await localRows
         let global = try await globalRows
@@ -113,10 +114,16 @@ private extension AccountSearchProvider {
         previous?.cancel()
     }
 
-    /// A nil prefix fetches every stored contact, otherwise only the ones whose username matches it.
-    func fetchLocalContacts(matching usernamePrefix: String?) async throws -> [SearchRow<MatchPayload>] {
+    /// An account id takes precedence over a username prefix, since an exact address match
+    /// is never also a username. A nil prefix with no account id fetches every stored contact.
+    func fetchLocalContacts(
+        matching usernamePrefix: String?,
+        accountId: AccountId?
+    ) async throws -> [SearchRow<MatchPayload>] {
         let repository =
-            if let usernamePrefix {
+            if let accountId {
+                localContactSearch.contact(accountId: accountId)
+            } else if let usernamePrefix {
                 localContactSearch.searchContacts(usernamePrefix: usernamePrefix)
             } else {
                 localContactSearch.allContacts()
@@ -138,10 +145,9 @@ private extension AccountSearchProvider {
             }
     }
 
-    func fetchGlobalContacts(query: String) async throws -> [SearchRow<MatchPayload>] {
+    func fetchGlobalContacts(query: String, accountId: AccountId?) async throws -> [SearchRow<MatchPayload>] {
         do {
-            if let accountId = try? query.toAccountId(),
-               let account = try? await remoteContactSearch.fetch(by: accountId) {
+            if let accountId, let account = try? await remoteContactSearch.fetch(by: accountId) {
                 try Task.checkCancellation()
                 return [makeRemoteRow(contact: account)]
             }

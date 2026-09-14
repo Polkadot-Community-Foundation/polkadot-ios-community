@@ -4,6 +4,7 @@ import Operation_iOS
 
 protocol LocalContactSearching {
     func searchContacts(usernamePrefix: String) -> AnyDataProviderRepository<Chat.Contact>
+    func contact(accountId: AccountId) -> AnyDataProviderRepository<Chat.Contact>
     func allContacts() -> AnyDataProviderRepository<Chat.Contact>
 }
 
@@ -16,6 +17,11 @@ final class LocalContactSearchService: LocalContactSearching {
 
     func searchContacts(usernamePrefix: String) -> AnyDataProviderRepository<Chat.Contact> {
         let predicate = NSPredicate.contact(beginsWith: usernamePrefix)
+        return repositoryFactory.createRepository(forFilter: predicate)
+    }
+
+    func contact(accountId: AccountId) -> AnyDataProviderRepository<Chat.Contact> {
+        let predicate = NSPredicate.contact(accountId: accountId)
         return repositoryFactory.createRepository(forFilter: predicate)
     }
 

@@ -106,6 +106,27 @@ public final class SearchContactViewLayout: DiffableCollectionViewProviderView<S
 }
 
 public extension SearchContactViewLayout {
+    /// Everything the layout shows around the rows: hint, failure text and loader.
+    /// Pushed on its own while a search is in flight, so the rows already on screen stay put.
+    struct StatusViewModel {
+        public let showHint: Bool
+        public let searchFailReason: NSAttributedString?
+        public let showsLoader: Bool
+        public let loaderText: String?
+
+        public init(
+            showHint: Bool = false,
+            searchFailReason: NSAttributedString? = nil,
+            showsLoader: Bool = false,
+            loaderText: String? = nil
+        ) {
+            self.showHint = showHint
+            self.searchFailReason = searchFailReason
+            self.showsLoader = showsLoader
+            self.loaderText = loaderText
+        }
+    }
+
     struct ViewModel {
         public struct Section {
             public let id: String
@@ -124,23 +145,11 @@ public extension SearchContactViewLayout {
         }
 
         let sections: [Section]
-        let showHint: Bool
-        let searchFailReason: NSAttributedString?
-        let showsLoader: Bool
-        let loaderText: String?
+        let status: StatusViewModel
 
-        public init(
-            sections: [Section],
-            showHint: Bool,
-            searchFailReason: NSAttributedString?,
-            showsLoader: Bool,
-            loaderText: String?
-        ) {
+        public init(sections: [Section], status: StatusViewModel) {
             self.sections = sections
-            self.showHint = showHint
-            self.searchFailReason = searchFailReason
-            self.showsLoader = showsLoader
-            self.loaderText = loaderText
+            self.status = status
         }
     }
 
@@ -154,13 +163,17 @@ public extension SearchContactViewLayout {
         set { searchHeader.cancelHandler = newValue }
     }
 
+    func bind(status: StatusViewModel) {
+        searchHintLabel.setHidden(!status.showHint)
+        noResultsLabel.attributedText = status.searchFailReason
+        noResultsLabel.setHidden(status.searchFailReason == nil)
+        loadingView.bind(text: status.loaderText)
+        loadingView.setLoading(status.showsLoader)
+    }
+
     func bind(viewModel: ViewModel) {
         configureCollectionView(viewModel: viewModel)
-        searchHintLabel.setHidden(!viewModel.showHint)
-        noResultsLabel.attributedText = viewModel.searchFailReason
-        noResultsLabel.setHidden(viewModel.searchFailReason == nil)
-        loadingView.bind(text: viewModel.loaderText)
-        loadingView.setLoading(viewModel.showsLoader)
+        bind(status: viewModel.status)
     }
 
     func focusSearchInput() {
@@ -329,10 +342,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     )
     let viewModel = SearchContactViewLayout.ViewModel(
         sections: [section],
-        showHint: false,
-        searchFailReason: nil,
-        showsLoader: false,
-        loaderText: nil
+        status: SearchContactViewLayout.StatusViewModel()
     )
     layout.bind(viewModel: viewModel)
     return layout
@@ -343,10 +353,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     let string = NSAttributedString(string: "No results for\n\"notfoundusername\"")
     let viewModel = SearchContactViewLayout.ViewModel(
         sections: [],
-        showHint: false,
-        searchFailReason: string,
-        showsLoader: false,
-        loaderText: nil
+        status: SearchContactViewLayout.StatusViewModel(searchFailReason: string)
     )
     layout.bind(viewModel: viewModel)
     return layout
@@ -356,10 +363,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     let layout = SearchContactViewLayout()
     let viewModel = SearchContactViewLayout.ViewModel(
         sections: [],
-        showHint: true,
-        searchFailReason: nil,
-        showsLoader: false,
-        loaderText: nil
+        status: SearchContactViewLayout.StatusViewModel(showHint: true)
     )
     layout.bind(viewModel: viewModel)
     return layout
@@ -369,10 +373,10 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     let layout = SearchContactViewLayout()
     let viewModel = SearchContactViewLayout.ViewModel(
         sections: [],
-        showHint: false,
-        searchFailReason: nil,
-        showsLoader: true,
-        loaderText: "Search is taking longer than usual"
+        status: SearchContactViewLayout.StatusViewModel(
+            showsLoader: true,
+            loaderText: "Search is taking longer than usual"
+        )
     )
     layout.bind(viewModel: viewModel)
     return layout
@@ -415,10 +419,7 @@ extension SearchContactViewLayout: UICollectionViewDelegate {
     ]
     let viewModel = SearchContactViewLayout.ViewModel(
         sections: sections,
-        showHint: false,
-        searchFailReason: nil,
-        showsLoader: false,
-        loaderText: nil
+        status: SearchContactViewLayout.StatusViewModel()
     )
     layout.bind(viewModel: viewModel)
     return layout

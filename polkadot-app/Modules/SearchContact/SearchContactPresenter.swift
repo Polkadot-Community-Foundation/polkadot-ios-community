@@ -15,6 +15,8 @@ final class SearchContactPresenter {
         state: .result(.sections(AccountSearchSections(recent: [], contacts: [], global: [])))
     )
 
+    private var selection: [String: ContactSearchPayload] = [:]
+
     init(
         interactor: SearchContactInteractorInputProtocol,
         wireframe: SearchContactWireframeProtocol
@@ -27,7 +29,7 @@ final class SearchContactPresenter {
 extension SearchContactPresenter: SearchContactPresenterProtocol {
     func setup() {
         interactor.setup()
-        provideViewModel()
+        provideViewModel(sections: AccountSearchSections(recent: [], contacts: [], global: []))
     }
 
     func search(username: String) {
@@ -69,13 +71,28 @@ private extension SearchContactPresenter {
 
     func applySearchState(_ state: SearchContactSearchState, for query: String) {
         currentSearch = CurrentSearch(query: query, state: state)
-        provideViewModel()
+
+        switch state {
+        case let .result(.sections(sections)):
+            selection = Dictionary(
+                (sections.recent + sections.contacts + sections.global)
+                    .map { ($0.payload.accountId.toHex(), $0.payload) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            provideViewModel(sections: sections)
+        case .result(.error):
+            selection = [:]
+            provideViewModel(sections: AccountSearchSections(recent: [], contacts: [], global: []))
+        case .started,
+             .waiting,
+             .waitingLong:
+            provideStatus()
+        }
     }
 
-    func provideViewModel() {
+    func makeStatus() -> SearchContactViewLayout.StatusViewModel {
         let query = currentSearch.query
-        let sections = currentSearch.sections
-        let allEmpty = sections.recent.isEmpty && sections.contacts.isEmpty && sections.global.isEmpty
+        let allEmpty = selection.isEmpty
         let showHint = !currentSearch.isSearching && !currentSearch.queryFailed && allEmpty && query.isEmpty
 
         let searchFailReason: NSAttributedString?
@@ -91,15 +108,24 @@ private extension SearchContactPresenter {
             searchFailReason = nil
         }
 
-        let viewSections = buildViewSections(from: sections)
-
-        let viewModel = SearchContactViewLayout.ViewModel(
-            sections: viewSections,
+        return SearchContactViewLayout.StatusViewModel(
             showHint: showHint,
             searchFailReason: searchFailReason,
             showsLoader: currentSearch.showsLoader,
             loaderText: currentSearch.loaderText
         )
+    }
+
+    func provideStatus() {
+        view?.didReceive(status: makeStatus())
+    }
+
+    func provideViewModel(sections: AccountSearchSections<ContactSearchPayload, ContactSearchPayload>) {
+        let viewModel = SearchContactViewLayout.ViewModel(
+            sections: buildViewSections(from: sections),
+            status: makeStatus()
+        )
+
         view?.didReceive(viewModel: viewModel)
     }
 
@@ -157,22 +183,12 @@ private extension SearchContactPresenter {
     }
 
     func findContact(by identifier: String) -> ContactSearchPayload? {
-        let sections = currentSearch.sections
-        return sections.recent.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
-            ?? sections.contacts.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
-            ?? sections.global.first(where: { $0.payload.accountId.toHex() == identifier })?.payload
+        selection[identifier]
     }
 
     struct CurrentSearch {
         let query: String
         let state: SearchContactSearchState
-
-        var sections: AccountSearchSections<ContactSearchPayload, ContactSearchPayload> {
-            guard case let .result(.sections(sections)) = state else {
-                return AccountSearchSections(recent: [], contacts: [], global: [])
-            }
-            return sections
-        }
 
         var queryFailed: Bool {
             guard case .result(.error) = state else {

@@ -14,6 +14,10 @@ extension NSPredicate {
         NSPredicate(format: "%K == YES", #keyPath(CDChatContact.pendingDevicesFanOut))
     }
 
+    static func contact(accountId: AccountId) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [contact(for: accountId), isContact()])
+    }
+
     static func contact(beginsWith prefix: String) -> NSPredicate {
         let begins = NSPredicate(
             format: "%K BEGINSWITH[c] %@",

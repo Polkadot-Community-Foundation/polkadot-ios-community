@@ -17,9 +17,7 @@ final class SearchAccountInteractor {
         ContactSearchPayload
     >
     private let chatOpenResolver: ChatOpenModelResolving
-    private let debouncer = Debouncer(delay: 0.5, queue: .main)
-    private var searchTask: Task<Void, Never>?
-    private var setupTask: Task<Void, Never>?
+    private let searchRunner = SearchRunner()
     private let logger: LoggerProtocol
     private let chainAsset: ChainAsset
     private let stateLock: OSAllocatedUnfairLock<State>
@@ -41,12 +39,12 @@ final class SearchAccountInteractor {
         self.chatOpenResolver = chatOpenResolver
         self.chainAsset = chainAsset
         self.logger = logger
-        stateLock = OSAllocatedUnfairLock(initialState: State(chainFormat: chainAsset.chain.chainFormat))
+        stateLock = OSAllocatedUnfairLock(initialState: State())
     }
 
     deinit {
-        searchTask?.cancel()
-        setupTask?.cancel()
+        replaceSearchTask(with: nil)
+        replaceSetupTask(with: nil)
     }
 }
 
@@ -54,14 +52,8 @@ final class SearchAccountInteractor {
 
 extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
     func setup() {
-        setupTask?.cancel()
-
         accountSearching.setup()
         subscribeToSourcesChanged()
-    }
-
-    func subscribeToRecentContacts() {
-        // No-op: subscribeToSourcesChanged handles updates via the provider
     }
 
     func searchAccount(for input: String?) {
@@ -69,45 +61,18 @@ extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
 
         guard let query = trimmed, !query.isEmpty else {
             stateLock.withLock { $0.query = nil }
-            performSearch(query: nil)
+            loadIdleState()
             return
         }
-
-        let isValidAddress = (try? query.toAccountId(using: chainAsset.chain.chainFormat)) != nil
 
         stateLock.withLock { $0.query = query }
 
-        guard isValidAddress || query.count <= Self.maximumPrefixCount else {
-            emit(
-                SearchAccountResult(
-                    query: query,
-                    loader: .unchanged,
-                    recent: [],
-                    contacts: [],
-                    global: []
-                )
-            )
+        guard isSearchable(query) else {
+            emit(.result(SearchAccountResult(recent: [], contacts: [], global: [])), for: query)
             return
         }
 
-        let pastedAddressContact = SearchAccountResult.Contact(username: nil, address: query)
-
-        emit(
-            SearchAccountResult(
-                query: query,
-                loader: isValidAddress ? .unchanged : .start,
-                recent: [],
-                contacts: isValidAddress ? [pastedAddressContact] : [],
-                global: []
-            )
-        )
-
-        guard !isValidAddress else { return }
-
-        searchTask?.cancel()
-        debouncer.debounce { [weak self] in
-            self?.performSearch(query: query)
-        }
+        performSearch(query: query)
     }
 
     func resolveChat(for address: AccountAddress) {
@@ -133,84 +98,102 @@ extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
 // MARK: - Private
 
 private extension SearchAccountInteractor {
+    struct State {
+        var query: String?
+        var globalContacts: [AccountId: Chat.RemoteContact] = [:]
+        var searchTask: Task<Void, Never>?
+        var setupTask: Task<Void, Never>?
+    }
+
+    func isSearchable(_ query: String) -> Bool {
+        let isValidAddress = (try? query.toAccountId(using: chainAsset.chain.chainFormat)) != nil
+
+        return isValidAddress || query.count <= Self.maximumPrefixCount
+    }
+
     func subscribeToSourcesChanged() {
-        setupTask = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             do {
                 for try await _ in accountSearching.sourcesChanged() {
                     guard !Task.isCancelled else { return }
-                    let query = stateLock.withLock { $0.query }
-                    if query == nil {
-                        loadIdleState()
-                    } else if let query, !query.isEmpty {
+
+                    if let query = stateLock.withLock({ $0.query }) {
+                        guard isSearchable(query) else { continue }
                         performSearch(query: query)
+                    } else {
+                        loadIdleState()
                     }
                 }
             } catch {
                 // Subscription ended
             }
         }
+
+        replaceSetupTask(with: task)
     }
 
     func loadIdleState() {
-        Task { [weak self, logger] in
+        let task = Task { [weak self] in
+            guard let self else { return }
+
             do {
-                guard let self else { return }
                 let sections = try await accountSearching.search(query: nil)
                 let result = SearchAccountResult(
-                    query: nil,
-                    loader: .unchanged,
                     recent: sections.recent.map(\.payload),
                     contacts: mapToContacts(sections.contacts),
                     global: []
                 )
-                emit(result)
+                emit(.result(result), for: nil)
             } catch {
                 logger.error("Load idle state failed: \(error)")
             }
         }
+
+        replaceSearchTask(with: task)
     }
 
-    func performSearch(query: String?) {
-        searchTask?.cancel()
+    func performSearch(query: String) {
+        let task = Task { [weak self, searchRunner] in
+            let stream = searchRunner.run { await self?.makeSearchResult(for: query) }
 
-        guard let query, !query.isEmpty else {
-            loadIdleState()
-            return
+            for await state in stream {
+                guard !Task.isCancelled else { return }
+                self?.emit(state, for: query)
+            }
         }
 
-        searchTask = Task { [weak self, logger] in
-            do {
-                guard let self else { return }
-                let sections = try await accountSearching.search(query: query)
-                try Task.checkCancellation()
+        replaceSearchTask(with: task)
+    }
 
-                let globalContacts = sections.global.compactMap { row -> (AccountId, Chat.RemoteContact)? in
-                    switch row.payload {
-                    case let .remote(contact):
-                        (row.accountId, contact)
-                    case .local:
-                        nil
-                    }
+    func makeSearchResult(for query: String) async -> SearchAccountResult? {
+        do {
+            let sections = try await accountSearching.search(query: query)
+            try Task.checkCancellation()
+
+            let globalContacts = sections.global.compactMap { row -> (AccountId, Chat.RemoteContact)? in
+                switch row.payload {
+                case let .remote(contact): (row.accountId, contact)
+                case .local: nil
                 }
-
-                stateLock.withLock { state in
-                    state.globalContacts = Dictionary(uniqueKeysWithValues: globalContacts)
-                }
-
-                let result = SearchAccountResult(
-                    query: query,
-                    loader: .stop,
-                    recent: sections.recent.map(\.payload),
-                    contacts: mapToContacts(sections.contacts),
-                    global: mapToContacts(sections.global)
-                )
-                emit(result)
-            } catch {
-                guard !Task.isCancelled else { return }
-                logger.error("Search failed: \(error)")
-                await self?.presenter?.didReceiveSearchError(message: error.localizedDescription)
             }
+
+            stateLock.withLock { state in
+                state.globalContacts = Dictionary(uniqueKeysWithValues: globalContacts)
+            }
+
+            return SearchAccountResult(
+                recent: sections.recent.map(\.payload),
+                contacts: mapToContacts(sections.contacts),
+                global: mapToContacts(sections.global)
+            )
+        } catch {
+            guard !Task.isCancelled else { return nil }
+
+            logger.error("Search failed: \(error)")
+            await presenter?.didReceiveSearchError(message: error.localizedDescription)
+
+            return SearchAccountResult(recent: [], contacts: [], global: [])
         }
     }
 
@@ -223,21 +206,35 @@ private extension SearchAccountInteractor {
         }
     }
 
-    func emit(_ result: SearchAccountResult) {
-        let isCurrent = stateLock.withLock { $0.query == result.query }
+    func emit(_ state: SearchAccountSearchState, for query: String?) {
+        let isCurrent = stateLock.withLock { $0.query == query }
 
         guard isCurrent else { return }
 
         Task { [weak presenter] in
-            await presenter?.didReceive(result)
+            await presenter?.didReceive(searchState: state)
         }
     }
-}
 
-extension SearchAccountInteractor {
-    private struct State {
-        let chainFormat: ChainFormat
-        var query: String?
-        var globalContacts: [AccountId: Chat.RemoteContact] = [:]
+    /// Swaps the stored handle under the lock and cancels the displaced task outside it,
+    /// so two concurrent callers cannot both install a task and leak one uncancelled.
+    func replaceSearchTask(with task: Task<Void, Never>?) {
+        let previous = stateLock.withLock { state in
+            let previous = state.searchTask
+            state.searchTask = task
+            return previous
+        }
+
+        previous?.cancel()
+    }
+
+    func replaceSetupTask(with task: Task<Void, Never>?) {
+        let previous = stateLock.withLock { state in
+            let previous = state.setupTask
+            state.setupTask = task
+            return previous
+        }
+
+        previous?.cancel()
     }
 }

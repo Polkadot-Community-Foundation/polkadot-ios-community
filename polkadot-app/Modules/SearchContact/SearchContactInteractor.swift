@@ -30,12 +30,12 @@ extension SearchContactInteractor: SearchContactInteractorInputProtocol {
     func setup() {
         accountSearching.setup()
         subscribeToSourcesChanged()
-        loadIdleSections()
+        loadIdleState()
     }
 
     func search(username: String) {
         guard !username.isEmpty else {
-            loadIdleSections()
+            loadIdleState()
             return
         }
 
@@ -88,7 +88,7 @@ private extension SearchContactInteractor {
                     if let query, !query.isEmpty {
                         search(username: query)
                     } else {
-                        loadIdleSections()
+                        loadIdleState()
                     }
                 }
             } catch {
@@ -121,7 +121,7 @@ private extension SearchContactInteractor {
         previous?.cancel()
     }
 
-    func loadIdleSections() {
+    func loadIdleState() {
         let task = Task { [weak self, weak presenter] in
             guard let self else { return }
             stateLock.withLock { $0.currentQuery = "" }
