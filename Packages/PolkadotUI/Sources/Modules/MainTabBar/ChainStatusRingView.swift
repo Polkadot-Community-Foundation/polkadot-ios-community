@@ -55,7 +55,7 @@ struct ChainStatusRingView: View, Hashable {
             ChainStatusIconView(
                 icon: viewModel.icon,
                 color: iconColor,
-                diameter: dotDiameter,
+                diameter: iconDiameter,
                 isPulsing: viewModel.state == .connecting
             )
         }
@@ -101,7 +101,7 @@ private extension ChainStatusRingView {
 
     var lineWidth: CGFloat { diameter / 8 }
 
-    var dotDiameter: CGFloat { diameter * 0.625 }
+    var iconDiameter: CGFloat { diameter * 0.5 }
 }
 
 /// Owns the repeating animation's `@State` so `ChainStatusRingView` keeps the synthesized
