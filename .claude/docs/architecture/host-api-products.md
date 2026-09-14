@@ -63,35 +63,6 @@ The HostApi allows web products to:
     / `ProductDerivationPath` (KeyDerivation) — never hand-format the index segment or feed a
     numeric index into a path.
 
-## Payments: `paymentRequest` / `paymentStatusSubscribe`
-
-Contract (host-api 0.12, `ProductNativeApi+Payment.swift`, handlers in `ContainerBridge+HostApi.swift`):
-
-- `paymentRequest { idHex, amount, destinationHex } → {}`: the product supplies the id (opaque bytes,
-  not validated, as for `paymentTopUp`). Coded errors: `AlreadyExists`, `Rejected`,
-  `InsufficientBalance`; anything else propagates uncoded.
-- `paymentStatusSubscribe { idHex } → { tag: Processing | Completed | PartiallyClaimed | Failed, value? }`;
-  `value` is the delivered planks on `PartiallyClaimed` and the reason on `Failed`. An unknown id
-  fails the subscription with the coded `NotFound`.
-- `payment.balance` reports the total CASH balance; the request check compares against what is
-  spendable on-chain (`availablePrivate + gainingPrivacy`).
-
-Native order (`ProductsNativeApi+Payment.swift`): balance check (`InsufficientBalance` when the
-product may read the balance, else `Rejected`) → approval sheet (skipped for `ProductAutoAllowList`
-products via `AutoAllowPaymentApprovalRequester`) → privacy warning when the preset is not
-`minPrivacy` and `canExecuteExternalPaymentPrivately` is false (declining is `Rejected`; never
-allowlisted) → `initiateExternalPayment(productId:paymentId:)`. The in-app pay flow applies the same
-warning rule. Products must treat any error on a retry as "subscribe to status".
-
-Funding entry points: `FundingDomainProvider` resolves the CASH card's top-up and withdraw pages from
-the remote key `funding_config` (`{ onrampUrl, offrampUrl }`, shared with Android; full product URLs, scheme and path optional); `funding_domain`
-remains only as the allowlist-label fallback. The container is built from local host-api tarballs
-(`product-container/package.json` → `triangle-js-sdks` `pack:local`) until 0.12 is published.
-
-Offramp worker flow (getcash): the worker calls `workerBeginOperation`, the page calls
-`paymentRequest(id)`, the worker subscribes `paymentStatusSubscribe(id)` and calls
-`workerEndOperation` on the terminal status; a relaunch restores the worker and replays the status.
-
 ## Product Runtimes
 
 A product runs in one of two runtime modes: **native** (Swift handlers behind the

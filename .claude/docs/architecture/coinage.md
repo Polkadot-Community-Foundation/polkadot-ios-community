@@ -62,17 +62,16 @@ Transfer plans determine how coins are spent:
 
 ## External Payments (offramp)
 
-`Packages/Coinage/Sources/ExternalPayment/` moves CASH to a destination account for a product
-(`getcash` withdraw) or the in-app pay flow (`ExternalPayment.nativeProductId`). Rows are
-`ExternalPayment` (`CDExternalPayment`, CoreData v47) keyed `external-payment:<productId>:<paymentId>`;
-registration goes through a `SerialOperationQueue` and throws `alreadyExists` on replay.
+`Packages/Coinage/Sources/ExternalPayment/` moves coins to a destination account for a product
+ or the in-app pay flow (`ExternalPayment.nativeProductId`). Rows are
+`ExternalPayment` (`CDExternalPayment`) keyed `external-payment:<productId>:<paymentId>`.
 
 - **Planner** (`ExternalPaymentPlanner`): private vouchers alone → `.private`; else every on-chain
   voucher, private first then largest → `.lowPrivacy(vouchers, coins: [])`; else coins for the
   shortfall with all vouchers offboarded as they are → `.lowPrivacy(vouchers, coins)`; else
   `.notEnoughBalance`. "Private" is what the balance calls usable (`ExternalPaymentAssetClassifier`).
   `canPayPrivately` is the first step alone, so the warning and the plan cannot disagree. Callers
-  warn when it is false and the preset is not `minPrivacy`; private coins never skip the warning.
+  warn when it is false and the preset is not `minPrivacy`.
 - **Worker** (persist-per-transition, one run per payment, no retries): `Plan` → `OffboardVouchers`,
   or `Plan` → `OnboardCoins` → `OffboardVouchers`. Onboarding recycles under `<id>:recycle`, awaits
   `CoinageRecyclingServicing.observeRecycling` (`pending | allRecycled(vouchers:finalized:) | incomplete`;
@@ -82,7 +81,8 @@ registration goes through a `SerialOperationQueue` and throws `alreadyExists` on
   vouchers (`plannedVoucherIndices`) and re-joins its durability group on relaunch; an onboarding row
   whose group was never registered goes back to `Plan`.
 - **Status**: unknown id → the stream throws `notFound`; duplicates collapse; ends after the first
-  terminal status. Tests: `Packages/Coinage/Tests/ExternalPayment/`, sweep
+  terminal status. 
+- **Tests**: `Packages/Coinage/Tests/ExternalPayment/`, sweep
   `Packages/Coinage/Tools/external_payment_mutation_sweep.py`.
 
 ## Seams
