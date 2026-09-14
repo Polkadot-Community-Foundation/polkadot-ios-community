@@ -48,8 +48,8 @@ private extension PaymentPrivacyConfirmer {
         }
     }
 
-    /// Main-actor owner of the pending continuation: the sheet's buttons, its dismissal, a failed
-    /// presentation and task cancellation may all answer, and only the first answer counts.
+    /// Main-actor owner of the pending continuation: the sheet's buttons, a failed presentation and
+    /// task cancellation may all answer, and only the first answer counts.
     @MainActor
     final class OneShotDecision {
         private var continuation: CheckedContinuation<Bool, Never>?

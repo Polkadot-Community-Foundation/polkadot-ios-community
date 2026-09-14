@@ -32,7 +32,6 @@ enum PaymentRequestViewFactory {
 // MARK: - Shared Helpers
 
 extension PaymentRequestViewFactory {
-    /// The CASH asset every product payment is denominated in.
     static func mainChainAsset() -> ChainAsset? {
         let chainRegistry = ChainRegistryFacade.sharedRegistry
         let chainAssetId = AppConfig.Assets.mainAsset

@@ -28,10 +28,6 @@ extension ProductsNativeApi {
             .eraseToAnyAsyncSequence()
     }
 
-    /// Balance → approval → privacy warning when private vouchers alone cannot pay → register.
-    /// Uniqueness of `(product, id)` is validated by the coinage service at registration, so a replay
-    /// surfaces as `AlreadyExists` after those steps; anything else the host throws reaches the
-    /// product uncoded.
     func requestPayment(amount: Balance, destination: AccountId, id: PaymentRequestId) async throws {
         let coinageService = try requirePaymentsSupport().coinageService
 
