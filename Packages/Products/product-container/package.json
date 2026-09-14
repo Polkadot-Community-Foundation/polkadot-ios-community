@@ -8,32 +8,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@novasamatech/host-api": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-api-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-container": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-container-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-substrate-chain-connection": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-substrate-chain-connection-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/scale": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-scale-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/storage-adapter": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-storage-adapter-0.12.0-local.20260913210817.tgz",
+    "@novasamatech/host-api": "0.12.0",
+    "@novasamatech/host-container": "0.12.0",
+    "@novasamatech/host-substrate-chain-connection": "0.12.0",
+    "@novasamatech/scale": "0.12.0",
+    "@novasamatech/storage-adapter": "0.12.0",
     "@polkadot-api/ws-provider": "latest"
   },
   "devDependencies": {
     "esbuild": "^0.20.2",
     "typescript": "^5.3.0"
-  },
-  "overrides": {
-    "@novasamatech/handoff-service": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-handoff-service-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-api": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-api-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-api-wrapper": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-api-wrapper-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-chat": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-chat-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-container": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-container-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-papp": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-papp-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-papp-react-ui": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-papp-react-ui-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-substrate-chain-connection": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-substrate-chain-connection-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/host-worker-sandbox": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-host-worker-sandbox-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/product-bulletin": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-product-bulletin-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/product-react-renderer": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-product-react-renderer-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/scale": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-scale-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/statement-store": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-statement-store-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/storage-adapter": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-storage-adapter-0.12.0-local.20260913210817.tgz",
-    "@novasamatech/substrate-slot-sr25519-wasm": "file:/Users/ruslanrezin/Documents/PolkadotApp/triangle-js-sdks-main/local-tarballs/novasamatech-substrate-slot-sr25519-wasm-0.12.0-local.20260913210817.tgz"
   }
 }
