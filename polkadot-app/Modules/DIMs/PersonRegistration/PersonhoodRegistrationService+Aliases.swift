@@ -96,7 +96,7 @@ private extension PersonhoodRegistrationService {
             localState.progress.isIdle,
             remoteState.isNotSuspendedPerson,
             remoteState.hasPersonalIdAccount,
-            remoteState.aliasCreationState == input.creationState
+            remoteState.aliasCreationState(keysPerPage: ringKeysPageSize) == input.creationState
         else {
             return
         }
@@ -229,7 +229,9 @@ private extension PersonRegistration.RemoteState {
         case done
     }
 
-    var aliasCreationState: AliasCreationState {
+    /// `keysPerPage` is nil until the runtime constant is read; an alias cannot be submitted before then,
+    /// because whether the member key is baked into the ring root is not yet decidable.
+    func aliasCreationState(keysPerPage: Int?) -> AliasCreationState {
         guard let memberRingPosition else {
             return .notReady
         }
@@ -242,7 +244,10 @@ private extension PersonRegistration.RemoteState {
 
         var canSubmitAlias = false
 
-        if let keysStatus, keysStatus.includesKey(from: memberRingPosition) {
+        if
+            let keysStatus,
+            let keysPerPage,
+            keysStatus.includesKey(from: memberRingPosition, keysPerPage: keysPerPage) {
             canSubmitAlias = true
         }
 
