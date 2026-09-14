@@ -14,7 +14,6 @@ extension AppConfig {
         static var termsURL: URL { url(.termsHost) }
         static var privacyURL: URL { url(.privacyHost) }
         static var contactEmail: String { string(.contactEmail) }
-        static var logsEmail: String { string(.logsEmail) }
     }
 }
 
@@ -31,7 +30,6 @@ private extension AppConfig.Brand {
         case termsHost = "BrandTermsHost"
         case privacyHost = "BrandPrivacyHost"
         case contactEmail = "BrandContactEmail"
-        case logsEmail = "BrandLogsEmail"
     }
 
     static func string(_ key: Key) -> String {

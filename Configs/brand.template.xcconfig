@@ -36,4 +36,3 @@ BRAND_FIAT_SYMBOL = $
 BRAND_TERMS_HOST = example.com/terms
 BRAND_PRIVACY_HOST = example.com/privacy
 BRAND_CONTACT_EMAIL = info@example.com
-BRAND_LOGS_EMAIL = logs@example.com

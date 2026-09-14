@@ -17,7 +17,6 @@ struct BrandConfigTests {
             AppConfig.Brand.cashSymbol,
             AppConfig.Brand.fiatSymbol,
             AppConfig.Brand.contactEmail,
-            AppConfig.Brand.logsEmail,
             AppConfig.Brand.termsURL.absoluteString,
             AppConfig.Brand.privacyURL.absoluteString
         ]
@@ -65,7 +64,6 @@ struct BrandConfigTests {
         #expect(AppConfig.Brand.privacyURL.scheme == "https")
         #expect(AppConfig.Brand.privacyURL.host() != nil)
         #expect(AppConfig.Brand.contactEmail.contains("@"))
-        #expect(AppConfig.Brand.logsEmail.contains("@"))
     }
 
     /// EXPECTED TO FAIL under any non-polkadot brand. ProductHost.shareRootDomains is the
