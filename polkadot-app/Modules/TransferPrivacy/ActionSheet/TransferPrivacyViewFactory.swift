@@ -1,6 +1,7 @@
 import Foundation
 import PolkadotUI
 import UIKit
+import UIKit_iOS
 
 @MainActor
 enum TransferPrivacyViewFactory {
@@ -8,7 +9,7 @@ enum TransferPrivacyViewFactory {
         amount: String,
         onSendAnyway: @escaping () -> Void,
         onCancel: @escaping () -> Void
-    ) -> UIViewController {
+    ) -> ControllerBackedProtocol {
         let wireframe = TransferPrivacyWireframe()
         let presenter = TransferPrivacyPresenter(
             model: TransferPrivacyModel(amount: amount),
