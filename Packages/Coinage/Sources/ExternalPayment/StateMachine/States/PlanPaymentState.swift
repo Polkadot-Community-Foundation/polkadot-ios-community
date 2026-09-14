@@ -21,8 +21,8 @@ struct PlanPaymentState: StateMachineState {
                 )
 
             switch preview {
-            case let .unloadVouchers(vouchers):
-                return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers.map(\.voucher))
+            case let .unloadVouchers(offboarding):
+                return factory.makeOffboardVouchersState(payment: payment, offboarding: offboarding)
             case let .loadCoins(coins, exactVouchers):
                 return factory.makeOnboardCoinsState(
                     payment: payment,
@@ -41,6 +41,7 @@ struct PlanPaymentState: StateMachineState {
         var currentPayment = payment
         currentPayment.stage = .plan
         currentPayment.plannedVoucherIndices = []
+        currentPayment.surplusInPlanks = 0
         currentPayment.updatedAt = Date()
         return currentPayment
     }

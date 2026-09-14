@@ -3,9 +3,9 @@ import StateMachine
 import SubstrateSdk
 
 /// Recycles the selected coins under the payment's own durability group and awaits that group's
-/// outcome through the recycler. On `allRecycled` (best-block inclusion is enough) the exact vouchers
-/// plus the recycled ones are checked against the amount and handed to offboarding; `incomplete`, a
-/// shortfall and any thrown error fail the payment — there are no retries.
+/// outcome through the recycler. On `allRecycled` (best-block inclusion is enough) the planner picks
+/// what to unload from the exact vouchers plus the recycled ones; `incomplete`, a shortfall and any
+/// thrown error fail the payment — there are no retries.
 ///
 /// The exact vouchers are persisted with the stage, so a relaunch (`coins` empty) re-joins the group
 /// and continues with the same selection. A relaunch that finds no group registered goes back to
@@ -47,7 +47,7 @@ struct OnboardCoinsPaymentState: StateMachineState {
                     factory.logger?.debug(
                         "Payment \(payment.id): \(recycled.count) vouchers recycled, finalized \(finalized)"
                     )
-                    return try await offboard(recycled: recycled.map(\.voucher), factory: factory)
+                    return try await offboard(recycled: recycled, factory: factory)
                 }
             }
 
@@ -61,6 +61,7 @@ struct OnboardCoinsPaymentState: StateMachineState {
         var currentPayment = payment
         currentPayment.stage = .onboardCoins
         currentPayment.plannedVoucherIndices = exactVoucherIndices
+        currentPayment.surplusInPlanks = 0
         currentPayment.updatedAt = Date()
         return currentPayment
     }
@@ -68,19 +69,21 @@ struct OnboardCoinsPaymentState: StateMachineState {
 
 private extension OnboardCoinsPaymentState {
     func offboard(
-        recycled: [Voucher],
+        recycled: [TrackedVoucher],
         factory: ExternalPaymentStateFactory
     ) async throws -> AnyStateMachineState<ExternalPaymentStateFactory, ExternalPayment> {
-        let exact = try await factory.voucherService
-            .fetchTracked(derivationIndices: Set(exactVoucherIndices))
-            .map(\.voucher)
-        let vouchers = exact + recycled
-        let covered = vouchers.reduce(Balance(0)) { $0 + factory.context.valueInPlanks(for: $1.exponent) }
+        let exact = try await factory.voucherService.fetchTracked(derivationIndices: Set(exactVoucherIndices))
+        let available = exact + recycled
 
-        guard covered >= payment.amountInPlanks else {
+        do {
+            let offboarding = try factory.planner.pickOffboarding(
+                from: available,
+                target: payment.amountInPlanks,
+                context: factory.context
+            )
+            return factory.makeOffboardVouchersState(payment: payment, offboarding: offboarding)
+        } catch ExternalPaymentPlannerError.insufficientVouchers {
             return factory.makeFailedState(payment: payment, reason: "insufficient balance after recycling")
         }
-
-        return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers)
     }
 }

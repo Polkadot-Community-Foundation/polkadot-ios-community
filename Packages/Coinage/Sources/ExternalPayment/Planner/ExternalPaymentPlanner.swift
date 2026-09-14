@@ -36,8 +36,12 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
         let onChainVouchers = buckets.usable + buckets.gainingPrivacy
         let voucherTotal = total(of: onChainVouchers, context: context)
         if voucherTotal >= amount {
-            let selected = pick(from: onChainVouchers, target: amount, preferred: privateVouchers, context: context)
-            return .unloadVouchers(selected)
+            return .unloadVouchers(pick(
+                from: onChainVouchers,
+                target: amount,
+                preferred: privateVouchers,
+                context: context
+            ))
         }
 
         let deficit = amount - voucherTotal
@@ -53,6 +57,19 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
         let buckets = try await classifier.voucherBuckets(voucherService.fetchAllTracked())
         return total(of: buckets.usable, context: context) >= amount
     }
+
+    func pickOffboarding(
+        from vouchers: [TrackedVoucher],
+        target: Balance,
+        context: DenominationBreakdownContext
+    ) throws -> VoucherOffboarding {
+        let available = total(of: vouchers, context: context)
+        guard available >= target else {
+            throw ExternalPaymentPlannerError.insufficientVouchers(available: available, target: target)
+        }
+
+        return pick(from: vouchers, target: target, preferred: [], context: context)
+    }
 }
 
 // MARK: - Selection
@@ -66,13 +83,14 @@ private extension ExternalPaymentPlanner {
         coins.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.coin.exponent) }
     }
 
-    /// `preferred` vouchers first, then the largest, until `target` is reached.
+    /// `preferred` vouchers first, then the largest, until `target` is reached; the surplus is what
+    /// the picked vouchers exceed it by.
     func pick(
         from vouchers: [TrackedVoucher],
         target: Balance,
         preferred: [TrackedVoucher],
         context: DenominationBreakdownContext
-    ) -> [TrackedVoucher] {
+    ) -> VoucherOffboarding {
         let preferredIndices = Set(preferred.map(\.voucher.derivationIndex))
         let sorted = vouchers.sorted { lhs, rhs in
             let lhsPreferred = preferredIndices.contains(lhs.voucher.derivationIndex)
@@ -81,7 +99,10 @@ private extension ExternalPaymentPlanner {
             return context.valueInPlanks(for: lhs.voucher.exponent) > context.valueInPlanks(for: rhs.voucher.exponent)
         }
 
-        return accumulate(sorted, target: target) { context.valueInPlanks(for: $0.voucher.exponent) }
+        let (selected, accumulated) = accumulate(sorted, target: target) {
+            context.valueInPlanks(for: $0.voucher.exponent)
+        }
+        return VoucherOffboarding(vouchers: selected, surplus: accumulated > target ? accumulated - target : 0)
     }
 
     func pick(from coins: [TrackedCoin], target: Balance, context: DenominationBreakdownContext) -> [TrackedCoin] {
@@ -89,10 +110,14 @@ private extension ExternalPaymentPlanner {
             context.valueInPlanks(for: $0.coin.exponent) > context.valueInPlanks(for: $1.coin.exponent)
         }
 
-        return accumulate(sorted, target: target) { context.valueInPlanks(for: $0.coin.exponent) }
+        return accumulate(sorted, target: target) { context.valueInPlanks(for: $0.coin.exponent) }.selected
     }
 
-    func accumulate<Asset>(_ sorted: [Asset], target: Balance, value: (Asset) -> Balance) -> [Asset] {
+    func accumulate<Asset>(
+        _ sorted: [Asset],
+        target: Balance,
+        value: (Asset) -> Balance
+    ) -> (selected: [Asset], accumulated: Balance) {
         var selected: [Asset] = []
         var accumulated = Balance(0)
 
@@ -102,6 +127,6 @@ private extension ExternalPaymentPlanner {
             accumulated += value(asset)
         }
 
-        return selected
+        return (selected, accumulated)
     }
 }

@@ -78,6 +78,7 @@ enum ExternalPaymentTestFactory {
         settled: Balance = 0,
         stage: ExternalPayment.Stage = .plan,
         plannedVoucherIndices: [DerivationIndex] = [],
+        surplus: Balance = 0,
         createdAt: Date = Date()
     ) -> ExternalPayment {
         ExternalPayment(
@@ -88,12 +89,13 @@ enum ExternalPaymentTestFactory {
             settledInPlanks: settled,
             stage: stage,
             plannedVoucherIndices: plannedVoucherIndices,
+            surplusInPlanks: surplus,
             createdAt: createdAt
         )
     }
 
-    static func unloadPreview(_ vouchers: [Voucher]) -> ExternalPaymentPreview {
-        .unloadVouchers(vouchers.map { tracked($0) })
+    static func unloadPreview(_ vouchers: [Voucher], surplus: Balance = 0) -> ExternalPaymentPreview {
+        .unloadVouchers(VoucherOffboarding(vouchers: vouchers.map { tracked($0) }, surplus: surplus))
     }
 
     static func loadCoinsPreview(coins: [Coin], exactVouchers: [Voucher]) -> ExternalPaymentPreview {

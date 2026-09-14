@@ -87,10 +87,37 @@ struct ExternalPaymentStateTests {
         let memo = await next.memo()
 
         #expect(memo.stage == .offboardVouchers)
-        #expect(memo.plannedVoucherIndices == [1, 2])
+        #expect(memo.plannedVoucherIndices == [2, 1])
         #expect(recycler.submissions == [.init(coins: [coin], groupId: groupId)])
         _ = await next.transit(with: factory)
         #expect(txService.registrations == [Factory.unloadGroupId(for: payment)])
+    }
+
+    @Test func onboardUnloadsOnlyWhatTheAmountNeedsAfterRecycling() async {
+        // Exact 1000 + recycled 1000 for a payment of 1000: one voucher is enough.
+        let exact = Factory.voucher(index: 1, exponent: 3)
+        let recycled = Factory.voucher(index: 2, exponent: 3)
+        let payment = Factory.payment(amount: Factory.planks(3))
+        let recycler = StubCoinageRecyclingService()
+        let groupId = Factory.recycleGroupId(for: payment)
+        recycler.script(
+            groupId: groupId,
+            statuses: [.allRecycled(vouchers: [Factory.tracked(recycled)], finalized: true)]
+        )
+        let txService = StubGroupTxService()
+        txService.seedGroup(groupId, statuses: [.finalizedSuccess])
+        let planner = StubExternalPaymentPlanner()
+        let factory = Factory.makeStateFactory(
+            planner: planner, recycler: recycler, txService: txService, vouchers: [exact, recycled]
+        )
+
+        let memo = await OnboardCoinsPaymentState(payment: payment, coins: [coin], exactVoucherIndices: [1])
+            .transit(with: factory).memo()
+
+        #expect(memo.stage == .offboardVouchers)
+        #expect(memo.plannedVoucherIndices.count == 1)
+        #expect(planner.pickCalls.count == 1)
+        #expect(Set(planner.pickCalls[0].available) == [1, 2])
     }
 
     @Test func onboardFailsWhenRecycledVouchersStillFallShort() async {
@@ -201,7 +228,7 @@ struct ExternalPaymentStateTests {
             .transit(with: factory).memo()
 
         #expect(memo.stage == .offboardVouchers)
-        #expect(memo.plannedVoucherIndices == [1, 2])
+        #expect(Set(memo.plannedVoucherIndices) == [1, 2])
         #expect(recycler.submissions.isEmpty)
         #expect(planner.calls.isEmpty)
     }

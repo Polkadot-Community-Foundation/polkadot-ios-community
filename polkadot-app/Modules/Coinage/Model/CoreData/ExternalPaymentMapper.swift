@@ -24,6 +24,7 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         let amount = BigUInt(amountString) ?? 0
         let stage = ExternalPayment.Stage(rawValue: Int(entity.stage)) ?? .plan
         let settled = entity.settledInPlanks.flatMap { BigUInt($0) } ?? 0
+        let surplus = entity.surplusInPlanks.flatMap { BigUInt($0) } ?? 0
 
         return ExternalPayment(
             productId: productId,
@@ -33,6 +34,7 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
             settledInPlanks: settled,
             stage: stage,
             plannedVoucherIndices: Self.decodeVoucherIndices(entity.plannedVoucherIndices),
+            surplusInPlanks: surplus,
             failureReason: entity.failureReason,
             createdAt: createdAt,
             updatedAt: updatedAt
@@ -52,6 +54,7 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         entity.settledInPlanks = String(model.settledInPlanks)
         entity.stage = Int16(model.stage.rawValue)
         entity.plannedVoucherIndices = Self.encodeVoucherIndices(model.plannedVoucherIndices)
+        entity.surplusInPlanks = String(model.surplusInPlanks)
         entity.failureReason = model.failureReason
         entity.createdAt = model.createdAt
         entity.updatedAt = model.updatedAt
@@ -95,6 +98,7 @@ final class ExternalPaymentStageMapper: CoreDataMapperProtocol {
         entity.stage = Int16(model.stage.rawValue)
         entity.settledInPlanks = String(model.settledInPlanks)
         entity.plannedVoucherIndices = ExternalPaymentMapper.encodeVoucherIndices(model.plannedVoucherIndices)
+        entity.surplusInPlanks = String(model.surplusInPlanks)
         entity.failureReason = model.failureReason
         entity.updatedAt = model.updatedAt
     }

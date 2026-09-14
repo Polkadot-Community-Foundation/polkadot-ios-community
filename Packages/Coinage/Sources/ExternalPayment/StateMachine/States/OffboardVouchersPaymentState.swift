@@ -15,6 +15,9 @@ struct OffboardVouchersPaymentState: StateMachineState {
 
     let payment: ExternalPayment
     let voucherIndices: [DerivationIndex]
+    /// Planner output: what the vouchers exceed the amount by. Persisted with the stage, never
+    /// recomputed, so a relaunch submits exactly what was planned.
+    let surplus: Balance
     let isTerminal = false
 
     func transit(
@@ -39,7 +42,7 @@ struct OffboardVouchersPaymentState: StateMachineState {
                 .fetchTracked(derivationIndices: Set(voucherIndices))
                 .map(\.voucher)
 
-            switch try await service.execute(payment: payment, vouchers: vouchers) {
+            switch try await service.execute(payment: payment, vouchers: vouchers, surplus: surplus) {
             case .success:
                 var settled = payment
                 settled.settledInPlanks = payment.amountInPlanks
@@ -63,6 +66,7 @@ struct OffboardVouchersPaymentState: StateMachineState {
         var currentPayment = payment
         currentPayment.stage = .offboardVouchers
         currentPayment.plannedVoucherIndices = voucherIndices
+        currentPayment.surplusInPlanks = surplus
         currentPayment.updatedAt = Date()
         return currentPayment
     }

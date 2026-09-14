@@ -57,11 +57,13 @@ final class OffboardVouchersForPaymentService {
         self.logger = logger
     }
 
+    /// `surplus` is what `vouchers` exceed the payment by; it is folded back into fresh vouchers.
     func execute(
         payment: ExternalPayment,
-        vouchers: [Voucher]
+        vouchers: [Voucher],
+        surplus: Balance
     ) async throws -> OffboardOutcome {
-        try await executeSubmissions(payment: payment, vouchers: vouchers)
+        try await executeSubmissions(payment: payment, vouchers: vouchers, surplus: surplus)
     }
 }
 
@@ -79,11 +81,12 @@ enum OffboardOutcome: Equatable {
 private extension OffboardVouchersForPaymentService {
     func executeSubmissions(
         payment: ExternalPayment,
-        vouchers: [Voucher]
+        vouchers: [Voucher],
+        surplus: Balance
     ) async throws -> OffboardOutcome {
         let groupId = groupId(for: payment)
 
-        try await registerOrRejoinGroup(payment: payment, vouchers: vouchers, groupId: groupId)
+        try await registerOrRejoinGroup(payment: payment, vouchers: vouchers, surplus: surplus, groupId: groupId)
 
         return try await awaitGroupOutcome(groupId: groupId)
     }
@@ -98,6 +101,7 @@ private extension OffboardVouchersForPaymentService {
     func registerOrRejoinGroup(
         payment: ExternalPayment,
         vouchers: [Voucher],
+        surplus: Balance,
         groupId: CoinageTxGroupId
     ) async throws {
         let existing = try await txService.getOperationGroupStatuses(groupId)
@@ -112,7 +116,7 @@ private extension OffboardVouchersForPaymentService {
             throw OffboardVouchersForPaymentError.missingRecyclerInfo
         }
 
-        let requests = try await buildGroupRequests(payment: payment, vouchers: vouchers)
+        let requests = try await buildGroupRequests(payment: payment, vouchers: vouchers, surplus: surplus)
         _ = try await txService.submitTransactions(requests, groupId: groupId)
         logger?.debug("Registered \(requests.count) offboard groups under \(groupId)")
 
@@ -149,12 +153,10 @@ private extension OffboardVouchersForPaymentService {
 
     func buildGroupRequests(
         payment: ExternalPayment,
-        vouchers: [Voucher]
+        vouchers: [Voucher],
+        surplus: Balance
     ) async throws -> [CoinageTxRequest] {
-        let details = try await buildGroupDetails(
-            groups: groupVouchers(vouchers),
-            paymentAmount: payment.amountInPlanks
-        )
+        let details = try await buildGroupDetails(groups: groupVouchers(vouchers), surplus: surplus)
 
         let blockHash = try await blockNumberProvider.fetchCurrentHash()
 
@@ -250,11 +252,8 @@ private extension OffboardVouchersForPaymentService {
 private extension OffboardVouchersForPaymentService {
     func buildGroupDetails(
         groups: [VoucherGroup],
-        paymentAmount: Balance
+        surplus: Balance
     ) async throws -> [GroupDetails] {
-        let totalInput = groups.reduce(Balance(0)) { $0 + groupInput($1) }
-        let surplus = totalInput > paymentAmount ? totalInput - paymentAmount : Balance(0)
-
         let host = try await resolveSurplusHost(groups: groups, surplus: surplus)
 
         return groups.map { group in

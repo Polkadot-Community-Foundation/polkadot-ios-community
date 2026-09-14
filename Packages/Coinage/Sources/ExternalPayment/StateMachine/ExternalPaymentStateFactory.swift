@@ -73,10 +73,11 @@ extension ExternalPaymentStateFactory {
         ))
     }
 
-    func makeOffboardVouchersState(payment: ExternalPayment, vouchers: [Voucher]) -> ErasedState {
+    func makeOffboardVouchersState(payment: ExternalPayment, offboarding: VoucherOffboarding) -> ErasedState {
         AnyStateMachineState(OffboardVouchersPaymentState(
             payment: payment,
-            voucherIndices: vouchers.map(\.derivationIndex)
+            voucherIndices: offboarding.vouchers.map(\.voucher.derivationIndex),
+            surplus: offboarding.surplus
         ))
     }
 
@@ -112,7 +113,8 @@ extension ExternalPaymentStateFactory {
         case .offboardVouchers:
             AnyStateMachineState(OffboardVouchersPaymentState(
                 payment: payment,
-                voucherIndices: payment.plannedVoucherIndices
+                voucherIndices: payment.plannedVoucherIndices,
+                surplus: payment.surplusInPlanks
             ))
         case .completed:
             makeCompletedState(payment: payment)

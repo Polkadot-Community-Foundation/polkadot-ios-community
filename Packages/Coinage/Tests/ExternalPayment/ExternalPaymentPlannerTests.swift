@@ -123,6 +123,27 @@ struct ExternalPaymentPlannerTests {
         #expect(preview == .notEnoughBalance)
     }
 
+    @Test func pickOffboardingTakesTheLargestVouchersUntilTheTargetIsReached() throws {
+        let planner = makePlanner()
+        let vouchers = [
+            Factory.voucher(index: 1, exponent: 1), Factory.voucher(index: 2, exponent: 3), Factory.voucher(
+                index: 3,
+                exponent: 2
+            )
+        ].map { Factory.tracked($0) }
+
+        let selected = try planner.pickOffboarding(
+            from: vouchers,
+            target: Factory.planks(3) + 1,
+            context: Factory.denomination
+        )
+
+        #expect(indices(selected) == [2, 3])
+        #expect(throws: ExternalPaymentPlannerError.self) {
+            try planner.pickOffboarding(from: vouchers, target: Factory.planks(4), context: Factory.denomination)
+        }
+    }
+
     @Test func unreachableAmountIsNotEnoughBalance() async throws {
         let planner = makePlanner(
             vouchers: [Factory.voucher(index: 1, exponent: 1)],

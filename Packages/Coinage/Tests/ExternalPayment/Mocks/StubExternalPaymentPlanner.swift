@@ -24,6 +24,7 @@ final class StubExternalPaymentPlanner: ExternalPaymentPlanning, @unchecked Send
         var defaultResult: Result<ExternalPaymentPreview, Error>
         var calls: [Balance] = []
         var privateCalls: [Balance] = []
+        var pickCalls: [(available: [DerivationIndex], target: Balance)] = []
         var privateAnswer: Result<Bool, Error> = .success(true)
         var handler: Handler?
         var blockUntilCancelled = false
@@ -77,6 +78,32 @@ final class StubExternalPaymentPlanner: ExternalPaymentPlanning, @unchecked Send
         }
 
         return try result.get()
+    }
+
+    var pickCalls: [(available: [DerivationIndex], target: Balance)] { state.withLock { $0.pickCalls } }
+
+    /// Largest-first greedy pick, recorded; throws like the real planner when the vouchers fall short.
+    func pickOffboarding(
+        from vouchers: [TrackedVoucher],
+        target: Balance,
+        context: DenominationBreakdownContext
+    ) throws -> VoucherOffboarding {
+        state.withLock { $0.pickCalls.append((vouchers.map(\.voucher.derivationIndex), target)) }
+        let sorted = vouchers.sorted {
+            context.valueInPlanks(for: $0.voucher.exponent) > context.valueInPlanks(for: $1.voucher.exponent)
+        }
+        let available = sorted.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.voucher.exponent) }
+        guard available >= target else {
+            throw ExternalPaymentPlannerError.insufficientVouchers(available: available, target: target)
+        }
+
+        var selected: [TrackedVoucher] = []
+        var accumulated = Balance(0)
+        for voucher in sorted where accumulated < target {
+            selected.append(voucher)
+            accumulated += context.valueInPlanks(for: voucher.voucher.exponent)
+        }
+        return VoucherOffboarding(vouchers: selected, surplus: accumulated - target)
     }
 
     func canPayPrivately(amount: Balance, context _: DenominationBreakdownContext) async throws -> Bool {
