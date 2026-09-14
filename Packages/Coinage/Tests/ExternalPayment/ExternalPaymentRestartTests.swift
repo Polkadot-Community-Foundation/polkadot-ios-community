@@ -13,7 +13,7 @@ struct ExternalPaymentRestartTests {
         let payment = Factory.payment(stage: .plan)
         let store = InMemoryExternalPaymentStore(seed: [payment])
         let harness = Factory.makeHarness(store: store, vouchers: [voucher])
-        harness.planner.setDefault(.success(Factory.privatePreview([voucher])))
+        harness.planner.setDefault(.success(Factory.unloadPreview([voucher])))
 
         harness.service.setup(with: Factory.denomination)
 

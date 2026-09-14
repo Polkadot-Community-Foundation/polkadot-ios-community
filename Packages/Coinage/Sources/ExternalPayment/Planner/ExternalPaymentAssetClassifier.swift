@@ -37,8 +37,6 @@ final class ExternalPaymentAssetClassifier: @unchecked Sendable {
 }
 
 private extension ExternalPaymentAssetClassifier {
-    /// Chain-backed capacities when reachable; the memoised ones otherwise, so an RPC hiccup degrades
-    /// to "not yet full" instead of failing the plan.
     func usabilityContext(for vouchers: [TrackedVoucher]) async -> VoucherUsabilityContext {
         let exponents = Set(vouchers.map(\.voucher.exponent))
         let capacities: [Int16: Int]

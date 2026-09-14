@@ -21,15 +21,13 @@ struct PlanPaymentState: StateMachineState {
                 )
 
             switch preview {
-            case let .private(vouchers):
+            case let .unloadVouchers(vouchers):
                 return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers.map(\.voucher))
-            case let .lowPrivacy(vouchers, coins) where coins.isEmpty:
-                return factory.makeOffboardVouchersState(payment: payment, vouchers: vouchers.map(\.voucher))
-            case let .lowPrivacy(vouchers, coins):
+            case let .loadCoins(coins, exactVouchers):
                 return factory.makeOnboardCoinsState(
                     payment: payment,
                     coins: coins.map(\.coin),
-                    exactVouchers: vouchers.map(\.voucher)
+                    exactVouchers: exactVouchers.map(\.voucher)
                 )
             case .notEnoughBalance:
                 return factory.makeFailedState(payment: payment, reason: "insufficient balance")

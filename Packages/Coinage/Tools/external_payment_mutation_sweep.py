@@ -63,10 +63,10 @@ MUTANTS = [
      '                return factory.makeFailedState(payment: payment, reason: "insufficient balance")',
      '                return factory.makePlanState(payment: payment)'),
     ("plan: coins to recycle are ignored", PLAN_STATE,
-     "            case let .lowPrivacy(vouchers, coins) where coins.isEmpty:",
-     "            case let .lowPrivacy(vouchers, _):"),
+     "                    coins: coins.map(\\.coin),",
+     "                    coins: [],"),
     ("plan: the exact vouchers are not handed to onboarding", PLAN_STATE,
-     "                    exactVouchers: vouchers.map(\\.voucher)",
+     "                    exactVouchers: exactVouchers.map(\\.voucher)",
      "                    exactVouchers: []"),
     ("onboard: recycling continues on incomplete", ONBOARD_STATE,
      '                case .incomplete:\n'

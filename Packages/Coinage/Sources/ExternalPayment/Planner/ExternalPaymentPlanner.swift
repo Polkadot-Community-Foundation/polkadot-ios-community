@@ -6,9 +6,9 @@ import SubstrateSdk
 /// Vouchers before coins, even ones still gaining privacy: a coin loaded only to be unloaded leaves
 /// its recycler as soon as such a voucher would, so it saves no privacy and adds a recycling round.
 ///
-/// 1. Private vouchers cover the amount → `.private`
-/// 2. Every on-chain voucher covers it → `.lowPrivacy`, private ones first, then the largest
-/// 3. Coins cover the shortfall → `.lowPrivacy` with all vouchers and the coins to recycle
+/// 1. Private vouchers cover the amount → `.unloadVouchers`
+/// 2. Every on-chain voucher covers it → `.unloadVouchers`, private ones first, then the largest
+/// 3. Coins cover the shortfall → `.loadCoins` with the coins to recycle and all vouchers as they are
 /// 4. Otherwise → `.notEnoughBalance`
 struct ExternalPaymentPlanner: ExternalPaymentPlanning {
     private let coinService: CoinServiceProtocol
@@ -30,14 +30,14 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
 
         let privateVouchers = buckets.usable
         if total(of: privateVouchers, context: context) >= amount {
-            return .private(vouchers: pick(from: privateVouchers, target: amount, preferred: [], context: context))
+            return .unloadVouchers(pick(from: privateVouchers, target: amount, preferred: [], context: context))
         }
 
         let onChainVouchers = buckets.usable + buckets.gainingPrivacy
         let voucherTotal = total(of: onChainVouchers, context: context)
         if voucherTotal >= amount {
             let selected = pick(from: onChainVouchers, target: amount, preferred: privateVouchers, context: context)
-            return .lowPrivacy(vouchers: selected, coins: [])
+            return .unloadVouchers(selected)
         }
 
         let deficit = amount - voucherTotal
@@ -46,7 +46,7 @@ struct ExternalPaymentPlanner: ExternalPaymentPlanning {
             return .notEnoughBalance
         }
 
-        return .lowPrivacy(vouchers: onChainVouchers, coins: pick(from: coins, target: deficit, context: context))
+        return .loadCoins(coins: pick(from: coins, target: deficit, context: context), exactVouchers: onChainVouchers)
     }
 
     func canPayPrivately(amount: Balance, context: DenominationBreakdownContext) async throws -> Bool {

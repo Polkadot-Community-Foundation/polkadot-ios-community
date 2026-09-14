@@ -92,12 +92,12 @@ enum ExternalPaymentTestFactory {
         )
     }
 
-    static func privatePreview(_ vouchers: [Voucher]) -> ExternalPaymentPreview {
-        .private(vouchers: vouchers.map { tracked($0) })
+    static func unloadPreview(_ vouchers: [Voucher]) -> ExternalPaymentPreview {
+        .unloadVouchers(vouchers.map { tracked($0) })
     }
 
-    static func lowPrivacyPreview(vouchers: [Voucher], coins: [Coin] = []) -> ExternalPaymentPreview {
-        .lowPrivacy(vouchers: vouchers.map { tracked($0) }, coins: coins.map { tracked($0) })
+    static func loadCoinsPreview(coins: [Coin], exactVouchers: [Voucher]) -> ExternalPaymentPreview {
+        .loadCoins(coins: coins.map { tracked($0) }, exactVouchers: exactVouchers.map { tracked($0) })
     }
 
     static func recycleGroupId(for payment: ExternalPayment) -> CoinageTxGroupId {

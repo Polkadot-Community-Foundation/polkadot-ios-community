@@ -11,8 +11,8 @@ struct ExternalPaymentStateTests {
 
     // MARK: - Plan
 
-    @Test func privatePlanMovesToOffboarding() async {
-        let planner = StubExternalPaymentPlanner(defaultResult: .success(Factory.privatePreview([voucher])))
+    @Test func unloadPlanMovesToOffboarding() async {
+        let planner = StubExternalPaymentPlanner(defaultResult: .success(Factory.unloadPreview([voucher])))
         let factory = Factory.makeStateFactory(planner: planner)
 
         let next = await PlanPaymentState(payment: Factory.payment()).transit(with: factory)
@@ -22,19 +22,8 @@ struct ExternalPaymentStateTests {
         #expect(memo.plannedVoucherIndices == [1])
     }
 
-    @Test func lowPrivacyPlanWithoutCoinsMovesToOffboarding() async {
-        let planner =
-            StubExternalPaymentPlanner(defaultResult: .success(Factory.lowPrivacyPreview(vouchers: [voucher])))
-        let factory = Factory.makeStateFactory(planner: planner)
-
-        let memo = await PlanPaymentState(payment: Factory.payment()).transit(with: factory).memo()
-
-        #expect(memo.stage == .offboardVouchers)
-        #expect(memo.plannedVoucherIndices == [1])
-    }
-
-    @Test func lowPrivacyPlanWithCoinsMovesToOnboardingWithExactVouchers() async {
-        let preview = Factory.lowPrivacyPreview(vouchers: [voucher], coins: [coin])
+    @Test func loadCoinsPlanMovesToOnboardingWithExactVouchers() async {
+        let preview = Factory.loadCoinsPreview(coins: [coin], exactVouchers: [voucher])
         let planner = StubExternalPaymentPlanner(defaultResult: .success(preview))
         let recycler = StubCoinageRecyclingService()
         let payment = Factory.payment(amount: Factory.planks(4))

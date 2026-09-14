@@ -37,8 +37,8 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
 
-        guard case let .private(vouchers) = preview else {
-            Issue.record("expected private: \(preview)")
+        guard case let .unloadVouchers(vouchers) = preview else {
+            Issue.record("expected unloadVouchers: \(preview)")
             return
         }
         #expect(indices(vouchers) == [2])
@@ -56,13 +56,12 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: amount, context: Factory.denomination)
 
-        guard case let .lowPrivacy(vouchers, coins) = preview else {
-            Issue.record("expected lowPrivacy: \(preview)")
+        guard case let .unloadVouchers(vouchers) = preview else {
+            Issue.record("expected unloadVouchers: \(preview)")
             return
         }
         #expect(indices(vouchers).first == 1)
         #expect(indices(vouchers).count == 2)
-        #expect(coins.isEmpty)
         #expect(try await !planner.canPayPrivately(amount: amount, context: Factory.denomination))
     }
 
@@ -75,11 +74,11 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: amount, context: Factory.denomination)
 
-        guard case let .lowPrivacy(vouchers, coins) = preview else {
-            Issue.record("expected lowPrivacy: \(preview)")
+        guard case let .loadCoins(coins, exactVouchers) = preview else {
+            Issue.record("expected loadCoins: \(preview)")
             return
         }
-        #expect(Set(indices(vouchers)) == [1, 2])
+        #expect(Set(indices(exactVouchers)) == [1, 2])
         #expect(coins.map(\.coin.derivationIndex) == [9])
     }
 
@@ -89,7 +88,6 @@ struct ExternalPaymentPlannerTests {
 
         let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
 
-        #expect(!preview.isPrivate)
         #expect(preview.coins.map(\.coin.derivationIndex) == [9])
         #expect(try await !planner.canPayPrivately(amount: Factory.planks(3), context: Factory.denomination))
     }
@@ -97,9 +95,8 @@ struct ExternalPaymentPlannerTests {
     @Test func minPrivacyTreatsEveryRecyclerVoucherAsPrivate() async throws {
         let planner = makePlanner(vouchers: [Factory.gainingVoucher(index: 2, exponent: 3)], strategy: .minPrivacy)
 
-        let preview = try await planner.plan(amount: Factory.planks(3), context: Factory.denomination)
-
-        #expect(preview.isPrivate)
+        #expect(try await planner.canPayPrivately(amount: Factory.planks(3), context: Factory.denomination))
+        #expect(try await planner.plan(amount: Factory.planks(3), context: Factory.denomination).coins.isEmpty)
     }
 
     @Test func nonSpendableAssetsAreIgnored() async throws {

@@ -91,7 +91,7 @@ struct ExternalPaymentServiceTests {
 
     @Test func previewAndPrivacyCheckProxyToThePlanner() async throws {
         let harness = Factory.makeHarness()
-        harness.planner.setDefault(.success(Factory.privatePreview([voucher])))
+        harness.planner.setDefault(.success(Factory.unloadPreview([voucher])))
         harness.planner.setPrivateAnswer(.success(false))
 
         let preview = try await harness.service.previewPayment(for: Factory.planks(3), context: Factory.denomination)
@@ -100,7 +100,7 @@ struct ExternalPaymentServiceTests {
             context: Factory.denomination
         )
 
-        #expect(preview.isPrivate)
+        #expect(preview == Factory.unloadPreview([voucher]))
         #expect(!isPrivate)
         #expect(harness.planner.calls == [Factory.planks(3)])
         #expect(harness.planner.privateCalls == [Factory.planks(2)])
@@ -171,7 +171,7 @@ struct ExternalPaymentServiceTests {
     @Test func privatePlanCompletesInOnePass() async throws {
         let payment = Factory.payment()
         let harness = Factory.makeHarness(store: InMemoryExternalPaymentStore(seed: [payment]), vouchers: [voucher])
-        harness.planner.setDefault(.success(Factory.privatePreview([voucher])))
+        harness.planner.setDefault(.success(Factory.unloadPreview([voucher])))
 
         harness.service.setup(with: Factory.denomination)
 
@@ -198,7 +198,7 @@ struct ExternalPaymentServiceTests {
         let vouchers = [Factory.voucher(index: 1, exponent: 3), Factory.voucher(index: 2, exponent: 2)]
         let payment = Factory.payment(amount: Factory.planks(3) + Factory.planks(2))
         let harness = Factory.makeHarness(store: InMemoryExternalPaymentStore(seed: [payment]), vouchers: vouchers)
-        harness.planner.setDefault(.success(Factory.privatePreview(vouchers)))
+        harness.planner.setDefault(.success(Factory.unloadPreview(vouchers)))
         harness.txService.setOutcome(.partial)
 
         harness.service.setup(with: Factory.denomination)

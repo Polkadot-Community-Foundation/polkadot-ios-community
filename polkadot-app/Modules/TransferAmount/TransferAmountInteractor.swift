@@ -100,12 +100,13 @@ extension TransferAmountInteractor: TransferAmountInteractorInputProtocol {
             return .coinage(preview)
         case .externalPayment:
             let preview = try await coinageService.previewExternalPayment(for: planks)
-            // Same rule as product payments: warn unless the plan is private or the preset is minPrivacy.
-            return .externalPayment(
-                preview,
-                amount: planks,
-                requiresPrivacyConfirmation: recyclingStrategy.strategy != .minPrivacy && !preview.isPrivate
-            )
+            // Same rule as product payments: warn unless private vouchers pay or the preset is minPrivacy.
+            var requiresPrivacyConfirmation = false
+            if recyclingStrategy.strategy != .minPrivacy {
+                requiresPrivacyConfirmation = try await !coinageService
+                    .canExecuteExternalPaymentPrivately(amount: planks)
+            }
+            return .externalPayment(preview, amount: planks, requiresPrivacyConfirmation: requiresPrivacyConfirmation)
         }
     }
 

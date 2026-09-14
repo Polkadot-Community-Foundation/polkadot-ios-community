@@ -16,8 +16,6 @@ public protocol DatabaseDependencyFactoring: Sendable {
     /// set. Empty `publicKeys` still returns a repository (the caller guards the empty case).
     func makeVoucherRepository(publicKeys: [PublicKey]) -> AnyDataProviderRepository<Voucher>
     func makeTrackedVoucherRepository() -> AnyDataProviderRepository<TrackedVoucher>
-    /// A tracked-voucher repository scoped to the given derivation indices — a filtered query rather
-    /// than the whole set. Empty `derivationIndices` still returns a repository (the caller guards it).
     func makeTrackedVoucherRepository(derivationIndices: [DerivationIndex]) -> AnyDataProviderRepository<TrackedVoucher>
     /// A write-only repository for location-sync updates (`remoteState`, `privacy`), backed by a
     /// mapper that touches only those fields — see ``VoucherLocationUpdate``.
