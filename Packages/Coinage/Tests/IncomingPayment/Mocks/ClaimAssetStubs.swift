@@ -75,6 +75,8 @@ final class InMemoryVoucherService: VoucherServiceProtocol, @unchecked Sendable 
 
     func fetchAllTracked() async throws -> [TrackedVoucher] { [] }
 
+    func fetchTracked(derivationIndices _: Set<DerivationIndex>) async throws -> [TrackedVoucher] { [] }
+
     func fetchVouchers(publicKeys: Set<PublicKey>) async throws -> [Voucher] {
         if let fetchError { throw fetchError }
         return vouchers.withLock { store in publicKeys.compactMap { store[$0] } }
