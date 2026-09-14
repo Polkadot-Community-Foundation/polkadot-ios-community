@@ -2,7 +2,7 @@ import Foundation
 import Keystore_iOS
 
 #if TESTNET_FEATURE
-    private let defaultTrUAPIRuntimeEnabled = true
+    private let defaultTrUAPIRuntimeEnabled = false
 #else
     private let defaultTrUAPIRuntimeEnabled = false
 #endif
