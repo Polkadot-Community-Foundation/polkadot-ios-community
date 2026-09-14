@@ -43,6 +43,9 @@ public extension CoinageService {
         txStore: any CoinageTxRepositoryProtocol,
         applicationStateStreamFactory: ApplicationStateStreamFactory,
         externalPaymentStore: ExternalPaymentStoring,
+        incomingPaymentStore: IncomingPaymentStoring,
+        incomingPaymentSecretStore: IncomingPaymentSecretStoring,
+        incomingPaymentAcknowledger: IncomingPaymentAcknowledging,
         backgroundExecutor: any BackgroundExecuting,
         recyclingStrategySettings: any CoinageRecyclingStrategyProviding,
         personOriginProvider: any OriginPersonProviding,
@@ -186,12 +189,11 @@ public extension CoinageService {
             logger: logger
         )
         let voucherService = VoucherService(
+            databaseFactory: databaseFactory,
             trackedVoucherRepository: trackedVoucherRepository,
             voucherLoaderFactory: voucherLoaderFactory
         )
 
-        // Shared unload-quota tracker: read by the recycling strategy's quota valve and decremented by the
-        // unload paths (transfer / external payment) as free-unload tokens are spent.
         let consumedTokenChecker = ConsumedTokenChecker(
             operationQueue: operationQueue,
             connection: connection,
@@ -279,12 +281,20 @@ public extension CoinageService {
             logger: logger
         )
 
+        let ringCapacityProvider = RingCapacityProvider(
+            instanceId: instanceId,
+            operationQueue: operationQueue,
+            connection: connection,
+            runtimeCodingService: runtimeService
+        )
+
         let voucherLocationService = VoucherLocationService(
             instanceId: instanceId,
             voucherRepository: voucherRepository,
             databaseFactory: databaseFactory,
             connection: connection,
             runtimeService: runtimeService,
+            ringCapacityProvider: ringCapacityProvider,
             logger: logger
         )
 
@@ -293,19 +303,12 @@ public extension CoinageService {
             coinKeypairFactory: coinKeypairFactory,
             voucherKeypairFactory: voucherKeypairFactory,
             txService: txService,
+            voucherService: voucherService,
             originFactory: originFactory,
             backgroundExecutor: backgroundExecutor,
             logger: logger
         )
 
-        // Recycling strategy evaluation collaborators. The evaluator itself is built lazily once the
-        // denomination context resolves (see `CoinageService.setup`).
-        let ringCapacityProvider = RingCapacityProvider(
-            instanceId: instanceId,
-            operationQueue: operationQueue,
-            connection: connection,
-            runtimeCodingService: runtimeService
-        )
         let recyclingStrategyResolver = RecyclingStrategyProvider(quotaTracker: quotaTracker)
         let preClassificator = CoinageAssetPreClassificator()
 
@@ -313,6 +316,13 @@ public extension CoinageService {
             instanceId: instanceId,
             coinService: coinService,
             voucherService: voucherService,
+            assetClassifier: ExternalPaymentAssetClassifier(
+                settings: recyclingStrategySettings,
+                strategyResolver: recyclingStrategyResolver,
+                ringCapacityProvider: ringCapacityProvider,
+                preClassificator: preClassificator,
+                logger: logger
+            ),
             recycler: recyclingService,
             voucherKeyFactory: voucherKeypairFactory,
             voucherMinter: coinageMinter,
@@ -338,6 +348,43 @@ public extension CoinageService {
             logger: logger
         )
 
+        let assetsTracking = AssetBalanceTracker(
+            connection: connection,
+            runtimeService: runtimeService,
+            storageRequestFactory: storageRequestFactory,
+            logger: logger
+        )
+
+        let claimAssetService = ClaimAssetService(
+            assetsTracking: assetsTracking,
+            voucherLoaderFactory: voucherLoaderFactory,
+            voucherService: voucherService,
+            txService: txService,
+            logger: logger
+        )
+
+        let incomingPaymentSourceResolver = IncomingPaymentSourceResolver(
+            entropyManager: rootEntropyManager,
+            snKeyFactory: SNKeyFactory()
+        )
+
+        let incomingPaymentService = IncomingPaymentService(
+            store: incomingPaymentStore,
+            secretStore: incomingPaymentSecretStore,
+            sourceResolver: incomingPaymentSourceResolver,
+            paymentContext: IncomingPaymentContext(logger: logger),
+            claimCoinsService: claimCoinsService,
+            claimAssetService: claimAssetService,
+            verdictResolver: CoinageGroupVerdictResolver(
+                txService: txService,
+                coinService: coinService,
+                voucherService: voucherService
+            ),
+            acknowledger: incomingPaymentAcknowledger,
+            instanceId: instanceId,
+            logger: logger
+        )
+
         let coinageService = CoinageService(
             coinService: coinService,
             voucherService: voucherService,
@@ -359,6 +406,7 @@ public extension CoinageService {
             applicationStateStreamFactory: applicationStateStreamFactory,
             databaseFactory: databaseFactory,
             recoveryService: recoveryService,
+            incomingPaymentService: incomingPaymentService,
             logger: logger
         )
 
