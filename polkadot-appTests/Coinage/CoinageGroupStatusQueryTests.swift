@@ -4,6 +4,7 @@ import Foundation
 import Testing
 
 @testable import polkadot_app
+import DurableTransactions
 
 /// The durability group-status seam against the real CoreData ledger over in-memory CoreData:
 /// `getOperationGroupStatuses` / `subscribeOperationGroupStatuses` find every transaction registered

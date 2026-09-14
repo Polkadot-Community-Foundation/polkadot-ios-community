@@ -4,6 +4,7 @@ import Operation_iOS
 import ExtrinsicService
 import AsyncExtensions
 @testable import Coinage
+import DurableTransactions
 
 /// Thread-safe journal for recording mock call events.
 final class CallJournal: @unchecked Sendable {

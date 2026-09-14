@@ -2,6 +2,7 @@ import Coinage
 import DurableTransactionsTestSupport
 import Foundation
 import os
+import DurableTransactions
 
 /// The real coin key factory over a fixed test entropy, so ``testKey`` yields curve-valid sr25519
 /// public keys — the recycle crypto path builds an `SNPublicKey` from them.

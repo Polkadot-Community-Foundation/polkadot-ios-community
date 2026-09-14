@@ -6,6 +6,7 @@ import KeyDerivation
 import Testing
 
 @testable import polkadot_app
+import DurableTransactions
 
 /// Guards the serialization of the CoreData ledger's registration transaction.
 ///

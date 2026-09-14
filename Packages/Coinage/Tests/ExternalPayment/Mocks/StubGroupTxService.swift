@@ -2,6 +2,7 @@ import AsyncExtensions
 import Foundation
 import os
 @testable import Coinage
+import DurableTransactions
 
 /// `CoinageTxServicing` double with real group semantics: registrations are keyed by group id,
 /// resolved to a configured terminal status, and re-readable / re-subscribable — the seam the
