@@ -98,6 +98,8 @@ private extension TabBarTipController {
 
         let controller = TipUIPopoverViewController(step.tip, sourceItem: anchor)
         controller.popoverPresentationController?.permittedArrowDirections = [.up, .down]
+        controller.popoverPresentationController?.backgroundColor = .fgPrimary
+        controller.viewStyle = TabBarTipViewStyle()
 
         host.present(controller, animated: true)
         presentedTip = step.tip
