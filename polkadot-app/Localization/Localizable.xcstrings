@@ -3792,6 +3792,23 @@
         }
       }
     },
+    "searchContact.recent.chats": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent chats"
+          }
+        },
+        "es-ES": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats recientes"
+          }
+        }
+      }
+    },
     "secret.recovery.subtitle": {
       "extractionState": "manual",
       "localizations": {
