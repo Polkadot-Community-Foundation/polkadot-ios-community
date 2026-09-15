@@ -1,6 +1,8 @@
 import Coinage
+import DurableTransactionsTestSupport
 import Foundation
 import os
+import DurableTransactions
 
 /// The real coin key factory over a fixed test entropy, so ``testKey`` yields curve-valid sr25519
 /// public keys — the recycle crypto path builds an `SNPublicKey` from them.
@@ -22,13 +24,6 @@ func testKey(_ index: DerivationIndex) -> PublicKey {
         }
         cache[index] = key
         return key
-    }
-}
-
-extension BlockRef {
-    /// Block `number` with a hash derived from it, so distinct numbers stay distinguishable.
-    static func fixture(_ number: UInt32) -> BlockRef {
-        BlockRef(number: number, hash: Data([UInt8(truncatingIfNeeded: number)]))
     }
 }
 
