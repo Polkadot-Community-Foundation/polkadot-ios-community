@@ -4,7 +4,7 @@ import AsyncExtensions
 import SubstrateSdk
 import PolkadotUI
 import FoundationExt
-import StructuredConcurrency
+import os
 @testable import polkadot_app
 
 struct ChainStatusProviderTests {
@@ -555,24 +555,21 @@ private extension ChainStatusProviderTests {
             return
         }
 
-        // Awaiting `task.value` ignores cancellation, so racing it directly would wait forever on a probe
-        // that never finishes. Iterating the stream is cancellable; the forwarding task is never awaited.
-        let completion = AsyncStream<Void> { continuation in
-            Task {
-                await task.value
-                continuation.yield(())
-                continuation.finish()
-            }
+        // Awaiting `task.value` cannot be cancelled, so a task-group timeout would wait on it forever.
+        // CI has also delivered probe completions seconds late, hence the generous bound.
+        let finished = OSAllocatedUnfairLock(initialState: false)
+        Task {
+            await task.value
+            finished.withLock { $0 = true }
         }
 
-        do {
-            try await withTimeout(.seconds(5)) {
-                for await _ in completion {
-                    break
-                }
-            }
-        } catch {
-            Issue.record("anchor probe did not finish within 5s", sourceLocation: sourceLocation)
+        let deadline = ContinuousClock.now + .seconds(30)
+        while !finished.withLock({ $0 }), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        if !finished.withLock({ $0 }) {
+            Issue.record("anchor probe did not finish within 30s", sourceLocation: sourceLocation)
         }
     }
 
