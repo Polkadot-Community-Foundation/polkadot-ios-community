@@ -25,12 +25,11 @@ public enum BlockLookup: Sendable {
 }
 
 /// Reads one extrinsic hash's dispatch outcome from one block. The single access that needs a live
-/// connection and runtime metadata, injected as a closure so the window-scan logic in ``BlockBodyScan``
-/// can be exercised without either.
-public typealias BlockOutcomeLookup = @Sendable (_ txHash: Data, _ blockHash: Data) async -> BlockLookup
-
-/// Resolves a block hash to its number, returning `nil` when the read failed.
-public typealias BlockNumberByHash = @Sendable (_ blockHash: Data) async -> UInt32?
+/// connection and runtime metadata, behind a protocol so the window-scan logic in ``BlockBodyScan`` can
+/// be exercised without either.
+public protocol BlockOutcomeReading: Sendable {
+    func lookUp(_ txHash: Data, at blockHash: Data) async -> BlockLookup
+}
 
 /// One view of the chain, pinned for the length of a single recovery pass.
 ///

@@ -86,6 +86,7 @@ let package = Package(
                 "DurableTransactionsTestSupport",
                 .product(name: "SubstrateSdk", package: "substrate-sdk-ios"),
                 .product(name: "ExtrinsicService", package: "extrinsic-service-ios"),
+                .product(name: "Operation-iOS", package: "operation-ios"),
                 "ChainStore"
             ]
         )

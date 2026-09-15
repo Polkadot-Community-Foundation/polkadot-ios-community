@@ -39,6 +39,10 @@ public protocol DurableTxRepositoryProtocol: Sendable {
     /// Every entry of every domain, live and terminal, ordered by `sequence`.
     func getAllEntries() async throws -> [DurableTxEntry]
 
+    /// Every entry of one domain, live and terminal, ordered by `sequence`. The recovery pass reads this
+    /// twice per domain per pass, so a store backed by a database answers it with a predicate.
+    func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry]
+
     /// The entry with this id, if any.
     func getEntry(id: DurableTxId) async throws -> DurableTxEntry?
 
@@ -57,10 +61,5 @@ public extension DurableTxRepositoryProtocol {
     /// The entry's current status, if it exists.
     func getStatus(_ id: DurableTxId) async throws -> DurableTxStatus? {
         try await getEntry(id: id)?.status
-    }
-
-    /// Every entry of one domain, live and terminal, ordered by `sequence`.
-    func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry] {
-        try await getAllEntries().filter { $0.domainId == domain }
     }
 }

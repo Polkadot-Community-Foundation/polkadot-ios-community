@@ -40,7 +40,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -71,7 +71,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -101,7 +101,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -131,7 +131,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -158,7 +158,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -190,7 +190,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -241,7 +241,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 
@@ -292,7 +292,7 @@ struct BodySearchTests {
         )
 
         let searcher = BlockBodyScan(
-            blockOutcome: { await stub.lookUp($0, at: $1) },
+            outcomeReader: stub,
             blockInfoProvider: blockInfo
         )
 

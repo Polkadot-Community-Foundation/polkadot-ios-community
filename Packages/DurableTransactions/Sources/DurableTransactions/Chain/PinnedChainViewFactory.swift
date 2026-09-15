@@ -52,7 +52,6 @@ extension PinnedChainViewFactory {
             throw DurableTxError.chainViewUnavailable
         }
 
-        let outcomeReader = readers.outcomeReader
         return PinnedChainView(
             chainId: chainId,
             heads: ChainHeads(
@@ -60,8 +59,7 @@ extension PinnedChainViewFactory {
                 best: BlockRef(number: bestNumber, hash: bestHash)
             ),
             blockInfoProvider: blockInfoProvider,
-            blockNumberByHash: { await outcomeReader.blockNumber(byHash: $0) },
-            blockOutcome: { await outcomeReader.lookUp($0, at: $1) }
+            outcomeReader: readers.outcomeReader
         )
     }
 
@@ -177,7 +175,7 @@ private enum HeadSubscriptionError: Error {
 
 /// Looks one extrinsic hash up in one block and resolves its dispatch outcome from that same block's
 /// events. Isolates the one access that needs a live connection and runtime metadata.
-private final class BlockOutcomeReader: Sendable {
+final class BlockOutcomeReader: BlockOutcomeReading {
     private let connection: any JSONRPCEngine
     private let runtimeService: any RuntimeCodingServiceProtocol
     private let eventsQueryFactory: any BlockEventsQueryFactoryProtocol
@@ -202,18 +200,6 @@ private final class BlockOutcomeReader: Sendable {
         }
 
         return await resolveOutcome(extrinsic: extrinsic)
-    }
-
-    /// The block's number, read straight from its header via `chain_getHeader`. `nil` when the read
-    /// fails or the number cannot be parsed.
-    func blockNumber(byHash blockHash: Data) async -> UInt32? {
-        let operation = JSONRPCListOperation<Block.Header>(
-            engine: connection,
-            method: RPCMethod.getBlockHeader,
-            parameters: [blockHash.toHex(includePrefix: true)]
-        )
-        guard let header = try? await operation.asyncExecute() else { return nil }
-        return UInt32.fromHex(header.number)
     }
 }
 

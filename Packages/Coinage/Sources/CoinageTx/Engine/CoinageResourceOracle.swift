@@ -64,6 +64,9 @@ struct CoinagePassScope: TxCompletionPassScope {
 
         if evidence.executed(entry, atFinalized: atFinalized) { return true }
 
+        // Propagation, which used to be a phase of its own. The engine runs two rounds per pass, so a
+        // successor promoted in the first is visible here in the second — the same fixpoint the separate
+        // phase reached by reloading the graph.
         if atFinalized, CoinageRules.successorProvesCompletion(entry, dag) { return true }
 
         return CoinageRules.hasOnlyProvenOwnCoinInputs(entry, dag, evidence)

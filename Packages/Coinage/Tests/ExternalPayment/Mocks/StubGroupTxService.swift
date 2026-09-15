@@ -104,10 +104,6 @@ final class StubGroupTxService: CoinageTxServicing, @unchecked Sendable {
         subject(for: groupId).eraseToAnyAsyncSequence()
     }
 
-    func startRecoveryPass() {}
-    func start() {}
-    func stop() {}
-
     func preCommitHandoff(_: [OwnAsset]) async throws -> any CoinageHandoffCommit {
         throw Failure()
     }

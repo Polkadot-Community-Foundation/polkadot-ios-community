@@ -30,7 +30,6 @@ actor MockCoinageTxService: CoinageTxServicing {
     private(set) var submittedInputs: [[CoinageTxInput]] = []
     private(set) var submittedOutputs: [[OwnAsset]] = []
     private(set) var handoffAssets: [OwnAsset] = []
-    private(set) var recoveryPassCount: Int = 0
 
     private let submissionOutcome: SubmissionOutcome
 
@@ -111,16 +110,6 @@ actor MockCoinageTxService: CoinageTxServicing {
         store.subscribeOperationGroupStatuses(groupId)
     }
 
-    nonisolated func startRecoveryPass() {
-        Task { [weak self] in
-            await self?.incrementRecoveryPassCount()
-        }
-    }
-
-    nonisolated func start() {}
-
-    nonisolated func stop() {}
-
     func preCommitHandoff(_ assets: [OwnAsset]) async throws -> any CoinageHandoffCommit {
         callJournal.record("preCommitHandoff")
         handoffAssets.append(contentsOf: assets)
@@ -130,10 +119,6 @@ actor MockCoinageTxService: CoinageTxServicing {
 
     func releaseUncommittedHandoffs() async throws {
         try await store.releaseUncommittedHandoffs()
-    }
-
-    private func incrementRecoveryPassCount() {
-        recoveryPassCount += 1
     }
 }
 

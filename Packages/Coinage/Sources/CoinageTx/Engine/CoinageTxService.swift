@@ -27,18 +27,6 @@ public protocol CoinageTxServicing: Sendable {
     /// registration order. Lets a claim watch its whole group settle by `groupId = messageId`.
     func subscribeOperationGroupStatuses(_ groupId: CoinageTxGroupId) -> AnyAsyncSequence<[CoinageTxEntry]>
 
-    /// Starts a recovery pass without waiting for it. Never awaited by startup: a single unresolvable
-    /// entry must not hold the app for a mortality window.
-    func startRecoveryPass()
-
-    /// Starts the shared engine's head-driven recovery and runs one pass immediately. Subsumes
-    /// ``startRecoveryPass()``. Idempotent across domains.
-    func start()
-
-    /// Cancels the shared engine's head-driven recovery — for every domain, not only coinage. Safe to call
-    /// when not started.
-    func stop()
-
     /// Provisionally reserves `assets` against being spent again, before their keys reach the transport.
     /// The reservation is released on relaunch unless the returned handle is committed once the carrying
     /// payload is durable — so a payment that fails after this point never freezes the coins.
@@ -105,7 +93,7 @@ public final class CoinageTxService: CoinageTxServicing {
                 try ledger.registerAssets(assets, for: ids, in: scope)
             }
         } catch let error as DurableTxError {
-            throw Self.coinageError(error)
+            throw CoinageTxError(durableTxError: error) ?? error
         }
     }
 
@@ -123,18 +111,6 @@ public final class CoinageTxService: CoinageTxServicing {
         ledger.subscribeOperationGroupStatuses(groupId)
     }
 
-    public func startRecoveryPass() {
-        engine.startRecoveryPass()
-    }
-
-    public func start() {
-        engine.start()
-    }
-
-    public func stop() {
-        engine.stop()
-    }
-
     /// Reserves `assets` against being spent again, rejecting any a live entry still claims — the mirror
     /// of the blocked-handoff invariant, run in the same transaction as the mark.
     public func preCommitHandoff(_ assets: [OwnAsset]) async throws -> any CoinageHandoffCommit {
@@ -150,20 +126,5 @@ public final class CoinageTxService: CoinageTxServicing {
 
     public func releaseUncommittedHandoffs() async throws {
         try await ledger.releaseUncommittedHandoffs()
-    }
-}
-
-private extension CoinageTxService {
-    /// The engine rejects in its own vocabulary, but ``CoinageTxError`` is what this module publishes and
-    /// what callers match on, so the engine-shaped rejections keep their coinage names.
-    static func coinageError(_ error: DurableTxError) -> Error {
-        switch error {
-        case .notMortal: CoinageTxError.notMortal
-        case .chainViewUnavailable: CoinageTxError.chainViewUnavailable
-        case let .entryNotFound(id): CoinageTxError.entryNotFound(id)
-        case .unregisteredDomain,
-             .buildIncomplete,
-             .foreignRegistrationScope: error
-        }
     }
 }
