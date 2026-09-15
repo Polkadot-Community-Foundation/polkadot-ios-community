@@ -18,32 +18,7 @@ struct ChainStatusStripTip: TabBarTip {
     var message: Text? { Text(.Tips.chainStatusMessage) }
 }
 
-struct ChatTabTip: TabBarTip {
-    var title: Text { Text(.Tips.chatTitle) }
-    var message: Text? { Text(.Tips.chatMessage) }
-}
-
-struct WalletTabTip: TabBarTip {
-    var title: Text { Text(.Tips.walletTitle) }
-    var message: Text? { Text(.Tips.walletMessage) }
-}
-
 struct ScanActionTip: TabBarTip {
     var title: Text { Text(.Tips.scanTitle) }
     var message: Text? { Text(.Tips.scanMessage) }
-}
-
-struct BrowseTabTip: TabBarTip {
-    var title: Text { Text(.Tips.browseTitle) }
-    var message: Text? { Text(.Tips.browseMessage) }
-}
-
-struct SettingsTabTip: TabBarTip {
-    var title: Text { Text(.Tips.settingsTitle) }
-    var message: Text? { Text(.Tips.settingsMessage) }
-}
-
-struct ConnectionStatusActionTip: TabBarTip {
-    var title: Text { Text(.Tips.connectionStatusTitle) }
-    var message: Text? { Text(.Tips.connectionStatusMessage) }
 }
