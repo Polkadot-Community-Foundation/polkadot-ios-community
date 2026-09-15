@@ -255,34 +255,21 @@ struct AccountSearchProviderTests {
             ownAccountId: ownAccountId,
             logger: MockLogger()
         )
+        var sourcesChangedIterator = provider.sourcesChanged().makeAsyncIterator()
         provider.setup()
 
-        // Push initial empty recents
         continuation.yield([])
-
-        // Wait for the first sourcesChanged emission
-        var sourcesChangedIterator = provider.sourcesChanged().makeAsyncIterator()
         _ = try await sourcesChangedIterator.next()
 
-        // Now push new recents
         continuation.yield([recentRow])
+        _ = try await sourcesChangedIterator.next()
 
-        // Wait for sourcesChanged to fire again
-        let sourceChangeTask = Task {
-            _ = try await sourcesChangedIterator.next()
-        }
-
-        // Give the subscription task time to receive and process the stream update
-        try await Task.sleep(for: .milliseconds(10))
-
-        // Search and verify recents are included
         let result = try await provider.search(query: nil)
 
         #expect(result.recent.count == 1)
         #expect(result.recent[0].username?.value == "recent_user")
 
         continuation.finish()
-        sourceChangeTask.cancel()
     }
 
     // MARK: - Remote contact fetch by id

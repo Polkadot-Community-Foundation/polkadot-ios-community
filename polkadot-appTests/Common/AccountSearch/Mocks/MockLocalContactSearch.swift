@@ -28,12 +28,9 @@ final class MockLocalContactSearch: LocalContactSearching {
 
     private func makeSeededRepository() -> AnyDataProviderRepository<Chat.Contact> {
         let repository = InMemoryDataProviderRepository<Chat.Contact>()
-        // Use a blocking operation queue to seed synchronously
-        let operationQueue = OperationQueue()
-        operationQueue.maxConcurrentOperationCount = 1
-        let seedOp = repository.replaceOperation { self.contacts }
-        operationQueue.addOperation(seedOp)
-        operationQueue.waitUntilAllOperationsAreFinished()
+        // `start()` runs the operation inline; an OperationQueue wait here would block
+        // a cooperative-pool thread, since callers seed from an async context.
+        repository.replaceOperation { self.contacts }.start()
         return AnyDataProviderRepository(repository)
     }
 }

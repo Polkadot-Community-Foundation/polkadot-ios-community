@@ -16,12 +16,6 @@
       "skippedTests" : {
         "suites" : [
           {
-            "name" : "AccountSearchComposerTests"
-          },
-          {
-            "name" : "AccountSearchProviderTests"
-          },
-          {
             "name" : "ChainSyncServiceTests"
           },
           {
