@@ -5,7 +5,7 @@ import UIKitExt
 
 @MainActor
 final class TabBarTipController {
-    private let barView: DSTabBarView
+    private unowned let barView: DSTabBarView
     private let itemIndex: (TabBarSlot) -> Int?
     private let statusStripAnchor: () -> (any UIPopoverPresentationControllerSourceItem)?
     private let sequence: any TabBarTipSequenceProtocol
