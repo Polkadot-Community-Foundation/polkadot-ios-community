@@ -1,16 +1,33 @@
 import ExtrinsicService
 import Foundation
 
+/// Names the requests of one submission that must be built together so their nonces are sequential —
+/// one spending another's output. Every request under a key must carry the same signing origin; the
+/// batch is built with the first one's.
+public struct DurableTxBatchKey: Hashable, Sendable {
+    public let rawValue: String
+
+    public init(_ rawValue: String) {
+        self.rawValue = rawValue
+    }
+}
+
 /// One transaction to build, register and submit. A batch of these registers atomically under one
-/// ``DurableTxGroupId``; requests sharing one `origin` instance are built together so their nonces are
-/// sequential.
+/// ``DurableTxGroupId``; requests sharing a ``DurableTxBatchKey`` are built together so their nonces are
+/// sequential, and a request without one is built on its own.
 public struct DurableTxRequest {
     public let builder: ExtrinsicBuilderClosure
     public let origin: any ExtrinsicOriginDefining
+    public let batchKey: DurableTxBatchKey?
 
-    public init(builder: @escaping ExtrinsicBuilderClosure, origin: any ExtrinsicOriginDefining) {
+    public init(
+        builder: @escaping ExtrinsicBuilderClosure,
+        origin: any ExtrinsicOriginDefining,
+        batchKey: DurableTxBatchKey? = nil
+    ) {
         self.builder = builder
         self.origin = origin
+        self.batchKey = batchKey
     }
 }
 
