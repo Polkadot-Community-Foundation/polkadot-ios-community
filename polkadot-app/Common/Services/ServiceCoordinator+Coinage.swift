@@ -6,11 +6,14 @@ import FoundationExt
 import SubstrateOperation
 import ChainRegistry
 import BackgroundExecution
+import DurableTransactions
 import ExtrinsicService
 
 extension ServiceCoordinator {
     struct CoinageServices {
         let coinageService: CoinageServicing
+        /// The one durable transaction engine every domain shares; the coordinator starts and stops it.
+        let durableTransactionEngine: any DurableTxServicing
         let transferMonitor: CoinageTransferMonitoring
         let w3sPaymentTracking: W3sPaymentTracking
         let backupSyncService: CoinageBackupSyncServicing
@@ -29,10 +32,19 @@ extension ServiceCoordinator {
             storageFacade: UserDataStorageFacade.shared
         )
 
+        let chainViewFactory = PinnedChainViewFactory(
+            chainResource: ChainRegistryFacade.sharedRegistry,
+            operationQueue: OperationManagerFacade.sharedDefaultQueue,
+            logger: Logger.shared
+        )
+        let durableEngine = createDurableTransactionEngine(chainViewFactory: chainViewFactory)
+
         guard let coinageService = createCoinageService(
             databaseFactory: databaseFactory,
             externalPaymentStore: externalPaymentStore,
-            incomingPaymentStore: incomingPaymentStore
+            incomingPaymentStore: incomingPaymentStore,
+            durableEngine: durableEngine,
+            chainViewFactory: chainViewFactory
         ) else {
             return nil
         }
@@ -51,6 +63,7 @@ extension ServiceCoordinator {
 
         return CoinageServices(
             coinageService: coinageService,
+            durableTransactionEngine: durableEngine,
             transferMonitor: transferMonitor,
             w3sPaymentTracking: createW3sPaymentTracking(coinageService: coinageService),
             backupSyncService: backupSyncService,
@@ -79,7 +92,9 @@ private extension ServiceCoordinator {
     static func createCoinageService(
         databaseFactory: DatabaseDependencyFactoring,
         externalPaymentStore: ExternalPaymentStoring,
-        incomingPaymentStore: IncomingPaymentStoring
+        incomingPaymentStore: IncomingPaymentStoring,
+        durableEngine: any DurableTxServicing,
+        chainViewFactory: any PinnedChainViewFactoryProtocol
     ) -> CoinageService? {
         let logger = Logger.shared
         let chainRegistry = ChainRegistryFacade.sharedRegistry
@@ -150,22 +165,9 @@ private extension ServiceCoordinator {
             return nil
         }
 
-        guard
-            let extrinsicOperationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: chain),
-            // Durability must observe the finalized outcome, not just inclusion, so the watch
-            // follows each extrinsic until its block is finalized.
-            let extrinsicSubmitter = try? extrinsicMonitorFacade.makeForkProtectedSubmitter(
-                chain: chain,
-                trackingTill: .finalized
-            )
-        else {
-            logger.error("Failed to create extrinsic operation factory / submitter for coinage")
-            return nil
-        }
-
-        let coinageTxStore = CoinageTxCoreDataRepository(
-            storageFacade: UserDataStorageFacade.shared
-        )
+        // Coinage registers its oracle with the shared engine inside `CoinageService.make`; the
+        // coordinator owns the engine's lifecycle.
+        let assetLedger = CoinageAssetLedgerCoreData(storageFacade: UserDataStorageFacade.shared)
 
         let incomingPaymentSecretStore = IncomingPaymentKeychainSecretStore(keychain: Keychain(), logger: logger)
         let incomingPaymentAcknowledger = TopUpAcknowledgementPresenter()
@@ -177,11 +179,11 @@ private extension ServiceCoordinator {
             databaseFactory: databaseFactory,
             originFactory: coinageOriginFactory,
             extrinsicMonitorFactory: monitorFactory,
-            extrinsicOperationFactory: extrinsicOperationFactory,
-            extrinsicSubmitter: extrinsicSubmitter,
+            durableEngine: durableEngine,
+            chainViewFactory: chainViewFactory,
+            assetLedger: assetLedger,
             rootEntropyManager: RootEntropyManager.shared,
             keystore: Keychain(),
-            txStore: coinageTxStore,
             applicationStateStreamFactory: ApplicationStateStreamFactory(),
             externalPaymentStore: externalPaymentStore,
             incomingPaymentStore: incomingPaymentStore,

@@ -61,7 +61,7 @@ private extension PaymentPrivacyModeCard {
                 .foregroundStyle(.fgSecondary)
                 .frame(width: 32, height: 32)
 
-            Text(String(localized: .settingsPrivacymodeTitle))
+            Text(String(localized: .settingsPrivacymodeTitle(AppConfig.Brand.cashSymbol)))
                 .typography(.bodyLarge)
                 .foregroundStyle(.fgPrimary)
         }

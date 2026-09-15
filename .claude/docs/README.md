@@ -22,6 +22,7 @@
 | Extrinsics, transfers, signing                 | architecture/transactions.md                               |
 | Storage queries, runtime calls, SCALE          | architecture/chain-integration.md                          |
 | Coinage, payments, coins                       | architecture/coinage.md                                    |
+| Durable transactions, recovery pass, completion oracle | architecture/durable-transactions.md                 |
 | Statement store, off-chain messaging           | architecture/statement-store-communication.md              |
 | Chain status rings, liveness, connection strip | architecture/chain-status.md                                |
 | Key derivation, product accounts, ring-VRF/ECDH keys | `Packages/KeyDerivation/` + architecture/sso.md (selector & wire pins) |

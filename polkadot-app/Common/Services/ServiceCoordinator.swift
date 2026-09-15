@@ -7,6 +7,7 @@ import CommonService
 import ExtrinsicService
 import KeyDerivation
 import Coinage
+import DurableTransactions
 import Products
 import SubstrateSdk
 import SubstrateOperation
@@ -58,6 +59,7 @@ final class ServiceCoordinator {
     let attachmentUploadService: AttachmentUploadingServicing
     let attachmentDownloadService: AttachmentDownloadingServicing
     let coinageTransferMonitor: CoinageTransferMonitoring
+    let durableTransactionEngine: any DurableTxServicing
     let w3sPaymentTracking: W3sPaymentTracking
     let audioSessionManager: AudioSessionManaging
     let determineStateSyncService: DetermineStateSyncServicing
@@ -99,6 +101,7 @@ final class ServiceCoordinator {
         attachmentUploadService: AttachmentUploadingServicing,
         attachmentDownloadService: AttachmentDownloadingServicing,
         coinageTransferMonitor: CoinageTransferMonitoring,
+        durableTransactionEngine: any DurableTxServicing,
         w3sPaymentTracking: W3sPaymentTracking,
         audioSessionManager: AudioSessionManaging,
         determineStateSyncService: DetermineStateSyncServicing,
@@ -133,6 +136,7 @@ final class ServiceCoordinator {
         self.attachmentUploadService = attachmentUploadService
         self.attachmentDownloadService = attachmentDownloadService
         self.coinageTransferMonitor = coinageTransferMonitor
+        self.durableTransactionEngine = durableTransactionEngine
         self.w3sPaymentTracking = w3sPaymentTracking
         self.audioSessionManager = audioSessionManager
         self.determineStateSyncService = determineStateSyncService
@@ -198,6 +202,8 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
                 logger.error("Coinage service setup failed: \(error)")
                 return
             }
+            // After coinage setup, which releases uncommitted handoffs the first pass must not see.
+            durableTransactionEngine.start()
             // Recovering backup 1st
             await coinageBackupSyncService.setup()
             await coinageTransferMonitor.setup()
@@ -221,6 +227,7 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
         allowanceRenewalService.throttle()
 
         messageExpansionService.stop()
+        durableTransactionEngine.stop()
 
         Task {
             await deviceSyncService.throttle()
@@ -444,6 +451,7 @@ extension ServiceCoordinator {
             attachmentUploadService: attachmentUploadService,
             attachmentDownloadService: attachmentDownloadService,
             coinageTransferMonitor: coinageServices.transferMonitor,
+            durableTransactionEngine: coinageServices.durableTransactionEngine,
             w3sPaymentTracking: coinageServices.w3sPaymentTracking,
             audioSessionManager: audioSessionManager,
             determineStateSyncService: syncServiceResult.service,

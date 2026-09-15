@@ -146,6 +146,10 @@ extension TransferSenderServiceTests {
             Data(repeating: 0x00, count: 32)
         }
 
+        func fetchBlockNumber(byHash _: BlockHashData) async throws -> BlockNumber {
+            BlockNumber(123)
+        }
+
         func subscribeFinalizedHeads() -> AnyAsyncSequence<Block.Header> {
             AsyncStream<Block.Header> { _ in }.eraseToAnyAsyncSequence()
         }
