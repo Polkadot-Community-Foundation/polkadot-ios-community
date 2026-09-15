@@ -124,6 +124,10 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
         allEntries
     }
 
+    public func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry] {
+        allEntries.filter { $0.domainId == domain }
+    }
+
     public func getEntry(id: DurableTxId) async throws -> DurableTxEntry? {
         state.withLock { $0.entries[id] }
     }
