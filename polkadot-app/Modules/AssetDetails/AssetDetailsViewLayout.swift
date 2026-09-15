@@ -61,10 +61,7 @@ struct AssetDetailsView: View {
             }
             if let breakdown = viewModel.coinageBreakdown,
                viewModel.balanceCardModel != nil {
-                CoinageBalanceBreakdownView(
-                    breakdown: breakdown,
-                    onMakeAllVouchersReady: viewModel.onMakeAllVouchersReady
-                )
+                CoinageBalanceBreakdownView(breakdown: breakdown)
             }
 
             #if TESTNET_FEATURE
@@ -176,8 +173,6 @@ struct AssetDetailsView: View {
 private struct CoinageBalanceBreakdownView: View {
     let breakdown: CoinageBalanceBreakdownViewModel
 
-    var onMakeAllVouchersReady: (() -> Void)?
-
     @State private var showDetails = false
     @State private var showExplanation = false
 
@@ -194,20 +189,6 @@ private struct CoinageBalanceBreakdownView: View {
                 .padding(.vertical, 2)
 
             summaryLegend
-
-            if let onMakeAllVouchersReady {
-                Button {
-                    onMakeAllVouchersReady()
-                } label: {
-                    Text(verbatim: "Make all vouchers ready")
-                        .textStyle(.body14SemiBold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .foregroundStyle(.fgPrimaryInverted)
-                }
-                .background(.bgActionPrimary, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityId(AccessibilityID.Wallet.makeVouchersReadyButton)
-            }
 
             Button {
                 withAnimation { showDetails.toggle() }

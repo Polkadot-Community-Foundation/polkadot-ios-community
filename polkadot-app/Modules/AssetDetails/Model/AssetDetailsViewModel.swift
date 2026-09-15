@@ -51,9 +51,6 @@ protocol AssetDetailsViewModelProtocol: Observation.Observable {
     var onWithdraw: (() -> Void)? { get set }
 
     var coinageBreakdown: CoinageBalanceBreakdownViewModel? { get set }
-    /// Set only in builds that carry the debug affordances; nil elsewhere, which is what hides the
-    /// button rather than a second conditional in the view.
-    var onMakeAllVouchersReady: (() -> Void)? { get set }
     #if TESTNET_FEATURE
         var isTestnetTopUpInProgress: Bool { get set }
         var onTestnetTopUp: (() -> Void)? { get set }
@@ -82,7 +79,6 @@ class AssetDetailsViewModel: AssetDetailsViewModelProtocol {
     var onWithdraw: (() -> Void)?
 
     var coinageBreakdown: CoinageBalanceBreakdownViewModel?
-    var onMakeAllVouchersReady: (() -> Void)?
     #if TESTNET_FEATURE
         var isTestnetTopUpInProgress: Bool = false
         var onTestnetTopUp: (() -> Void)?

@@ -71,11 +71,6 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
             viewModel.onTestnetTopUp = { [weak presenter] in
                 presenter?.onTestnetTopUp()
             }
-
-            viewModel.onMakeAllVouchersReady = { [weak presenter] in
-                presenter?.onMakeAllVouchersReady()
-            }
-
         #endif
     }
 
