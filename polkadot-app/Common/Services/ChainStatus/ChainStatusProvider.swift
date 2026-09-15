@@ -35,7 +35,7 @@ actor ChainStatusProvider {
     private var deadSince: [String: Date] = [:]
     private var awaitingReanchor: Set<ChainConnectionTarget> = []
     private var anchorGeneration: [ChainConnectionTarget: Int] = [:]
-    private var anchorTasks: [ChainConnectionTarget: Task<Void, Never>] = [:]
+    private(set) var anchorTasks: [ChainConnectionTarget: Task<Void, Never>] = [:]
     private var tickTask: Task<Void, Never>?
     private var isObserving = false
     private var lastEmittedRows: [ChainConnectionStatusViewModel] = []

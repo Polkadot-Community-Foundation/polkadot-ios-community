@@ -4,6 +4,7 @@ import AsyncExtensions
 import SubstrateSdk
 import PolkadotUI
 import FoundationExt
+import StructuredConcurrency
 @testable import polkadot_app
 
 struct ChainStatusProviderTests {
@@ -31,8 +32,7 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        let preAnchorRow = await currentChatRow(from: provider)
-        _ = await waitForRowChange(from: provider, changedFrom: preAnchorRow)
+        await awaitAnchor(for: .chat, from: provider)
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -116,17 +116,18 @@ struct ChainStatusProviderTests {
         await provider.handleStatusUpdate(.connected, for: .assethub, at: t0)
         await provider.handleStatusUpdate(.waitingForNetwork, for: .bulletin, at: t0)
 
-        await mockAnchor.waitForCallCount(atLeast: 2)
-
-        let callsAfterConnect = await mockAnchor.fetchAnchorCalls.count
+        await awaitAnchor(for: .chat, from: provider)
+        await awaitAnchor(for: .assethub, from: provider)
 
         await provider.handleForeground(at: t0)
 
-        await mockAnchor.waitForCallCount(atLeast: 4)
+        await awaitAnchor(for: .chat, from: provider)
+        await awaitAnchor(for: .assethub, from: provider)
 
         let allCalls = await mockAnchor.fetchAnchorCalls
         let foregroundCalls = Array(allCalls.suffix(2))
 
+        #expect(allCalls.count == 4)
         #expect(foregroundCalls.count == 2)
         #expect(foregroundCalls.contains { $0.target == .chat })
         #expect(foregroundCalls.contains { $0.target == .assethub })
@@ -167,13 +168,13 @@ struct ChainStatusProviderTests {
             "held at the prior value, not the stale-history 0"
         )
 
-        let heldRow = chatRow
+        let foregroundProbe = await provider.anchorTasks[.chat]
         await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
         await mockAnchor.openGate()
         await mockAnchor.release()
 
-        // Wait for the anchor to apply, indicated by a row change
-        chatRow = await waitForRowChange(from: provider, changedFrom: heldRow)
+        await awaitAnchor(foregroundProbe)
+        chatRow = await currentChatRow(from: provider)
 
         #expect(chatRow?.indication == .normal, "the landed anchor replaces the held value")
     }
@@ -209,15 +210,18 @@ struct ChainStatusProviderTests {
         chatRow = await currentChatRow(from: provider)
         #expect(chatRow?.indication == .normal, "no outage flashes while the probe is outstanding")
 
-        let heldRow = chatRow
-        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
+        let foregroundProbe = await provider.anchorTasks[.chat]
+        // Span 33 lands at 13/15: still normal, but distinct from the held liveness 1, so the assertion proves the
+        // probe applied.
+        await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 33))
         await mockAnchor.openGate()
         await mockAnchor.release()
 
-        // Wait for the probe to land
-        chatRow = await waitForRowChange(from: provider, changedFrom: heldRow)
+        await awaitAnchor(foregroundProbe)
+        chatRow = await currentChatRow(from: provider)
 
         #expect(chatRow?.indication == .normal, "and still normal once the probe lands")
+        #expect(chatRow?.liveness == 13.0 / 15.0, "the landed anchor replaced the held liveness 1")
     }
 
     @Test("A failed re-anchor clears history and reads normal")
@@ -231,8 +235,7 @@ struct ChainStatusProviderTests {
         // Build history
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        let preAnchorRow = await currentChatRow(from: provider)
-        _ = await waitForRowChange(from: provider, changedFrom: preAnchorRow)
+        await awaitAnchor(for: .chat, from: provider)
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -250,12 +253,12 @@ struct ChainStatusProviderTests {
         #expect(chatRow?.indication == .outage(liveness: 10.0 / 15.0))
 
         // Now set error for foreground re-anchor
-        let preErrorRow = chatRow
         await mockAnchor.setError(NSError(domain: "test", code: -1))
         await provider.handleForeground(at: t0.addingTimeInterval(41))
 
         // Wait for the failed probe to complete
-        chatRow = await waitForRowChange(from: provider, changedFrom: preErrorRow)
+        await awaitAnchor(for: .chat, from: provider)
+        chatRow = await currentChatRow(from: provider)
 
         #expect(chatRow?.indication == .normal, "failed re-anchor clears history, row reads normal")
     }
@@ -309,25 +312,26 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
+        let connectProbe = await provider.anchorTasks[.chat]
         await mockAnchor.openGate()
         await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
 
-        let preforegroundRow = await currentChatRow(from: provider)
         await provider.handleForeground(at: t0.addingTimeInterval(1))
 
-        // Wait for the foreground probe to land
-        var chatRow = await waitForRowChange(from: provider, changedFrom: preforegroundRow)
+        await awaitAnchor(for: .chat, from: provider)
+        var chatRow = await currentChatRow(from: provider)
         #expect(chatRow?.indication == .normal, "the foreground anchor applied")
+        #expect(chatRow?.liveness == 1, "the foreground anchor applied")
 
         // The parked connect probe now resumes carrying a much worse reading.
-        let preReleaseRow = chatRow
         await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 90))
         await mockAnchor.release()
 
-        // Wait for the released connect probe to land (or stay unchanged)
-        chatRow = await waitForRowChange(from: provider, changedFrom: preReleaseRow)
+        await awaitAnchor(connectProbe)
+        chatRow = await currentChatRow(from: provider)
 
         #expect(chatRow?.indication == .normal, "the superseded completion changed nothing")
+        #expect(chatRow?.liveness == 1, "a span-90 anchor would have read 5/15")
     }
 
     @Test("Recovery within dwell window clears deadSince so fresh dwell can start")
@@ -390,8 +394,8 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        let originalRow = await currentChatRow(from: provider)
-        let chatRow = await waitForRowChange(from: provider, changedFrom: originalRow)
+        await awaitAnchor(for: .chat, from: provider)
+        let chatRow = await currentChatRow(from: provider)
 
         #expect(await mockAnchor.fetchAnchorCalls.count == 1)
         #expect(await mockAnchor.fetchAnchorCalls[0].target == .chat)
@@ -409,8 +413,7 @@ struct ChainStatusProviderTests {
         await provider.handleStatusUpdate(.connecting, for: .chat, at: t0)
         await provider.handleStatusUpdate(.waitingForNetwork, for: .chat, at: t0)
 
-        try? await Task.sleep(for: .milliseconds(100))
-
+        #expect(await provider.anchorTasks.isEmpty)
         #expect(await mockAnchor.fetchAnchorCalls.isEmpty)
     }
 
@@ -423,7 +426,7 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        try? await Task.sleep(for: .milliseconds(100))
+        await awaitAnchor(for: .chat, from: provider)
 
         let chatRow = await currentChatRow(from: provider)
         #expect(chatRow?.indication == .normal, "error does not crash; row stays on default indication")
@@ -438,8 +441,7 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        let preAnchorRow = await currentChatRow(from: provider)
-        _ = await waitForRowChange(from: provider, changedFrom: preAnchorRow)
+        await awaitAnchor(for: .chat, from: provider)
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -466,8 +468,7 @@ struct ChainStatusProviderTests {
 
         await provider.handleStatusUpdate(.connected, for: .chat, at: t0)
 
-        let preAnchorRow = await currentChatRow(from: provider)
-        _ = await waitForRowChange(from: provider, changedFrom: preAnchorRow)
+        await awaitAnchor(for: .chat, from: provider)
 
         for index in 0 ... 15 {
             let date = t0.addingTimeInterval(Double(index) * 2)
@@ -517,13 +518,13 @@ struct ChainStatusProviderTests {
             "held at the prior liveness, not the stale-history 0"
         )
 
-        let heldRow = chatRow
+        let foregroundProbe = await provider.anchorTasks[.chat]
         await mockAnchor.setAnchor(ChainLivenessAnchor(headHeight: 100, chainTimeSpanSeconds: 30))
         await mockAnchor.openGate()
         await mockAnchor.release()
 
-        // Wait for the anchor to apply, indicated by a row change
-        chatRow = await waitForRowChange(from: provider, changedFrom: heldRow)
+        await awaitAnchor(foregroundProbe)
+        chatRow = await currentChatRow(from: provider)
 
         #expect(chatRow?.liveness == 1, "the landed anchor updates liveness")
     }
@@ -545,21 +546,41 @@ private extension ChainStatusProviderTests {
         return rows?.first { $0.id == ChainConnectionTarget.chat.chainId }
     }
 
-    func waitForRowChange(
-        from provider: ChainStatusProvider,
-        changedFrom originalRow: ChainConnectionStatusViewModel?,
-        timeout: Double = 5
-    ) async -> ChainConnectionStatusViewModel? {
-        let deadline = Date().addingTimeInterval(timeout)
-        var currentRow = await currentChatRow(from: provider)
-
-        while currentRow?.indication == originalRow?.indication,
-              currentRow?.liveness == originalRow?.liveness,
-              Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
-            currentRow = await currentChatRow(from: provider)
+    func awaitAnchor(
+        _ task: Task<Void, Never>?,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        guard let task else {
+            Issue.record("no anchor probe was started", sourceLocation: sourceLocation)
+            return
         }
 
-        return currentRow
+        // Awaiting `task.value` ignores cancellation, so racing it directly would wait forever on a probe
+        // that never finishes. Iterating the stream is cancellable; the forwarding task is never awaited.
+        let completion = AsyncStream<Void> { continuation in
+            Task {
+                await task.value
+                continuation.yield(())
+                continuation.finish()
+            }
+        }
+
+        do {
+            try await withTimeout(.seconds(5)) {
+                for await _ in completion {
+                    break
+                }
+            }
+        } catch {
+            Issue.record("anchor probe did not finish within 5s", sourceLocation: sourceLocation)
+        }
+    }
+
+    func awaitAnchor(
+        for target: ChainConnectionTarget,
+        from provider: ChainStatusProvider,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        await awaitAnchor(provider.anchorTasks[target], sourceLocation: sourceLocation)
     }
 }
