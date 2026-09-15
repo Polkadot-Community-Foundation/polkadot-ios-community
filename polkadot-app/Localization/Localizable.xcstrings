@@ -2956,13 +2956,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show this QR to someone who wants to add you as a contact or send you money"
+            "value": "Show this QR to someone who wants to add you as a contact or send you %@"
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muestra este QR a quien quiera agregarte como contacto o enviarte dinero"
+            "value": "Muestra este QR a quien quiera agregarte como contacto o enviarte %@"
           }
         }
       }
@@ -4257,13 +4257,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Payments Privacy Mode"
+            "value": "%@ Privacy Mode"
           }
         },
         "es-ES": {
           "stringUnit": {
             "state": "translated",
-            "value": "Modo de privacidad de pagos"
+            "value": "Modo de privacidad de %@"
           }
         }
       }
