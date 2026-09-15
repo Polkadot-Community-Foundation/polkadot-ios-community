@@ -30,22 +30,22 @@ struct ChainStatusRingView: View, Hashable {
 
                 if !isFilled {
                     Group {
-                        ChainStatusTrackView(
-                            color: trackColor,
-                            lineWidth: lineWidth,
-                            isRotating: false
-                        )
+                        if isStalledOutage {
+                            // Trimmed here rather than via ChainStatusTrackView: the quarter left
+                            // open at the top-left is what the X sits in.
+                            ringStroke(from: 0, to: 0.75, color: trackColor)
 
-                        if showsArc {
-                            Circle()
-                                .inset(by: lineWidth / 2)
-                                .trim(from: 1 - arcEnd, to: 1)
-                                .stroke(
-                                    arcColor,
-                                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                                )
-                                .rotationEffect(.degrees(-90))
-                                .animation(indicationAnimation, value: indication)
+                            stalledOutageX
+                        } else {
+                            ChainStatusTrackView(
+                                color: trackColor,
+                                lineWidth: lineWidth,
+                                isRotating: false
+                            )
+
+                            if showsArc {
+                                ringStroke(from: 1 - arcEnd, to: 1, color: arcColor)
+                            }
                         }
                     }
                     .transition(.opacity)
@@ -102,6 +102,52 @@ private extension ChainStatusRingView {
     var lineWidth: CGFloat { diameter / 8 }
 
     var iconDiameter: CGFloat { diameter * 0.5 }
+
+    var isStalledOutage: Bool { indication == .outage(liveness: 0) }
+
+    /// Distance along each axis to the top-left 45° point of the stroke's centreline.
+    var stalledOutageXOffset: CGFloat {
+        let strokeCentreRadius = (diameter - lineWidth) / 2
+        return strokeCentreRadius / sqrt(2)
+    }
+
+    var stalledOutageX: some View {
+        // Drawn X: the xIcon asset's stroke is fixed at 1:12 ratio and cannot match lineWidth.
+        StalledOutageXShape(lineWidth: lineWidth)
+            .stroke(trackColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            .frame(width: lineWidth * 3, height: lineWidth * 3)
+            .offset(x: -stalledOutageXOffset, y: -stalledOutageXOffset)
+    }
+
+    func ringStroke(from: CGFloat, to: CGFloat, color: Color) -> some View {
+        Circle()
+            .inset(by: lineWidth / 2)
+            .trim(from: from, to: to)
+            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+            .animation(indicationAnimation, value: indication)
+    }
+}
+
+/// Draws an X in the top-left quadrant to indicate a stalled outage (zero liveness).
+private struct StalledOutageXShape: Shape {
+    let lineWidth: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let armExtent = lineWidth / sqrt(2)
+        let centerX = rect.midX
+        let centerY = rect.midY
+
+        var path = Path()
+
+        path.move(to: CGPoint(x: centerX - armExtent, y: centerY - armExtent))
+        path.addLine(to: CGPoint(x: centerX + armExtent, y: centerY + armExtent))
+
+        path.move(to: CGPoint(x: centerX - armExtent, y: centerY + armExtent))
+        path.addLine(to: CGPoint(x: centerX + armExtent, y: centerY - armExtent))
+
+        return path
+    }
 }
 
 /// Owns the repeating animation's `@State` so `ChainStatusRingView` keeps the synthesized
