@@ -54,4 +54,8 @@ extension SearchContactViewController: SearchContactViewProtocol {
     func didReceive(viewModel: SearchContactViewLayout.ViewModel) {
         rootView.bind(viewModel: viewModel)
     }
+
+    func didReceive(status: SearchContactViewLayout.StatusViewModel) {
+        rootView.bind(status: status)
+    }
 }

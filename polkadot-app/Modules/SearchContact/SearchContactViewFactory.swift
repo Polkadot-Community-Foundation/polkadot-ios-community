@@ -9,7 +9,25 @@ enum SearchContactViewFactory {
             return nil
         }
 
-        let interactor = SearchContactInteractor(ownAccountId: ownAccountId)
+        let localContactSearch = LocalContactSearchService(
+            repositoryFactory: ChatContactRepositoryFactory()
+        )
+        let recentChatsProvider = RecentChatsProvider(
+            chatProvider: ChatContactDataProviderFactory()
+        )
+
+        let accountSearching: any AccountSearching<ContactSearchPayload, ContactSearchPayload> =
+            AccountSearchProvider(
+                recentRowsStream: { recentChatsProvider.subscribe() },
+                localContactSearch: localContactSearch,
+                remoteContactSearch: RemoteContactOperationFactory(),
+                ownAccountId: ownAccountId,
+                logger: Logger.shared
+            )
+
+        let interactor = SearchContactInteractor(
+            accountSearching: accountSearching
+        )
         let wireframe = SearchContactWireframe(model: model)
 
         let presenter = SearchContactPresenter(
