@@ -70,7 +70,7 @@ private extension DurableRecoveryPass {
         let domains = try await decidableDomains()
 
         logger?.debug("Recovery pass: \(domains.count) domains to process")
-        
+
         // Nothing to decide means nothing to read, so the pass ends before pinning a view — which would
         // be a chain read with nothing to read it for.
         guard !domains.isEmpty else { return }
@@ -145,7 +145,7 @@ private extension DurableRecoveryPass {
         let all = try await store.getAllEntries(domain: domain)
         let decidable = all.filter { $0.status.isLive && !owned.isOwned($0.id) }
         guard !decidable.isEmpty else { return 0 }
-        
+
         logger?.debug("Decidable for domain=\(domain) count=\(decidable.count)")
 
         let scope = try await oracle.openPass(

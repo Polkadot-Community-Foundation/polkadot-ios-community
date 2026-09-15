@@ -2,7 +2,7 @@ import Foundation
 import SubstrateOperation
 import SubstrateSdk
 
-/// Concrete ``PinnedChainViewProtocol`` over a block-info provider and a block-outcome lookup.
+/// Concrete ``PinnedChainViewProtocol`` over a block-info provider and a block-outcome reader.
 ///
 /// Converts every failure mode — a transport error, an unknown block, an undecodable value — into
 /// `failedRead` rather than `absent`, so no read failure can ever produce a terminal verdict.
@@ -12,22 +12,19 @@ final class PinnedChainView: PinnedChainViewProtocol, @unchecked Sendable {
     let bestHead: BlockRef
 
     private let blockInfoProvider: any BlockInfoProviding
-    private let blockNumberByHash: BlockNumberByHash
     private let scan: BlockBodyScan
 
     init(
         chainId: ChainId,
         heads: ChainHeads,
         blockInfoProvider: any BlockInfoProviding,
-        blockNumberByHash: @escaping BlockNumberByHash,
-        blockOutcome: @escaping BlockOutcomeLookup
+        outcomeReader: any BlockOutcomeReading
     ) {
         self.chainId = chainId
         finalizedHead = heads.finalized
         bestHead = heads.best
         self.blockInfoProvider = blockInfoProvider
-        self.blockNumberByHash = blockNumberByHash
-        scan = BlockBodyScan(blockOutcome: blockOutcome, blockInfoProvider: blockInfoProvider)
+        scan = BlockBodyScan(outcomeReader: outcomeReader, blockInfoProvider: blockInfoProvider)
     }
 
     func blockHash(at number: UInt32) async -> ReadResult<Data> {
@@ -38,7 +35,9 @@ final class PinnedChainView: PinnedChainViewProtocol, @unchecked Sendable {
     }
 
     func blockRef(forHash hash: Data) async -> ReadResult<BlockRef> {
-        guard let number = await blockNumberByHash(hash) else { return .failedRead }
+        guard let number = try? await blockInfoProvider.fetchBlockNumber(byHash: hash) else {
+            return .failedRead
+        }
         return .present(BlockRef(number: number, hash: hash))
     }
 
@@ -57,11 +56,11 @@ final class PinnedChainView: PinnedChainViewProtocol, @unchecked Sendable {
 /// Nothing is carried between passes — a pass that cannot read the whole window simply repeats it, which
 /// is the same liveness either way, and the window is bounded at one mortality.
 public struct BlockBodyScan {
-    let blockOutcome: BlockOutcomeLookup
+    let outcomeReader: any BlockOutcomeReading
     let blockInfoProvider: any BlockInfoProviding
 
-    public init(blockOutcome: @escaping BlockOutcomeLookup, blockInfoProvider: any BlockInfoProviding) {
-        self.blockOutcome = blockOutcome
+    public init(outcomeReader: any BlockOutcomeReading, blockInfoProvider: any BlockInfoProviding) {
+        self.outcomeReader = outcomeReader
         self.blockInfoProvider = blockInfoProvider
     }
 
@@ -80,7 +79,7 @@ public struct BlockBodyScan {
 
             let block = BlockRef(number: number, hash: hash)
 
-            switch await blockOutcome(txHash, hash) {
+            switch await outcomeReader.lookUp(txHash, at: hash) {
             case .unreadable:
                 everyBlockRead = false
             case .notInBlock:
@@ -96,7 +95,7 @@ public struct BlockBodyScan {
     /// Reads the outcome of `txHash` at `block`, resolving its index from the same block the events
     /// come from.
     public func outcome(of txHash: Data, at block: BlockRef) async -> ReadResult<Bool> {
-        switch await blockOutcome(txHash, block.hash) {
+        switch await outcomeReader.lookUp(txHash, at: block.hash) {
         case let .outcome(result):
             result
         case .notInBlock,

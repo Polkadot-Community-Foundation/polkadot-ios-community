@@ -4,9 +4,8 @@ import KeyDerivation
 
 /// What a voucher's recycler alias says at one block — three-valued, because a voucher can be present
 /// yet leave its unload state unreadable: Suspended from its ring (the alias key needs a ring index it
-/// no longer has), or a failed alias read. Coins have no alias; their presence carries `.notUnloaded`,
-/// which no rule consults for a coin.
-public enum VoucherAliasEvidence: Sendable, Equatable {
+/// no longer has), or a failed alias read.
+public enum VoucherAliasPresence: Sendable, Equatable {
     case unloaded
     case notUnloaded
     case unknown
@@ -14,22 +13,12 @@ public enum VoucherAliasEvidence: Sendable, Equatable {
 
 /// On-chain presence of one asset at one block.
 ///
-/// The `alias` is meaningful only for recycler vouchers: a successful unload marks the alias without
-/// removing the recycler mapping, so a spent voucher can still read present. A present voucher may still
-/// carry `.unknown` — the case a two-valued flag could not express.
-public struct AssetPresence: Sendable, Equatable {
-    public let alias: VoucherAliasEvidence
-
-    public init(alias: VoucherAliasEvidence) {
-        self.alias = alias
-    }
-
-    /// Convenience for coins and definite voucher reads; `.unknown` needs the `alias:` initializer.
-    public init(isUnloaded: Bool = false) {
-        alias = isUnloaded ? .unloaded : .notUnloaded
-    }
-
-    public var isUnloaded: Bool { alias == .unloaded }
+/// A coin is simply there or not. A recycler voucher also carries what its alias says: a successful
+/// unload marks the alias without removing the recycler mapping, so a spent voucher can still read
+/// present, and a present voucher may still leave that `.unknown`.
+public enum AssetPresence: Sendable, Equatable {
+    case coin
+    case voucher(VoucherAliasPresence)
 }
 
 /// Coinage's reads of the chain at a pinned block: the presence of its coins and vouchers.
@@ -106,7 +95,7 @@ private extension CoinageStateReader {
             return Array(repeating: .failedRead, count: keys.count)
         }
 
-        return responses.map { $0 == nil ? .absent : .present(AssetPresence()) }
+        return responses.map { $0 == nil ? .absent : .present(.coin) }
     }
 
     /// A voucher is present whenever it is a recycler member — Onboarding, Suspended or Included. A nil
@@ -126,7 +115,7 @@ private extension CoinageStateReader {
 
         return responses.map { info in
             guard let info else { return .failedRead }
-            return .present(AssetPresence(alias: info.aliasEvidence))
+            return .present(.voucher(info.aliasPresence))
         }
     }
 }

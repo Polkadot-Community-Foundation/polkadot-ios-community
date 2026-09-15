@@ -36,7 +36,7 @@ Coinage (`Packages/Coinage/Sources/CoinageTx/`) is the first domain.
 - `DurableTxRowObserving` lets a domain react to a status write in the same transaction (coinage
   touches its coin/voucher rows so snapshot subscribers re-emit).
 - `DurableChainToolsProvider` resolves extrinsic tools per chain from the chain registry.
-- `ServiceCoordinator.createDurableTransactionEngine` builds the engine once; every domain shares it.
+- `ServiceCoordinator.createDurableTransactionEngine` builds the engine once; every domain shares it, and the coordinator alone calls `start()` (after coinage setup) and `stop()` (on throttle). No domain starts or stops the engine.
 
 ### Coinage's half (`Packages/Coinage/Sources/CoinageTx/`)
 

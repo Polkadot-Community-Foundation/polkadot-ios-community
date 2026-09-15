@@ -4,8 +4,8 @@ import Foundation
 
 extension ServiceCoordinator {
     /// The one durable transaction engine every domain shares. Built once; a domain registers its oracle
-    /// with `engine.oracles` before it submits anything, and the first domain to start it drives the
-    /// head-driven recovery for all of them.
+    /// with `engine.oracles` before it submits anything. The coordinator starts and stops the head-driven
+    /// recovery for all of them, so no domain owns the engine.
     static func createDurableTransactionEngine(
         chainViewFactory: any PinnedChainViewFactoryProtocol
     ) -> DurableTxService {

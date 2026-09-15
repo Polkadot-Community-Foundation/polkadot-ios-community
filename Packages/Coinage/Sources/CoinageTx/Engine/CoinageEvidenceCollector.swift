@@ -71,15 +71,14 @@ private extension CoinageEvidenceCollector {
         }
     }
 
+    /// A coin has no alias to be marked, so a present coin reads not-unloaded; no rule consults it.
     static func alias(_ read: ReadResult<AssetPresence>) -> AliasRead {
         switch read {
-        case let .present(presence):
-            switch presence.alias {
-            case .unloaded: .unloaded
-            case .notUnloaded: .notUnloaded
-            case .unknown: .unknown
-            }
-        case .absent,
+        case .present(.coin),
+             .present(.voucher(.notUnloaded)): .notUnloaded
+        case .present(.voucher(.unloaded)): .unloaded
+        case .present(.voucher(.unknown)),
+             .absent,
              .failedRead: .unknown
         }
     }

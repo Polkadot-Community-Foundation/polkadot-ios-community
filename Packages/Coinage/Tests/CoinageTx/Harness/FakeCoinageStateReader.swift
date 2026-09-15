@@ -44,7 +44,7 @@ private extension FakeCoinageStateReader {
         if faults.unreadableCoins.contains(key) || faults.statelessBlocks.contains(block.hash) {
             return .failedRead
         }
-        return state.coins[key] != nil ? .present(AssetPresence()) : .absent
+        return state.coins[key] != nil ? .present(.coin) : .absent
     }
 
     /// Mirrors ``VoucherOnChainQueryService``: a recycler member is present whatever its ring position —
@@ -66,18 +66,18 @@ private extension FakeCoinageStateReader {
         switch position {
         case .onboarding:
             // Never in a ring, so no unload was possible: provably not-unloaded without a read.
-            return .present(AssetPresence(alias: .notUnloaded))
+            return .present(.voucher(.notUnloaded))
         case .suspended:
             // Once in a ring, none now: the alias key cannot be formed, so nothing can be said.
-            return .present(AssetPresence(alias: .unknown))
+            return .present(.voucher(.unknown))
         case let .included(ringIndex):
             let aliasKey = CoinageChainState.aliasKey(index: index, exponent: exponent, ringIndex: ringIndex)
             if faults.unreadableAliases.contains(aliasKey) {
                 // A failed alias read leaves the voucher present but its unload state unknown.
-                return .present(AssetPresence(alias: .unknown))
+                return .present(.voucher(.unknown))
             }
             let unloaded = state.aliases[aliasKey] == true
-            return .present(AssetPresence(alias: unloaded ? .unloaded : .notUnloaded))
+            return .present(.voucher(unloaded ? .unloaded : .notUnloaded))
         }
     }
 }

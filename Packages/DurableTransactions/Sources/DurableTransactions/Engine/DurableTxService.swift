@@ -155,7 +155,7 @@ public extension DurableTxService {
         let ids = try await registrar.register(registrations, onRegister: onRegister)
 
         logger?.debug("Registered transactions=\(ids.count) groupId=\(String(describing: groupId))")
-        
+
         for (id, model) in zip(ids, models) {
             let submission = DurableTxTracker.Submission(
                 model: model,

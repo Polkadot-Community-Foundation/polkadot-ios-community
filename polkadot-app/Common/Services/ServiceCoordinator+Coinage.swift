@@ -12,6 +12,8 @@ import ExtrinsicService
 extension ServiceCoordinator {
     struct CoinageServices {
         let coinageService: CoinageServicing
+        /// The one durable transaction engine every domain shares; the coordinator starts and stops it.
+        let durableTransactionEngine: any DurableTxServicing
         let transferMonitor: CoinageTransferMonitoring
         let w3sPaymentTracking: W3sPaymentTracking
         let backupSyncService: CoinageBackupSyncServicing
@@ -30,10 +32,19 @@ extension ServiceCoordinator {
             storageFacade: UserDataStorageFacade.shared
         )
 
+        let chainViewFactory = PinnedChainViewFactory(
+            chainResource: ChainRegistryFacade.sharedRegistry,
+            operationQueue: OperationManagerFacade.sharedDefaultQueue,
+            logger: Logger.shared
+        )
+        let durableEngine = createDurableTransactionEngine(chainViewFactory: chainViewFactory)
+
         guard let coinageService = createCoinageService(
             databaseFactory: databaseFactory,
             externalPaymentStore: externalPaymentStore,
-            incomingPaymentStore: incomingPaymentStore
+            incomingPaymentStore: incomingPaymentStore,
+            durableEngine: durableEngine,
+            chainViewFactory: chainViewFactory
         ) else {
             return nil
         }
@@ -52,6 +63,7 @@ extension ServiceCoordinator {
 
         return CoinageServices(
             coinageService: coinageService,
+            durableTransactionEngine: durableEngine,
             transferMonitor: transferMonitor,
             w3sPaymentTracking: createW3sPaymentTracking(coinageService: coinageService),
             backupSyncService: backupSyncService,
@@ -80,7 +92,9 @@ private extension ServiceCoordinator {
     static func createCoinageService(
         databaseFactory: DatabaseDependencyFactoring,
         externalPaymentStore: ExternalPaymentStoring,
-        incomingPaymentStore: IncomingPaymentStoring
+        incomingPaymentStore: IncomingPaymentStoring,
+        durableEngine: any DurableTxServicing,
+        chainViewFactory: any PinnedChainViewFactoryProtocol
     ) -> CoinageService? {
         let logger = Logger.shared
         let chainRegistry = ChainRegistryFacade.sharedRegistry
@@ -151,14 +165,8 @@ private extension ServiceCoordinator {
             return nil
         }
 
-        // The engine is shared by every durable domain; coinage registers its oracle with it inside
-        // `CoinageService.make` and drives its recovery through `CoinageService.setup`.
-        let chainViewFactory = PinnedChainViewFactory(
-            chainResource: chainRegistry,
-            operationQueue: operationQueue,
-            logger: logger
-        )
-        let durableEngine = createDurableTransactionEngine(chainViewFactory: chainViewFactory)
+        // Coinage registers its oracle with the shared engine inside `CoinageService.make`; the
+        // coordinator owns the engine's lifecycle.
         let assetLedger = CoinageAssetLedgerCoreData(storageFacade: UserDataStorageFacade.shared)
 
         let incomingPaymentSecretStore = IncomingPaymentKeychainSecretStore(keychain: Keychain(), logger: logger)
