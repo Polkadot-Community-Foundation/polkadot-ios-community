@@ -7,7 +7,10 @@ protocol TabBarTip: Tip {}
 
 extension TabBarTip {
     var rules: [Rule] {
-        [#Rule(TabBarTips.$isBarShownAtRoot) { $0 == true }]
+        [
+            #Rule(TabBarTips.$isBarShownAtRoot) { $0 == true },
+            #Rule(TabBarTips.$isBarLaidOut) { $0 == true }
+        ]
     }
 
     var options: [any Option] { [MaxDisplayCount(1)] }

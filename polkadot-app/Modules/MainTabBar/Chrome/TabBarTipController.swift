@@ -18,6 +18,8 @@ final class TabBarTipController {
     /// be on screen") during the window before an anchor resolves.
     private var presentedTip: AnyTip?
 
+    private var isBarLaidOut = false
+
     init(
         host: UIViewController,
         barView: DSTabBarView,
@@ -57,6 +59,15 @@ final class TabBarTipController {
         TabBarTips.isBarShownAtRoot = isShown
     }
 
+    func setBarLaidOut(_ isLaidOut: Bool) {
+        guard isBarLaidOut != isLaidOut else {
+            return
+        }
+
+        isBarLaidOut = isLaidOut
+        TabBarTips.isBarLaidOut = isLaidOut
+    }
+
     func retireForUserInteraction() {
         guard let presentedTip else {
             return
@@ -67,11 +78,6 @@ final class TabBarTipController {
 
     func dismissForPanel() {
         dismiss()
-    }
-
-    func refreshAnchor() {
-        presentedTip = nil
-        presentCurrent()
     }
 }
 
@@ -91,7 +97,9 @@ private extension TabBarTipController {
     func show(_ step: TabBarTipStep) {
         guard let host,
               host.presentedViewController == nil,
-              let anchor = anchorItem(for: step.anchor)
+              let anchor = anchorItem(for: step.anchor),
+              let frame = anchor.frame(in: host.view),
+              !frame.isEmpty
         else {
             return
         }
