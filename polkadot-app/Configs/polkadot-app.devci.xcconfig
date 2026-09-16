@@ -1,4 +1,19 @@
 #include "../../Configs/base.devci.xcconfig"
 
 OTHER_SWIFT_FLAGS = $(inherited) $(BASE_SWIFT_FLAGS)
+
+// Pinned to PCF identity, mirroring polkadot-app.dev.xcconfig. base.devci.xcconfig derives
+// APP_MAIN_BUNDLE from $(BRAND_BUNDLE_ROOT), and Configs/brand.xcconfig is deliberately kept
+// byte-identical to upstream (so it never conflicts on a sync), which means it still expands to
+// io.parity.polkadotapp.develop. Without this override the PR lane asserts a Parity identity and
+// demands a GoogleService-Info.plist from Parity's Firebase project, which this fork cannot hold.
+//
+// Safe because nothing ships from DevCI here: the workflow that distributed DevCI builds
+// (firebase_debug_distribution.yml) is one of the nine inherited workflows this fork deleted, and
+// release-dev.yml archives the Dev configuration instead. DevCI is PR validation only.
+//
+// APP_GROUP is deliberately NOT group.$(APP_MAIN_BUNDLE): the registered PCF App Group predates
+// the bundle id and is not derived from it.
+APP_MAIN_BUNDLE = io.pcf.polkadotapp
+APP_GROUP       = group.pcf.polkadotapp
 BUNDLE = $(APP_MAIN_BUNDLE)

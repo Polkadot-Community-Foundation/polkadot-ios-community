@@ -1,4 +1,12 @@
 #include "../../Configs/base.devci.xcconfig"
 
 OTHER_SWIFT_FLAGS = $(inherited) $(BASE_SWIFT_FLAGS)
+
+// Identity must agree with polkadot-app/Configs/polkadot-app.devci.xcconfig - same
+// APP_MAIN_BUNDLE, same APP_GROUP - mirroring how the Dev pair is pinned. Without this the
+// parent app builds as io.pcf.polkadotapp while the embedded extension still derives
+// $(BRAND_BUNDLE_ROOT).develop from base.devci.xcconfig, and Xcode rejects the package with
+// "Embedded binary's bundle identifier is not prefixed with the parent app's bundle identifier".
+APP_MAIN_BUNDLE = io.pcf.polkadotapp
+APP_GROUP       = group.pcf.polkadotapp
 BUNDLE = $(APP_MAIN_BUNDLE).NotificationServiceExtension
