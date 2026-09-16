@@ -65,15 +65,15 @@ final class UserStorageMigratorTests: XCTestCase {
 
         try context.performAndWait {
             let object = NSEntityDescription.insertNewObject(
-                forEntityName: "CDKeystoreIntegrity",
+                forEntityName: "CDProduct",
                 into: context
             )
-            object.setValue("probe", forKey: "keyTag")
-            object.setValue(Data([0x01]), forKey: "integrityKey")
+            object.setValue("probe", forKey: "identifier")
+            object.setValue("probe-name", forKey: "name")
 
             try context.save()
 
-            let request = NSFetchRequest<NSManagedObject>(entityName: "CDKeystoreIntegrity")
+            let request = NSFetchRequest<NSManagedObject>(entityName: "CDProduct")
             XCTAssertEqual(try context.fetch(request).count, 1)
         }
     }
@@ -89,11 +89,11 @@ final class UserStorageMigratorTests: XCTestCase {
 
         try context.performAndWait {
             let object = NSEntityDescription.insertNewObject(
-                forEntityName: "CDKeystoreIntegrity",
+                forEntityName: "CDProduct",
                 into: context
             )
-            object.setValue("keep-me", forKey: "keyTag")
-            object.setValue(Data([0x02]), forKey: "integrityKey")
+            object.setValue("keep-me", forKey: "identifier")
+            object.setValue("keep-me-name", forKey: "name")
 
             try context.save()
         }
