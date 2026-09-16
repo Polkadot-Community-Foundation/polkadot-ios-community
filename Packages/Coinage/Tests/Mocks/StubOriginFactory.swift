@@ -6,8 +6,9 @@ import KeyDerivation
 
 /// An origin factory that hands back ``StubExtrinsicOrigin`` for every request. Pass `errorToThrow` to
 /// make the unload-token path fail.
-final class StubOriginFactory: OriginCreating {
+final class StubOriginFactory: OriginCreating, @unchecked Sendable {
     let errorToThrow: Error?
+    private(set) var signedOriginChainIds: [ChainId] = []
 
     init(errorToThrow: Error? = nil) {
         self.errorToThrow = errorToThrow
@@ -17,8 +18,9 @@ final class StubOriginFactory: OriginCreating {
         StubExtrinsicOrigin()
     }
 
-    func createSignedOrigin(for _: WalletManaging, chainId _: ChainId) async throws -> ExtrinsicOriginDefining {
-        StubExtrinsicOrigin()
+    func createSignedOrigin(for _: WalletManaging, chainId: ChainId) async throws -> ExtrinsicOriginDefining {
+        signedOriginChainIds.append(chainId)
+        return StubExtrinsicOrigin()
     }
 
     func createInfallibleUnpaidSignedOrigin(for _: WalletManaging) throws -> ExtrinsicOriginDefining {

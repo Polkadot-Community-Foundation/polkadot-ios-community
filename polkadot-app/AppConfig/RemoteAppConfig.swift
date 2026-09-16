@@ -26,7 +26,7 @@ struct RemoteAppConfig {
     /// The `AccountDataStore` contract on Asset Hub, as a hex H160, from the `account_data_store_config`
     /// remote object. Not part of `isValid`: without it installation registration waits and reports
     /// itself delayed, and recovery scans only the installations already known.
-    let accountDataStoreContract: String?
+    let accountDataStoreContract: Data?
 }
 
 extension RemoteAppConfig {

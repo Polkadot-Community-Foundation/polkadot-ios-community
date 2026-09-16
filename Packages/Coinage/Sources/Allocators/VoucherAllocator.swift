@@ -2,22 +2,19 @@ import Foundation
 import SubstrateSdk
 import NovaCrypto
 import Operation_iOS
-import StructuredConcurrency
 
 protocol VoucherAllocating: Actor {
     func allocate(exponent: Int16) async throws -> Voucher
 }
 
 /// Hands out the next voucher item in the current installation from the Keychain-backed counter, so a
-/// previous installation's vouchers never move this installation's counter. The serial queue keeps
-/// the reserve-then-save atomic across suspension points; a single shared instance is the only safe
-/// configuration.
+/// previous installation's vouchers never move this installation's counter. The store reserves each
+/// item atomically, so concurrent mints never collide.
 actor VoucherAllocator: VoucherAllocating {
     private let installationStore: any CoinageCurrentInstallationStoring
     private let delayProvider: VoucherDelayProviderProtocol
     private let voucherRepository: AnyDataProviderRepository<Voucher>
     private let keyFactory: any VoucherKeyDeriving
-    private let queue = SerialOperationQueue()
 
     init(
         installationStore: any CoinageCurrentInstallationStoring,
@@ -34,21 +31,19 @@ actor VoucherAllocator: VoucherAllocating {
     /// Allocates a new voucher index and persists the voucher — with its on-chain public key cached
     /// so the durability layer never re-derives it — from the moment it is minted.
     func allocate(exponent: Int16) async throws -> Voucher {
-        try await queue.run { [self] in
-            let index = try await nextIndex()
-            let delay = delayProvider.timeInterval()
-            let allocatedAt = Date.now
+        let index = try nextIndex()
+        let delay = delayProvider.timeInterval()
+        let allocatedAt = Date.now
 
-            let voucher = try Voucher(
-                exponent: exponent,
-                derivationIndex: index,
-                allocatedAt: allocatedAt,
-                readyAt: allocatedAt.addingTimeInterval(delay),
-                publicKey: keyFactory.derivePublicKey(index: index)
-            )
-            try await voucherRepository.saveOperation({ [voucher] }, { [] }).asyncExecute()
-            return voucher
-        }
+        let voucher = try Voucher(
+            exponent: exponent,
+            derivationIndex: index,
+            allocatedAt: allocatedAt,
+            readyAt: allocatedAt.addingTimeInterval(delay),
+            publicKey: keyFactory.derivePublicKey(index: index)
+        )
+        try await voucherRepository.saveOperation({ [voucher] }, { [] }).asyncExecute()
+        return voucher
     }
 }
 

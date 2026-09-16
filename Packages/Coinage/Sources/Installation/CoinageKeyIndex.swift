@@ -25,11 +25,6 @@ public struct CoinageKeyIndex: Hashable, Sendable {
     public var identifier: String {
         "\(installation.hex)\(Self.identifierSeparator)\(item)"
     }
-
-    /// The next item in the same installation.
-    public func next() -> CoinageKeyIndex {
-        CoinageKeyIndex(installation: installation, item: item + 1)
-    }
 }
 
 extension CoinageKeyIndex: Comparable {

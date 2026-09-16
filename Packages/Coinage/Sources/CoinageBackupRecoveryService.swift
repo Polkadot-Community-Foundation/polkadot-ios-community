@@ -84,6 +84,9 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     }
 
     func deepSearch() async {
+        // The launch pass holds `.unknown` while it lists the contract, so the progress alone cannot
+        // fence it; scanning the same cursors twice would let the last writer regress them.
+        await launchPass?.value
         guard !progress.value.isInProgress else { return }
         progress.send(.deep(.syncing))
 
@@ -98,9 +101,23 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     }
 
     func markAsCompleted() async {
+        await launchPass?.value
         guard !progress.value.isInProgress else { return }
         await completedStore.setDeepRecoveryCompleted(true)
         progress.send(.completed)
+    }
+}
+
+// MARK: - Cursors
+
+private extension CoinageBackupRecoveryService {
+    /// A cursor that fails to persist only costs a re-scan of the same batch on the next launch.
+    func persistCursor(_ write: () async throws -> Void) async {
+        do {
+            try await write()
+        } catch {
+            logger?.warning("Recovery: could not persist a scan cursor, the batch is re-read next launch: \(error)")
+        }
     }
 }
 
@@ -246,7 +263,9 @@ private extension CoinageBackupRecoveryService {
                 return error
             }
             .asyncMap { result in
-                try? await installationRepository.updateCoinScanNextIndex(result.nextIndex, for: installation)
+                await persistCursor {
+                    try await installationRepository.updateCoinScanNextIndex(result.nextIndex, for: installation)
+                }
                 return result.found
             }
     }
@@ -271,7 +290,9 @@ private extension CoinageBackupRecoveryService {
                 return error
             }
             .asyncMap { result in
-                try? await installationRepository.updateVoucherScanNextIndex(result.nextIndex, for: installation)
+                await persistCursor {
+                    try await installationRepository.updateVoucherScanNextIndex(result.nextIndex, for: installation)
+                }
                 return result.found
             }
     }

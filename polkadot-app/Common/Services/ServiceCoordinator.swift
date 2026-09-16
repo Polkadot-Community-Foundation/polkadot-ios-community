@@ -322,7 +322,9 @@ extension ServiceCoordinator {
                 logger: logger
             ),
             let chatCoordinator = createChatCoordinator(factory: chatCoordinatorFactory, logger: logger),
-            let coinageServices = createCoinageServices(),
+            let coinageServices = createCoinageServices(
+                allowanceManager: allowanceManagerFacade.smartContractManager
+            ),
             let depositService = createDepositService(
                 walletToFund: depositWallet,
                 walletToDeposit: depositWallet,

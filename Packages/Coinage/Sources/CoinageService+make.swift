@@ -424,37 +424,3 @@ extension VoucherKeyDeriving {
             .deriveAlias(for: UnloadTokenContextBuilder.recyclerAliasContext)
     }
 }
-
-/// The app-side pieces installation allocation, registration and recovery run on: the Keychain store
-/// of the current installation, pallet-revive and fee estimation on the chain the `AccountDataStore`
-/// contract lives on, PGAS for the data store account, and the persisted acknowledgement flag.
-public struct CoinageInstallationDependency {
-    public let currentInstallationStore: any CoinageCurrentInstallationStoring
-    public let chainId: ChainId
-    public let runtimeService: any RuntimeCodingServiceProtocol
-    public let reviveApi: any ReviveContractApiProtocol
-    public let configProvider: any AccountDataStoreConfigProviding
-    public let pgasProvisioner: any PGASAccountProvisioning
-    public let feeEstimator: any RegistrationFeeEstimating
-    public let deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
-
-    public init(
-        currentInstallationStore: any CoinageCurrentInstallationStoring,
-        chainId: ChainId,
-        runtimeService: any RuntimeCodingServiceProtocol,
-        reviveApi: any ReviveContractApiProtocol,
-        configProvider: any AccountDataStoreConfigProviding,
-        pgasProvisioner: any PGASAccountProvisioning,
-        feeEstimator: any RegistrationFeeEstimating,
-        deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
-    ) {
-        self.currentInstallationStore = currentInstallationStore
-        self.chainId = chainId
-        self.runtimeService = runtimeService
-        self.reviveApi = reviveApi
-        self.configProvider = configProvider
-        self.pgasProvisioner = pgasProvisioner
-        self.feeEstimator = feeEstimator
-        self.deepRecoveryCompletedStore = deepRecoveryCompletedStore
-    }
-}

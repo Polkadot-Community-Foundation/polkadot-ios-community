@@ -50,14 +50,12 @@ final class CoinageDataStorePgasProvider: PGASBalanceProviding, @unchecked Senda
 }
 
 extension PGASAccountProvisioner {
-    /// The data store account's PGAS provisioner over the app's allowance manager; nil when PGAS is
-    /// unavailable (no TLD or no Asset Hub in the registry).
-    static func forDataStoreAccount(chainRegistry: ChainRegistryProtocol) -> PGASAccountProvisioner? {
-        guard let allowanceManager = PGASAllowanceManager.create(chainRegistry: chainRegistry) else {
-            return nil
-        }
-
-        return PGASAccountProvisioner(
+    /// The data store account's PGAS provisioner over the app's shared PGAS allowance manager.
+    static func forDataStoreAccount(
+        allowanceManager: AllowanceManaging,
+        chainRegistry: ChainRegistryProtocol
+    ) -> PGASAccountProvisioner {
+        PGASAccountProvisioner(
             allowanceManager: allowanceManager,
             balanceProvider: CoinageDataStorePgasProvider(
                 chainResource: chainRegistry,

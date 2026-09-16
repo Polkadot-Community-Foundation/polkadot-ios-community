@@ -29,13 +29,25 @@ struct RestoredBackupGuardTests {
         #expect(eraser.calls.isEmpty)
     }
 
-    @Test("a key id without entropy erases the defaults first and the databases second")
+    @Test("a key id without entropy erases the databases first and the defaults second")
     func restoredOntoAnotherDevice() throws {
         keyIdStore.saveInstallationKeyId("restored-from-backup")
 
         try makeGuard(keychain: InMemoryKeychain()).migrate()
 
-        #expect(eraser.calls == [.userDefaults, .databases])
+        #expect(eraser.calls == [.databases, .userDefaults])
+    }
+
+    @Test("a failed directory removal keeps the key id so the next launch retries")
+    func databaseRemovalFailure() throws {
+        keyIdStore.saveInstallationKeyId("restored-from-backup")
+        eraser.databaseError = RecordingLocalStateEraser.Error.removalFailed
+
+        #expect(throws: RecordingLocalStateEraser.Error.removalFailed) {
+            try makeGuard(keychain: InMemoryKeychain()).migrate()
+        }
+        #expect(eraser.calls == [.databases])
+        #expect(keyIdStore.getInstallationKeyId() == "restored-from-backup")
     }
 
     @Test("a Keychain read failure propagates and erases nothing")
@@ -65,7 +77,12 @@ private extension RestoredBackupGuardTests {
             case databases
         }
 
+        enum Error: Swift.Error, Equatable {
+            case removalFailed
+        }
+
         private(set) var calls: [Call] = []
+        var databaseError: Error?
 
         func eraseUserDefaults() {
             calls.append(.userDefaults)
@@ -73,6 +90,7 @@ private extension RestoredBackupGuardTests {
 
         func eraseDatabases() throws {
             calls.append(.databases)
+            if let databaseError { throw databaseError }
         }
     }
 

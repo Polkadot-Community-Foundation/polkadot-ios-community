@@ -15,7 +15,7 @@ struct InstallationRegistrationSubmitterTests {
     private let pgas = StubPgasProvisioner()
     private let feeEstimator = StubFeeEstimator()
     private let engine = RecordingEngine()
-    private let origins = StubSignedOriginFactory()
+    private let origins = StubOriginFactory()
     private let submitter: InstallationRegistrationSubmitter
 
     init() {
@@ -46,7 +46,8 @@ struct InstallationRegistrationSubmitterTests {
         #expect(engine.submissions.count == 1)
         #expect(engine.submissions.first?.domain == .coinageInstallation)
         #expect(engine.submissions.first?.groupId == Self.target.registrationGroup)
-        #expect(origins.signedOrigins == ["asset-hub", "asset-hub"])
+        #expect(feeEstimator.estimates == 1)
+        #expect(origins.signedOriginChainIds == ["asset-hub", "asset-hub"])
     }
 
     @Test("the balance required is the storage deposit with its margin plus the fee")

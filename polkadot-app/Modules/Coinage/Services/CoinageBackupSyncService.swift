@@ -87,7 +87,11 @@ private extension CoinageBackupSyncService {
     func apply(_ progress: BackupProgress) {
         logger.debug("Coinage backup progress: \(progress)")
 
-        let restorePending = progress.awaitsAcknowledgement
+        // `.unknown` is replayed on every setup before the launch pass reports; it must not hide a card
+        // the user has not acknowledged yet.
+        let restorePending = progress == .unknown
+            ? balanceSyncStateStorage.isRestorePending
+            : progress.awaitsAcknowledgement
         if balanceSyncStateStorage.isRestorePending != restorePending {
             balanceSyncStateStorage.isRestorePending = restorePending
         }

@@ -1,4 +1,5 @@
 import BigInt
+import Clocks
 import Foundation
 import SubstrateSdk
 import Testing
@@ -9,16 +10,21 @@ struct PGASAccountProvisionerTests {
     private static let required: BigUInt = 500_000_000
     private static let claimAmount: BigUInt = 10_000_000_000
 
-    private let allowance = FakeAllowanceManager()
+    private static let claimTimeout: Duration = .seconds(120)
+
+    private let clock = TestClock<Duration>()
+    private let allowance: FakeAllowanceManager
     private let balances = FakeBalanceProvider()
     private let provisioner: PGASAccountProvisioner
 
     init() {
+        allowance = FakeAllowanceManager(clock: clock)
         allowance.balances = balances
         provisioner = PGASAccountProvisioner(
             allowanceManager: allowance,
             balanceProvider: balances,
-            claimTimeout: .milliseconds(50)
+            claimTimeout: Self.claimTimeout,
+            clock: clock
         )
     }
 
@@ -83,8 +89,18 @@ struct PGASAccountProvisionerTests {
     func claimTimesOut() async throws {
         allowance.neverReportsBack = true
 
-        await #expect(throws: PGASClaimTimeoutError.self) {
+        let attempt = Task { [provisioner] in
             try await provisioner.ensureCovers(account: Self.account, required: Self.required)
+        }
+        await settle()
+        await clock.advance(by: Self.claimTimeout)
+
+        await #expect(throws: PGASClaimTimeoutError.self) { try await attempt.value }
+    }
+
+    private func settle() async {
+        for _ in 0 ..< 20 {
+            await Task.yield()
         }
     }
 }
@@ -104,11 +120,16 @@ private final class FakeBalanceProvider: PGASBalanceProviding, @unchecked Sendab
 }
 
 private final class FakeAllowanceManager: AllowanceManaging, @unchecked Sendable {
+    private let clock: any Clock<Duration>
     var balances: FakeBalanceProvider?
     var topUp: BigUInt = .zero
     var error: Error?
     var neverReportsBack = false
     private(set) var claims: [(account: AccountId, policy: OnExistingAllowancePolicy)] = []
+
+    init(clock: any Clock<Duration>) {
+        self.clock = clock
+    }
 
     func allocate(
         accountId: AccountId,
@@ -118,7 +139,8 @@ private final class FakeAllowanceManager: AllowanceManaging, @unchecked Sendable
         claims.append((accountId, policy))
         if let error { throw error }
         if neverReportsBack {
-            try await Task.sleep(for: .seconds(60))
+            // Sleeps on the test clock, so only an advance past the timeout can end it.
+            try await clock.sleep(for: .seconds(3_600))
         }
         balances?.balance += topUp
     }

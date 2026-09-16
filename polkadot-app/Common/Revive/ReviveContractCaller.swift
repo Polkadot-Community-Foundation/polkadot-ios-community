@@ -1,7 +1,9 @@
 import Foundation
 import SubstrateSdk
+import SubstrateSdkExt
 @preconcurrency import SubstrateStateCall
 @preconcurrency import SubstrateStorageQuery
+import StructuredConcurrency
 import Operation_iOS
 import BigInt
 
@@ -15,16 +17,28 @@ struct ReviveContractResult: Decodable {
 }
 
 /// The pallet's `ContractResult` with the fields a dry-run reads; the dynamic decoder ignores the rest.
+///
+/// pallet-revive renamed `gas_required` to `weight_required` in the same change that renamed the call's
+/// `gas_limit`, and both runtimes are live, so either spelling is accepted.
 struct ReviveDryRunResult: Decodable {
     enum CodingKeys: String, CodingKey {
+        case weightRequired = "weight_required"
         case gasRequired = "gas_required"
         case storageDeposit = "storage_deposit"
         case result
     }
 
-    @Substrate.WeightDecodable var gasRequired: Substrate.WeightV2
+    let weightRequired: Substrate.WeightV2
     let storageDeposit: ReviveStorageDeposit
     let result: Substrate.Result<ReviveExecResult, JSON>
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let weightKey: CodingKeys = container.contains(.weightRequired) ? .weightRequired : .gasRequired
+        weightRequired = try container.decode(Substrate.WeightDecodable.self, forKey: weightKey).wrappedValue
+        storageDeposit = try container.decode(ReviveStorageDeposit.self, forKey: .storageDeposit)
+        result = try container.decode(Substrate.Result<ReviveExecResult, JSON>.self, forKey: .result)
+    }
 }
 
 enum ReviveStorageDeposit: Decodable {
@@ -69,17 +83,9 @@ struct ReviveReturnFlags: Decodable {
 
 final class ReviveContractCaller {
     private let stateCallFactory: StateCallRequestFactoryProtocol
-    private let storageRequestFactory: StorageRequestFactoryProtocol
 
-    init(
-        stateCallFactory: StateCallRequestFactoryProtocol = StateCallRequestFactory(),
-        storageRequestFactory: StorageRequestFactoryProtocol = StorageRequestFactory(
-            remoteFactory: StorageKeyFactory(),
-            operationManager: OperationManager(operationQueue: OperationManagerFacade.sharedDefaultQueue)
-        )
-    ) {
+    init(stateCallFactory: StateCallRequestFactoryProtocol = StateCallRequestFactory()) {
         self.stateCallFactory = stateCallFactory
-        self.storageRequestFactory = storageRequestFactory
     }
 
     // 184467440737090 — max weight dimension (matches the runtime's saturating max used for read calls).
@@ -146,7 +152,7 @@ extension ReviveContractCaller: ReviveContractCalling {
 
         return ReviveDryRunOutput(
             output: output,
-            weightRequired: outcome.gasRequired,
+            weightRequired: outcome.weightRequired,
             storageDeposit: outcome.storageDeposit.charged
         )
     }
@@ -156,9 +162,10 @@ extension ReviveContractCaller: ReviveContractCalling {
         runtimeProvider: RuntimeCodingServiceProtocol,
         account: AccountId
     ) async throws -> Bool {
-        let evmAccount = try account.keccak256().suffix(20)
+        let evmAccount = try account.toH160()
         let codingFactory = try await runtimeProvider.fetchCoderFactoryOperation().asyncExecute()
 
+        let storageRequestFactory = StorageRequestFactory.asyncInit()
         let responses: [StorageResponse<BytesCodable>] = try await storageRequestFactory.queryItems(
             engine: connection,
             keyParams: { [BytesCodable(wrappedValue: evmAccount)] },

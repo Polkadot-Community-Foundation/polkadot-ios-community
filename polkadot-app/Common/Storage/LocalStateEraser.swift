@@ -13,18 +13,21 @@ protocol LocalStateErasing {
 /// directory (backup-excluded) on first use. Not for use while a store is open.
 final class LocalStateEraser: LocalStateErasing {
     private let sharedSuiteName: String
-    private let databaseDirectoryURL: URL
+    private let databaseDirectoryURLs: [URL]
     private let fileManager: FileManager
     private let logger: LoggerProtocol
 
     init(
         sharedSuiteName: String = SharedContainerGroup.name,
-        databaseDirectoryURL: URL = UserStorageParams.sharedStorageDirectoryURL,
+        databaseDirectoryURLs: [URL] = [
+            UserStorageParams.sharedStorageDirectoryURL,
+            SubstrateStorageParams.sharedStorageDirectoryURL
+        ],
         fileManager: FileManager = .default,
         logger: LoggerProtocol
     ) {
         self.sharedSuiteName = sharedSuiteName
-        self.databaseDirectoryURL = databaseDirectoryURL
+        self.databaseDirectoryURLs = databaseDirectoryURLs
         self.fileManager = fileManager
         self.logger = logger
     }
@@ -40,13 +43,16 @@ final class LocalStateEraser: LocalStateErasing {
     }
 
     func eraseDatabases() throws {
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: databaseDirectoryURL.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            return
-        }
+        let directories = Set(databaseDirectoryURLs.map(\.standardizedFileURL))
+        for directory in directories {
+            var isDirectory: ObjCBool = false
+            let exists = fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+            guard exists, isDirectory.boolValue else {
+                continue
+            }
 
-        try fileManager.removeItem(at: databaseDirectoryURL)
-        logger.info("Removed the CoreData directory")
+            try fileManager.removeItem(at: directory)
+            logger.info("Removed the CoreData directory \(directory.lastPathComponent)")
+        }
     }
 }

@@ -70,7 +70,27 @@ struct CoinageKeychainInstallationStoreTests {
     func corruptedInstallation() throws {
         try keychain.saveKey(Data(repeating: 0xAB, count: 31), with: tags.installationTag())
 
-        #expect(throws: CoinageInstallationIdError.invalidLength(31)) { try store.getOrCreateCurrent() }
+        #expect(throws: try CoinageKeychainInstallationStoreError.corruptedRecord(tags.installationTag())) {
+            try store.getOrCreateCurrent()
+        }
+    }
+
+    @Test("a counter with trailing bytes is reported as corrupted")
+    func trailingBytes() throws {
+        try keychain.saveKey(Data([0x01, 0x00, 0x00, 0x00, 0xFF]), with: tags.coinIndexTag())
+
+        #expect(throws: try CoinageKeychainInstallationStoreError.corruptedRecord(tags.coinIndexTag())) {
+            try store.nextCoinItem()
+        }
+    }
+
+    @Test("an exhausted counter refuses to wrap around")
+    func counterExhausted() throws {
+        try keychain.saveKey(UInt32.max.scaleEncoded(), with: tags.voucherIndexTag())
+
+        #expect(throws: try CoinageKeychainInstallationStoreError.counterExhausted(tags.voucherIndexTag())) {
+            try store.nextVoucherItem()
+        }
     }
 
     @Test("an undecodable counter is reported as corrupted")

@@ -39,7 +39,9 @@ final class RestoredBackupGuard: Migrating {
         }
 
         logger.warning("Installation key id found without root entropy: erasing state restored from a device backup")
-        eraser.eraseUserDefaults()
+        // Databases first: the key id is the only trigger, so it must outlive a failed directory removal
+        // and let the next launch retry.
         try eraser.eraseDatabases()
+        eraser.eraseUserDefaults()
     }
 }

@@ -26,6 +26,8 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         let settled = entity.settledInPlanks.flatMap { BigUInt($0) } ?? 0
         let surplus = entity.surplusInPlanks.flatMap { BigUInt($0) } ?? 0
 
+        let plannedVoucherIndices = try Self.decodeVoucherIndices(entity.plannedVoucherIndices)
+
         return ExternalPayment(
             productId: productId,
             paymentId: paymentId,
@@ -33,7 +35,7 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
             destination: destination,
             settledInPlanks: settled,
             stage: stage,
-            plannedVoucherIndices: Self.decodeVoucherIndices(entity.plannedVoucherIndices),
+            plannedVoucherIndices: plannedVoucherIndices,
             surplusInPlanks: surplus,
             failureReason: entity.failureReason,
             createdAt: createdAt,
@@ -65,8 +67,15 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         indices.isEmpty ? nil : indices.map(\.identifier).joined(separator: ",")
     }
 
-    static func decodeVoucherIndices(_ encoded: String?) -> [CoinageKeyIndex] {
-        encoded?.split(separator: ",").compactMap { CoinageKeyIndex(identifier: String($0)) } ?? []
+    static func decodeVoucherIndices(_ encoded: String?) throws -> [CoinageKeyIndex] {
+        try encoded?.split(separator: ",").map { identifier in
+            guard let index = CoinageKeyIndex(identifier: String(identifier)) else {
+                throw CoreDataMapperError.missingRequiredData(
+                    keyPath: #keyPath(CDExternalPayment.plannedVoucherIndices)
+                )
+            }
+            return index
+        } ?? []
     }
 }
 

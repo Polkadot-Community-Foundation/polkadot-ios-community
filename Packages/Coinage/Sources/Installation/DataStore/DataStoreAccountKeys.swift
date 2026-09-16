@@ -1,6 +1,7 @@
 import Foundation
 import KeyDerivation
 import SubstrateSdk
+import SubstrateSdkExt
 
 /// The `//datastore` sr25519 account that owns this seed's list in the `AccountDataStore` contract,
 /// with the key its records are sealed under.
@@ -28,7 +29,6 @@ public protocol DataStoreAccountKeysProviding: Sendable {
 /// Derives the data store account once from the root entropy and caches it.
 public actor DataStoreAccountKeys: DataStoreAccountKeysProviding {
     public static let derivationPath = "//datastore"
-    static let evmAccountIdSize = 20
     private static let encryptionContext = Data("encryption".utf8)
 
     private let entropyManager: RootEntropyManaging
@@ -65,6 +65,6 @@ public actor DataStoreAccountKeys: DataStoreAccountKeysProviding {
     }
 
     public static func evmAccountId(for accountId: AccountId) throws -> Data {
-        try accountId.keccak256().suffix(evmAccountIdSize)
+        try accountId.toH160()
     }
 }

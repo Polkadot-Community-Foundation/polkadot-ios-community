@@ -51,6 +51,20 @@ struct CoinageBackupRecoveryServiceTests {
         #expect(scanner.scannedInstallations == [Self.previous])
     }
 
+    @Test("vouchers found under a previous installation keep that installation and their absolute index")
+    func recoveredVouchersKeepIndex() async throws {
+        dataStore.listed([Self.previous])
+        scanner.vouchersOnChain = [CoinageKeyIndex(installation: Self.previous, item: 77)]
+
+        await service.runLaunchPass()
+
+        #expect(assetStore.savedVouchers.map(\.derivationIndex) == [CoinageKeyIndex(
+            installation: Self.previous,
+            item: 77
+        )])
+        #expect(assetStore.savedCoins.isEmpty)
+    }
+
     @Test("coins found under a previous installation keep that installation and their absolute index")
     func recoveredCoinsKeepIndex() async throws {
         dataStore.listed([Self.previous])
@@ -184,15 +198,21 @@ private extension CoinageBackupRecoveryServiceTests {
 private final class StubScanner: InstallationAssetScanning, @unchecked Sendable {
     private let state = OSAllocatedUnfairLock<(
         coins: Set<CoinageKeyIndex>,
+        vouchers: Set<CoinageKeyIndex>,
         failing: Bool,
         scanned: [CoinageInstallationId]
     )>(
-        initialState: ([], false, [])
+        initialState: ([], [], false, [])
     )
 
     var coinsOnChain: Set<CoinageKeyIndex> {
         get { state.withLock { $0.coins } }
         set { state.withLock { $0.coins = newValue } }
+    }
+
+    var vouchersOnChain: Set<CoinageKeyIndex> {
+        get { state.withLock { $0.vouchers } }
+        set { state.withLock { $0.vouchers = newValue } }
     }
 
     var failing: Bool {
@@ -235,28 +255,45 @@ private final class StubScanner: InstallationAssetScanning, @unchecked Sendable 
 
     func scanVouchers(
         installation: CoinageInstallationId,
-        startIndex _: UInt32,
-        count _: UInt32
+        startIndex: UInt32,
+        count: UInt32
     ) async throws -> [Voucher] {
-        let failing = state.withLock { state -> Bool in
+        let (vouchers, failing) = state.withLock { state -> (Set<CoinageKeyIndex>, Bool) in
             state.scanned.append(installation)
-            return state.failing
+            return (state.vouchers, state.failing)
         }
         if failing { throw InstallationStubError.nodeWentAway }
-        return []
+
+        return (startIndex ..< startIndex + count)
+            .map { CoinageKeyIndex(installation: installation, item: $0) }
+            .filter { vouchers.contains($0) }
+            .map { key in
+                Voucher(
+                    exponent: 1,
+                    derivationIndex: key,
+                    allocatedAt: .now,
+                    readyAt: .distantPast,
+                    remoteState: .onboarding,
+                    publicKey: Data([UInt8(truncatingIfNeeded: key.item)])
+                )
+            }
     }
 }
 
 private final class RecordingAssetStore: RecoveredAssetStoring, @unchecked Sendable {
     private let coins = OSAllocatedUnfairLock<[Coin]>(initialState: [])
+    private let vouchers = OSAllocatedUnfairLock<[Voucher]>(initialState: [])
 
     var savedCoins: [Coin] { coins.withLock { $0 } }
+    var savedVouchers: [Voucher] { vouchers.withLock { $0 } }
 
     func saveNew(coins: [Coin]) async throws {
         self.coins.withLock { $0.append(contentsOf: coins) }
     }
 
-    func saveNew(vouchers _: [Voucher]) async throws {}
+    func saveNew(vouchers: [Voucher]) async throws {
+        self.vouchers.withLock { $0.append(contentsOf: vouchers) }
+    }
 }
 
 private final class InMemoryFlag: DeepRecoveryCompletedStoring, @unchecked Sendable {

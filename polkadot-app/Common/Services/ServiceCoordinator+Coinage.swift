@@ -21,7 +21,9 @@ extension ServiceCoordinator {
         let claimStatusStore: ClaimStatusStore
     }
 
-    static func createCoinageServices() -> CoinageServices? {
+    /// `allowanceManager` is the coordinator's PGAS manager: the data store account is topped up through
+    /// the same one as everything else.
+    static func createCoinageServices(allowanceManager: AllowanceManaging) -> CoinageServices? {
         let databaseFactory = CoinageDatabaseDependencyFactory(storageFacade: UserDataStorageFacade.shared)
         let claimStatusStore = ClaimStatusStore()
 
@@ -41,6 +43,7 @@ extension ServiceCoordinator {
         let durableEngine = createDurableTransactionEngine(chainViewFactory: chainViewFactory)
 
         guard let coinageService = createCoinageService(
+            allowanceManager: allowanceManager,
             databaseFactory: databaseFactory,
             externalPaymentStore: externalPaymentStore,
             incomingPaymentStore: incomingPaymentStore,
@@ -87,6 +90,7 @@ extension ServiceCoordinator {
 
 private extension ServiceCoordinator {
     static func createCoinageService(
+        allowanceManager: AllowanceManaging,
         databaseFactory: DatabaseDependencyFactoring,
         externalPaymentStore: ExternalPaymentStoring,
         incomingPaymentStore: IncomingPaymentStoring,
@@ -170,6 +174,7 @@ private extension ServiceCoordinator {
         let incomingPaymentAcknowledger = TopUpAcknowledgementPresenter()
 
         guard let installation = createInstallationDependency(
+            allowanceManager: allowanceManager,
             chainRegistry: chainRegistry,
             extrinsicMonitorFacade: extrinsicMonitorFacade,
             logger: logger
@@ -205,6 +210,7 @@ private extension ServiceCoordinator {
     /// Registration and recovery of installations run against the `AccountDataStore` contract on
     /// Asset Hub, paid in PGAS by the seed's `//datastore` account.
     static func createInstallationDependency(
+        allowanceManager: AllowanceManaging,
         chainRegistry: ChainRegistryProtocol,
         extrinsicMonitorFacade: ExtrinsicSubmissionMonitorFacade,
         logger: LoggerProtocol
@@ -213,13 +219,19 @@ private extension ServiceCoordinator {
 
         guard
             let assetHub = chainRegistry.getChain(for: assetHubChainId),
-            let runtimeProvider = chainRegistry.getRuntimeProvider(for: assetHubChainId),
-            let operationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: assetHub),
-            let pgasProvisioner = PGASAccountProvisioner.forDataStoreAccount(chainRegistry: chainRegistry)
+            let runtimeProvider = chainRegistry.getRuntimeProvider(for: assetHubChainId)
         else {
-            logger.error("Failed to set up installation registration on Asset Hub")
+            logger.error("Installation registration: Asset Hub \(assetHubChainId) is not in the chain registry")
             return nil
         }
+        guard let operationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: assetHub) else {
+            logger.error("Installation registration: no extrinsic operation factory for Asset Hub")
+            return nil
+        }
+        let pgasProvisioner = PGASAccountProvisioner.forDataStoreAccount(
+            allowanceManager: allowanceManager,
+            chainRegistry: chainRegistry
+        )
 
         let currentInstallationStore = CoinageKeychainInstallationStore(
             keystore: Keychain(),

@@ -92,7 +92,11 @@ final class CoinageInstallationRegistrar: CoinageInstallationRegistering, @unche
 private extension CoinageInstallationRegistrar {
     func register() async {
         let overdue = Task { [timing, weak self] in
-            try? await timing.clock.sleep(for: timing.expectedRegistrationTime)
+            do {
+                try await timing.clock.sleep(for: timing.expectedRegistrationTime)
+            } catch {
+                return // cancelled: the run ended, there is nothing to be late for
+            }
             self?.reportDelayedUnlessCompleted()
         }
         defer { overdue.cancel() }

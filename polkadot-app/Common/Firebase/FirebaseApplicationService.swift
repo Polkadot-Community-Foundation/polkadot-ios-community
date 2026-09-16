@@ -24,6 +24,7 @@ final class FirebaseApplicationService: RemoteConfigManaging {
 
     weak var delegate: (any RemoteConfigDelegate)?
     private let logger: LoggerProtocol = Logger.shared
+    private static let accountDataStoreAddressSize = 20
 
     // MARK: Initial methods
 
@@ -171,11 +172,18 @@ private extension FirebaseApplicationService {
         return value
     }
 
-    /// One JSON object shared with Android: `{ "contractAddress": "0x…" }`.
-    func accountDataStoreContractAddress() -> String? {
+    /// One JSON object shared with Android: `{ "contractAddress": "0x…" }`, decoded to the 20-byte H160
+    /// here so consumers never see a malformed address. A delivered address that cannot be used is a
+    /// config mistake, not a payload still on its way: both stall registration, only the log tells them apart.
+    func accountDataStoreContractAddress() -> Data? {
         let json = remoteConfig[.accountDataStoreConfig].jsonValue as? [String: String]
-        guard let value = json?[.contractAddress], !value.isEmpty else { return nil }
-        return value
+        guard let hex = json?[.contractAddress], !hex.isEmpty else { return nil }
+
+        guard let address = try? Data(hexString: hex), address.count == Self.accountDataStoreAddressSize else {
+            logger.error("Remote config carries an unusable AccountDataStore contract address: \(hex)")
+            return nil
+        }
+        return address
     }
 
     func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {

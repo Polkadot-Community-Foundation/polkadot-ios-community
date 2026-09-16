@@ -23,7 +23,7 @@ public final class CoinageKeychainInstallationStore: CoinageCurrentInstallationS
         try lock.withLock {
             let tag = try tags.installationTag()
             if try keystore.checkKey(for: tag) {
-                return try CoinageInstallationId(value: keystore.fetchKey(for: tag))
+                return try storedInstallation(tag: tag)
             }
 
             let created = try CoinageInstallationId.random()
@@ -42,6 +42,15 @@ public final class CoinageKeychainInstallationStore: CoinageCurrentInstallationS
 }
 
 private extension CoinageKeychainInstallationStore {
+    func storedInstallation(tag: String) throws -> CoinageInstallationId {
+        let record = try keystore.fetchKey(for: tag)
+        do {
+            return try CoinageInstallationId(value: record)
+        } catch {
+            throw CoinageKeychainInstallationStoreError.corruptedRecord(tag)
+        }
+    }
+
     func reserveNextItem(tag: String) throws -> UInt32 {
         let item = try storedNextItem(tag: tag) ?? 0
         guard item < UInt32.max else {
@@ -59,7 +68,12 @@ private extension CoinageKeychainInstallationStore {
 
         let record = try keystore.fetchKey(for: tag)
         do {
-            return try UInt32(scaleDecoder: ScaleDecoder(data: record))
+            let decoder = try ScaleDecoder(data: record)
+            let item = try UInt32(scaleDecoder: decoder)
+            guard decoder.remained == 0 else {
+                throw CoinageKeychainInstallationStoreError.corruptedRecord(tag)
+            }
+            return item
         } catch {
             throw CoinageKeychainInstallationStoreError.corruptedRecord(tag)
         }

@@ -130,6 +130,24 @@ struct CoinageInstallationRegistrarTests {
         #expect(submitter.attempts.count == 2)
     }
 
+    @Test("the backoff doubles after each failed attempt")
+    func backoffDoubles() async throws {
+        registrar.start()
+        try await settle(until: { submitter.attempts.count == 1 })
+
+        failCurrentAttempts()
+        await clock.advance(by: Self.initialBackoff + .milliseconds(1))
+        try await settle(until: { submitter.attempts.count == 2 })
+
+        failCurrentAttempts()
+        await clock.advance(by: Self.initialBackoff + .milliseconds(1))
+        await settle()
+        #expect(submitter.attempts.count == 2)
+
+        await clock.advance(by: Self.initialBackoff)
+        try await settle(until: { submitter.attempts.count == 3 })
+    }
+
     @Test("an attempt that could not be submitted is retried")
     func submissionFailed() async throws {
         submitter.failNextAttempts(1)
@@ -229,6 +247,13 @@ private extension CoinageInstallationRegistrarTests {
         for _ in 0 ..< 20 {
             await Task.yield()
         }
+    }
+
+    func failCurrentAttempts() {
+        engine.set(
+            engine.current(Self.target.registrationGroup).map { $0.changing(status: .failure) },
+            group: Self.target.registrationGroup
+        )
     }
 
     func settle(until condition: @escaping @Sendable () async -> Bool) async throws {

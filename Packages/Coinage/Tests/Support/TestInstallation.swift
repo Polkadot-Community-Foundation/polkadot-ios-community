@@ -23,3 +23,10 @@ extension CoinageKeyIndex: ExpressibleByIntegerLiteral {
         CoinageKeyIndex(installation: .test, item: item)
     }
 }
+
+extension CoinageKeyIndex {
+    /// The next item in the same installation, for fixtures that hand out consecutive keys.
+    func next() -> CoinageKeyIndex {
+        CoinageKeyIndex(installation: installation, item: item + 1)
+    }
+}
