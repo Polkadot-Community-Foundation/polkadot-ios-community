@@ -285,7 +285,7 @@ private extension TabBarBottomChromeController {
 
         setSelectedIndex(selectedTabIndex)
         updateActiveActionIndex()
-        tipController.refreshAnchor()
+        tipController.setBarLaidOut(false)
     }
 
     func updateActiveActionIndex() {
@@ -348,6 +348,9 @@ private extension TabBarBottomChromeController {
             guard let self, let tabIndex = slotMap.tabIndex(forItemIndex: itemIndex) else {
                 return
             }
+            // The bar moves its own lens on a tap, so the selection has to be recorded here too:
+            // `rebuildItems` reapplies `selectedTabIndex`, and a stale one snaps the lens back.
+            selectedTabIndex = tabIndex
             onSelect?(tabIndex, isReselection)
         }
 
@@ -357,6 +360,10 @@ private extension TabBarBottomChromeController {
                 return
             }
             togglePanel(action == .spaTabs ? .spaTabs : .content(action))
+        }
+
+        barView.onItemsLaidOut = { [weak self] in
+            self?.tipController.setBarLaidOut(true)
         }
     }
 

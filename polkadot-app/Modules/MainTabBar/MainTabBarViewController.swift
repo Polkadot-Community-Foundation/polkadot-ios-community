@@ -17,8 +17,13 @@ final class MainTabBarViewController: UIViewController {
     private lazy var statusBarHost = UIHostingController(rootView: ChainConnectionStatusBarView(models: []))
 
     /// The rings sit at the trailing end of the full-width strip, so the tip anchors here
-    /// rather than at the host view, whose centre is empty.
+    /// rather than at the host view, whose centre is empty. Inset from the trailing edge so the
+    /// popover is not clamped against the screen edge.
     private let chainStatusAnchorGuide = UILayoutGuide()
+
+    private static let chainStatusAnchorInset: CGFloat = 26
+
+    private var chainStatusAnchorWidth: Constraint?
 
     private lazy var container = TabBarContainer(hostController: self)
 
@@ -124,8 +129,9 @@ private extension MainTabBarViewController {
 
         statusBarHost.view.addLayoutGuide(chainStatusAnchorGuide)
         chainStatusAnchorGuide.snp.makeConstraints { make in
-            make.trailing.top.bottom.equalTo(statusBarHost.view)
-            make.width.equalTo(1)
+            make.trailing.equalTo(statusBarHost.view).offset(-Self.chainStatusAnchorInset)
+            make.top.bottom.equalTo(statusBarHost.view)
+            chainStatusAnchorWidth = make.width.equalTo(1).constraint
         }
 
         statusBarHost.didMove(toParent: self)
@@ -343,6 +349,17 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
 
     func showChainStatus(_ models: [ChainConnectionStatusViewModel]) {
         statusBarHost.rootView = ChainConnectionStatusBarView(models: models)
+        let width = max(1, ChainConnectionStatusBarView.ringsWidth(count: models.count))
+        chainStatusAnchorWidth?.update(offset: width)
+    }
+}
+
+// MARK: - Scan panel
+
+extension MainTabBarViewController {
+    /// Opens the scan panel from outside the bar, as a tap on the `.scan` action would.
+    func openScanPanel() {
+        chromeController.setPanel(.content(.scan), animated: true)
     }
 }
 

@@ -5,8 +5,11 @@ import UIKit
 final class ContactsListWireframe {
     let flowState: ChatFlowState
 
-    init(flowState: ChatFlowState) {
+    private let moduleNavigator: ModuleNavigating
+
+    init(flowState: ChatFlowState, moduleNavigator: ModuleNavigating = ModuleNavigator()) {
         self.flowState = flowState
+        self.moduleNavigator = moduleNavigator
     }
 }
 
@@ -21,6 +24,10 @@ private extension ContactsListWireframe {
 }
 
 extension ContactsListWireframe: ContactsListWireframeProtocol {
+    func showScanPanel() {
+        moduleNavigator.openScanPanel()
+    }
+
     func showChat(from view: ContactsListViewProtocol?, for model: ChatOpenModel) {
         performChatShow(from: view, for: model)
     }

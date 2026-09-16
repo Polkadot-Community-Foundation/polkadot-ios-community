@@ -103,9 +103,10 @@ extension VoucherLocationService {
         voucherStatusSubscriptionTask = Task { [weak self] in
             do {
                 try await self?.runLocationPipeline(for: vouchers)
-            } catch is CancellationError {
-                // Expected: superseded by a newer tracked-voucher set.
             } catch {
+                // Superseded by a newer tracked-voucher set: whatever the pipeline threw on the way out,
+                // an operation cancelled underneath it included, is not a failure.
+                guard !Task.isCancelled else { return }
                 self?.logger.error("Voucher sync failed during monitoring: \(error)")
             }
         }

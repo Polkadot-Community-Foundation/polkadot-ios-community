@@ -12,6 +12,7 @@ import SubstrateOperation
 import FoundationExt
 import BackgroundExecution
 import Individuality
+import DurableTransactions
 
 public extension CoinageService {
     /// Creates a CoinageService instance.
@@ -23,6 +24,9 @@ public extension CoinageService {
     ///   - databaseFactory: Factory for creating database repositories
     ///   - originFactory: Factory for creating extrinsic origins (app-side implementation)
     ///   - extrinsicMonitorFactory: Factory for extrinsic submission monitoring
+    ///   - durableEngine: The shared durable transaction engine; coinage registers its oracle with it
+    ///   - chainViewFactory: Pinned chain views for reads outside the engine
+    ///   - assetLedger: Coinage's half of the ledger (asset rows, handoff marks)
     ///   - rootEntropyManager: Manager for root entropy (key derivation)
     ///   - keystore: Keystore for key management
     ///   - logger: Logger for diagnostic output
@@ -36,11 +40,11 @@ public extension CoinageService {
         databaseFactory: DatabaseDependencyFactoring,
         originFactory: OriginCreating,
         extrinsicMonitorFactory: ExtrinsicSubmitMonitorFactoryProtocol,
-        extrinsicOperationFactory: any ExtrinsicOperationFactoryProtocol,
-        extrinsicSubmitter: any ExtrinsicSubmitting,
+        durableEngine: any DurableTxServicing,
+        chainViewFactory: any PinnedChainViewFactoryProtocol,
+        assetLedger: any CoinageAssetLedgerProtocol,
         rootEntropyManager: RootEntropyManaging,
         keystore: KeystoreProtocol,
-        txStore: any CoinageTxRepositoryProtocol,
         applicationStateStreamFactory: ApplicationStateStreamFactory,
         externalPaymentStore: ExternalPaymentStoring,
         incomingPaymentStore: IncomingPaymentStoring,
@@ -130,53 +134,15 @@ public extension CoinageService {
             aliasProvider: { try voucherKeypairFactory.alias(for: $0) }
         )
 
-        let watchedEntries = CoinageTrackingTxSet()
-
-        let chainFactory = CoinageChainViewFactory(
-            coinQuery: coinOnChainQuery,
-            voucherQuery: voucherOnChainQuery,
-            blockInfoProvider: blockNumberProvider,
-            blockEvents: CoinageChainViewFactory.BlockEventsDependencies(
-                connection: connection,
-                runtimeService: runtimeService,
-                operationQueue: operationQueue,
-                storageRequestFactory: storageRequestFactory
-            ),
-            logger: logger
+        // Coinage's oracle answers the engine's two questions from its asset rows and its own chain
+        // reads; the engine owns the ledger row, the submission watch and recovery.
+        let stateReader = CoinageStateReader(coinQuery: coinOnChainQuery, voucherQuery: voucherOnChainQuery)
+        durableEngine.oracles.register(
+            CoinageResourceOracle(chainId: chain.chainId, ledger: assetLedger, reader: stateReader),
+            for: .coinage
         )
 
-        let recoveryPass = RecoveryPass(
-            store: txStore,
-            chainFactory: chainFactory,
-            watched: watchedEntries,
-            logger: logger
-        )
-
-        let registrar = CoinageTxRegistrar(
-            store: txStore,
-            validator: CoinageTxRegistrationValidator(),
-            watched: watchedEntries,
-            logger: logger
-        )
-
-        let submissionWatcher = CoinageTxTracker(
-            submitter: extrinsicSubmitter,
-            store: txStore,
-            chainFactory: chainFactory,
-            watched: watchedEntries,
-            backgroundExecutor: backgroundExecutor,
-            logger: logger
-        )
-
-        let txService = CoinageTxService(
-            store: txStore,
-            registrar: registrar,
-            watcher: submissionWatcher,
-            pass: recoveryPass,
-            operationFactory: extrinsicOperationFactory,
-            chainFactory: chainFactory,
-            logger: logger
-        )
+        let txService = CoinageTxService(engine: durableEngine, ledger: assetLedger, logger: logger)
 
         let voucherLoaderFactory = VoucherLoaderFactory(
             instanceId: instanceId,
@@ -342,7 +308,8 @@ public extension CoinageService {
 
         let transferStatusService = CoinageTransferStatusService(
             databaseFactory: databaseFactory,
-            chainViewFactory: chainFactory,
+            chainViewFactory: chainViewFactory,
+            chainId: chain.chainId,
             coinOnChainQuery: coinOnChainQuery,
             snKeyFactory: SNKeyFactory(),
             logger: logger

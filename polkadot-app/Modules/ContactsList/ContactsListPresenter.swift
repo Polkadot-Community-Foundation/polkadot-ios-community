@@ -45,6 +45,10 @@ extension ContactsListPresenter: ContactsListPresenterProtocol {
         interactor.notifyViewDisappeared()
     }
 
+    func showScanPanel() {
+        wireframe.showScanPanel()
+    }
+
     func openChat(contactIdentifier: String) {
         guard let chat = chatsByIdentifier[contactIdentifier]?.chat else {
             return assertionFailure()

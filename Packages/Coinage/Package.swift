@@ -66,7 +66,8 @@ let package = Package(
         .package(path: "../StateMachine"),
         .package(path: "../SubstrateOperation"),
         .package(path: "../BackgroundExecution"),
-        .package(path: "../ExtrinsicServiceExt")
+        .package(path: "../ExtrinsicServiceExt"),
+        .package(path: "../DurableTransactions")
     ],
     targets: [
         .target(
@@ -94,7 +95,8 @@ let package = Package(
                 "StateMachine",
                 "SubstrateOperation",
                 "BackgroundExecution",
-                "ExtrinsicServiceExt"
+                "ExtrinsicServiceExt",
+                "DurableTransactions"
             ],
         ),
         .testTarget(
@@ -103,6 +105,8 @@ let package = Package(
                 "Coinage",
                 "BackgroundExecution",
                 "ExtrinsicServiceExt",
+                "DurableTransactions",
+                .product(name: "DurableTransactionsTestSupport", package: "DurableTransactions"),
                 .product(name: "Clocks", package: "swift-clocks")
             ],
             path: "Tests"
