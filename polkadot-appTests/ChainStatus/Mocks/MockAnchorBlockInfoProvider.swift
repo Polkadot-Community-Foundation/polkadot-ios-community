@@ -41,6 +41,10 @@ actor MockAnchorBlockInfoProvider: BlockInfoProviding {
         Self.hash(for: currentHeight)
     }
 
+    func fetchBlockNumber(byHash _: BlockHashData) async throws -> BlockNumber {
+        currentHeight
+    }
+
     nonisolated func subscribeNewHeads() -> AnyAsyncSequence<Block.Header> {
         AsyncStream<Block.Header> { $0.finish() }.eraseToAnyAsyncSequence()
     }
