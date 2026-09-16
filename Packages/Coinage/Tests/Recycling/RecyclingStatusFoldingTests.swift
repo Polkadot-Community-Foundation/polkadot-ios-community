@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Coinage
+import DurableTransactions
 
 struct RecyclingStatusFoldingTests {
     private typealias Factory = ExternalPaymentTestFactory
