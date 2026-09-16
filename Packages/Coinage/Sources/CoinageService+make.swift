@@ -68,19 +68,17 @@ public extension CoinageService {
         let voucherRepository = databaseFactory.makeVoucherRepository()
 
         let installationRepository = databaseFactory.makeInstallationRepository()
-        let keyIndexQueries = databaseFactory.makeKeyIndexQueries()
+        let currentInstallationStore = installation.currentInstallationStore
         let coinKeypairFactory = CoinKeypairFactory(entropyManager: rootEntropyManager)
         let voucherKeypairFactory = VoucherKeypairFactory(entropyManager: rootEntropyManager)
-        // One allocator per Coinage instance: each serialises its own read-then-save.
+        // One allocator per Coinage instance: each serialises its own reserve-then-save.
         let coinAllocator = CoinAllocator(
-            installationRepository: installationRepository,
-            keyIndexQueries: keyIndexQueries,
+            installationStore: currentInstallationStore,
             coinRepository: coinRepository,
             keyFactory: coinKeypairFactory
         )
         let voucherAllocator = VoucherAllocator(
-            installationRepository: installationRepository,
-            keyIndexQueries: keyIndexQueries,
+            installationStore: currentInstallationStore,
             delayProvider: VoucherDelayProvider(),
             voucherRepository: voucherRepository,
             keyFactory: voucherKeypairFactory
@@ -210,7 +208,7 @@ public extension CoinageService {
             for: .coinageInstallation
         )
         let installationRegistrar = CoinageInstallationRegistrar(
-            installationRepository: installationRepository,
+            currentInstallationStore: currentInstallationStore,
             configProvider: installation.configProvider,
             engine: durableEngine,
             submitter: InstallationRegistrationSubmitter(
@@ -229,6 +227,7 @@ public extension CoinageService {
         )
 
         let recoveryService = CoinageBackupRecoveryService(
+            currentInstallationStore: currentInstallationStore,
             installationRepository: installationRepository,
             configProvider: installation.configProvider,
             dataStoreRepository: dataStoreRepository,
@@ -426,10 +425,11 @@ extension VoucherKeyDeriving {
     }
 }
 
-/// The app-side pieces installation registration and recovery run on: pallet-revive and fee estimation
-/// on the chain the `AccountDataStore` contract lives on, PGAS for the data store account, and the
-/// persisted acknowledgement flag.
+/// The app-side pieces installation allocation, registration and recovery run on: the Keychain store
+/// of the current installation, pallet-revive and fee estimation on the chain the `AccountDataStore`
+/// contract lives on, PGAS for the data store account, and the persisted acknowledgement flag.
 public struct CoinageInstallationDependency {
+    public let currentInstallationStore: any CoinageCurrentInstallationStoring
     public let chainId: ChainId
     public let runtimeService: any RuntimeCodingServiceProtocol
     public let reviveApi: any ReviveContractApiProtocol
@@ -439,6 +439,7 @@ public struct CoinageInstallationDependency {
     public let deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
 
     public init(
+        currentInstallationStore: any CoinageCurrentInstallationStoring,
         chainId: ChainId,
         runtimeService: any RuntimeCodingServiceProtocol,
         reviveApi: any ReviveContractApiProtocol,
@@ -447,6 +448,7 @@ public struct CoinageInstallationDependency {
         feeEstimator: any RegistrationFeeEstimating,
         deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
     ) {
+        self.currentInstallationStore = currentInstallationStore
         self.chainId = chainId
         self.runtimeService = runtimeService
         self.reviveApi = reviveApi

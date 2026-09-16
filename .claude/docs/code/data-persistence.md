@@ -73,8 +73,33 @@ attributes need a `defaultValueString`. If lightweight isn't possible, add an
 ## UserDefaults
 
 - **Use `SettingsManager`** instead of direct UserDefaults access
-- Located in `Common/UserDefaults/` (5 items)
+- Located in `Common/UserDefaults/`
 - For session data and user preferences
+- The **App Group suite** (`SharedContainerGroup.userDefaults`) holds the ids that index the Keychain:
+  `SettingsKey.installationKeyId` (raw key `io.polkadot.app.entropy.id.v2`, kept from before the rename;
+  `InstallationKeyIdStore`), `deviceEncryptId`, and the product resource store id. A missing App Group
+  entitlement must trap, never onboard into an empty suite.
+
+## Device backup
+
+What an iOS device backup carries, and what the app does about it:
+
+- **Backed up**: standard UserDefaults, the App Group suite, the `io.products.dotns.cache` suite,
+  Documents and Application Support files (except the chat attachments directory).
+- **Not backed up**: the CoreData directory. Operation-iOS `CoreDataService` creates it with
+  `isExcludedFromBackup` (`CoreDataPersistentSettings.excludeFromiCloudBackup` defaults to `true`; both
+  facades keep the default). Nothing else may create that directory first, or the flag is never set.
+- **Not restored onto another device**: every app-side Keychain item (`Keychain()` is
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`). The iCloud mnemonic backup is a separate,
+  synchronizable item and is the recovery path.
+- `RestoredBackupGuard` runs first in the serial launch chain built by `RootPresenterFactory`: when the
+  installation key id is present but `hasRootEntropy()` is false — a backup restored onto another
+  device — it calls `LocalStateEraser` (both UserDefaults suites, the DotNs cache suite
+  `ContentHashCache.suiteName`, and the CoreData directory removed from disk — a no-op after a real
+  restore) before any store is opened or the wallet gate runs. The eraser never touches the storage facades: constructing them before the migrators run is
+  not allowed, and removing the directory is exactly what `CoreDataService.drop()` does. A Keychain read
+  error propagates and erases nothing. The TESTNET factory reset shares the defaults step and drops its
+  (open) stores through the services.
 
 ## iCloud
 

@@ -23,6 +23,9 @@ enum SettingsKey: String {
     case coinageBackupRestorePending = "coinageBackupRestorePending.v2"
     case coinageDeepRecoveryCompleted = "coinageDeepRecoveryCompleted.v2"
     case deviceEncryptId = "deviceEncryptId.v2"
+    // App Group suite. The raw key predates the rename from "entropy id" and is kept so existing
+    // installs keep resolving their Keychain items.
+    case installationKeyId = "io.polkadot.app.entropy.id.v2"
     case nextSyncUpdateId = "nextSyncUpdateId.v2"
     case themeSelected = "themeSelected.v2"
     case gameCalendarReminder

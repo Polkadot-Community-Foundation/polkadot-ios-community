@@ -10,7 +10,7 @@ struct CoinageBackupRecoveryServiceTests {
     private static let previous = CoinageInstallationId.fixed(0x01)
     private static let anotherPrevious = CoinageInstallationId.fixed(0x02)
 
-    private let installations = InMemoryInstallations(current: .test)
+    private let installations = InMemoryInstallations()
     private let dataStore = StubDataStoreRepository()
     private let scanner = StubScanner()
     private let assetStore = RecordingAssetStore()
@@ -19,6 +19,7 @@ struct CoinageBackupRecoveryServiceTests {
 
     init() {
         service = CoinageBackupRecoveryService(
+            currentInstallationStore: StubCurrentInstallationStore(current: .test),
             installationRepository: installations,
             configProvider: StubDataStoreConfig(),
             dataStoreRepository: dataStore,

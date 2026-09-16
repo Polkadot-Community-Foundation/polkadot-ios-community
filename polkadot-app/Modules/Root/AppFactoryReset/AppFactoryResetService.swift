@@ -9,15 +9,18 @@
 
     final class AppFactoryResetService {
         private let mnemonicBackupHelper: MnemonicBackupHelperProtocol
+        private let eraser: LocalStateErasing
         private let notificationCenter: UNUserNotificationCenter
         private let logger: LoggerProtocol
 
         init(
             mnemonicBackupHelper: MnemonicBackupHelperProtocol,
+            eraser: LocalStateErasing,
             notificationCenter: UNUserNotificationCenter = .current(),
             logger: LoggerProtocol
         ) {
             self.mnemonicBackupHelper = mnemonicBackupHelper
+            self.eraser = eraser
             self.notificationCenter = notificationCenter
             self.logger = logger
         }
@@ -27,8 +30,7 @@
                 clearAlarmKitAlarms()
             }
             deleteAllKeychainItems()
-            clearUserDefaultsStandard()
-            clearSharedUserDefaults()
+            eraser.eraseUserDefaults()
             clearAllNotifications()
             deleteCloudBackup()
             deleteCoreDataDatabases()
@@ -57,10 +59,6 @@
             }
         }
 
-        func clearUserDefaultsStandard() {
-            SettingsManager.shared.removeAll()
-        }
-
         @available(iOS 26.0, *)
         func clearAlarmKitAlarms() {
             guard let alarmIdString = SettingsManager.shared.string(for: .gameAlarmId),
@@ -72,13 +70,6 @@
             } catch {
                 logger.error("Failure to cancel alarm: \(error)")
             }
-        }
-
-        func clearSharedUserDefaults() {
-            let groupName = SharedContainerGroup.name
-            let defaults = UserDefaults(suiteName: groupName)
-            defaults?.removePersistentDomain(forName: groupName)
-            defaults?.synchronize()
         }
 
         func clearAllNotifications() {
@@ -94,6 +85,7 @@
             }
         }
 
+        // The stores are open at this point, so they go through the services rather than the eraser.
         func deleteCoreDataDatabases() {
             let stores: [(String, CoreDataServiceProtocol)] = [
                 ("UserData", UserDataStorageFacade.shared.databaseService),

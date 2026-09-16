@@ -31,10 +31,19 @@ A coin (`Packages/Coinage/Sources/Models/Coin.swift`) has:
 Every installation draws a random 32-byte `CoinageInstallationId` (`Packages/Coinage/Sources/Installation/`)
 and allocates coins and vouchers under it: `//coinage//4294967295//0x{id}/{item}` for coins,
 `//coinage-ring-vrf//4294967295//0x{id}//{item}` for vouchers. A `CoinageKeyIndex(installation, item)`
-addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifier`. Allocators hand out
-`max(item) + 1` over the *current* installation only (`CoinageKeyIndexQuerying`), so a previous
-installation's rows never move the counter and a reinstall can never re-issue a key an earlier one
-handed off. The keychain index stores and the `coinageSyncNeeded` / scan-horizon settings are gone.
+addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifier`.
+
+The *current* installation and its two allocation counters live in the Keychain
+(`CoinageKeychainInstallationStore`, behind `CoinageCurrentInstallationStoring`), under tags scoped by the
+app's installation key id — the same UUID that scopes the root entropy:
+`io.polkadotapp:<installationKeyId>:coinage.installation` (32 raw bytes), `…:coinage.coin.index` and
+`…:coinage.voucher.index` (SCALE `UInt32`, the next unissued item). The app supplies the tags
+(`CoinageInstallationKeychainTags` over `InstallationKeyIdStore`), so the package never sees the id, and a
+new wallet (new id) starts a fresh page with zeroed counters. Each `next…Item` call reserves an item for
+good, so a crash before the coin is saved costs one unused key, never a reused one; previous
+installations' rows never move the counters. The database (`CDCoinageInstallation`) holds *previous*
+installations only, with their scan cursors. The `coinageSyncNeeded` / scan-horizon settings are gone.
+This is a deliberate divergence from Android, which keeps the current installation in Room.
 
 Backup: the seed's `//datastore` sr25519 account registers each installation in the `AccountDataStore`
 contract on Asset Hub (record = ChaCha20-Poly1305 of the id under `"encryption".blake2b32WithKey(secret64)`,
@@ -117,7 +126,8 @@ Transfer plans determine how coins are spent:
 | External payments       | `Packages/Coinage/Sources/ExternalPayment/` | Offramp identity, retry, status, planner scope |
 | Coinage UI              | `Modules/Coinage/`            | Coinage screen changes           |
 | Backup sync             | ServiceCoordinator             | Backup/restore flow changes      |
-| Installation identity   | `Packages/Coinage/Sources/Installation/`, `CoinageInstallationCoreDataRepository` | Key index / page format, allocator counters |
+| Installation identity   | `Packages/Coinage/Sources/Installation/`, `CoinageKeychainInstallationStore` (current + counters), `CoinageInstallationCoreDataRepository` (previous) | Key index / page format, allocator counters |
+| Installation Keychain tags | `Common/Crypto/KeystoreTag.swift`, `Modules/Coinage/Model/Keychain/CoinageInstallationKeychainTags.swift` | Tag layout, key-id scoping |
 | Installation registration | `.../Installation/Registration/`, `ServiceCoordinator.createInstallationDependency` | Contract ABI, PGAS provisioning, registrar timing |
 | Backup recovery         | `Packages/Coinage/Sources/Backup/`, `CoinageBackupSyncService` | Scan rules, progress model, restored-balance card |
 | Durability (oracle, asset ledger) | `Packages/Coinage/Sources/CoinageTx/` | Coin/voucher evidence or invariants; the engine itself is `Packages/DurableTransactions` (see architecture/durable-transactions.md) |

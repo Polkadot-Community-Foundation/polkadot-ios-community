@@ -221,7 +221,13 @@ private extension ServiceCoordinator {
             return nil
         }
 
+        let currentInstallationStore = CoinageKeychainInstallationStore(
+            keystore: Keychain(),
+            tags: CoinageInstallationKeychainTags(keyIdStore: InstallationKeyIdStore())
+        )
+
         return CoinageInstallationDependency(
+            currentInstallationStore: currentInstallationStore,
             chainId: assetHubChainId,
             runtimeService: runtimeProvider,
             reviveApi: CoinageReviveContractApi(chainId: assetHubChainId, chainRegistry: chainRegistry),

@@ -135,8 +135,4 @@ struct CoinageDatabaseDependencyFactory: DatabaseDependencyFactoring, @unchecked
     func makeInstallationRepository() -> any CoinageInstallationRepositoryProtocol {
         CoinageInstallationCoreDataRepository(storageFacade: storageFacade)
     }
-
-    func makeKeyIndexQueries() -> any CoinageKeyIndexQuerying {
-        CoinageKeyIndexQueries(storageFacade: storageFacade)
-    }
 }

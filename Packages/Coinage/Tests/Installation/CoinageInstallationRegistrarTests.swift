@@ -20,7 +20,7 @@ struct CoinageInstallationRegistrarTests {
     init() {
         submitter = FakeRegistrationSubmitter(engine: engine)
         registrar = CoinageInstallationRegistrar(
-            installationRepository: InMemoryInstallations(current: .test),
+            currentInstallationStore: StubCurrentInstallationStore(current: .test),
             configProvider: config,
             engine: engine,
             submitter: submitter,

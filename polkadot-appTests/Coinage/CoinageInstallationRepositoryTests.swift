@@ -8,37 +8,20 @@ import Testing
 struct CoinageInstallationRepositoryTests {
     private let repository = CoinageInstallationCoreDataRepository(storageFacade: UserDataStorageTestFacade())
 
-    @Test("the current installation is created once and read back afterwards")
-    func idempotentCurrent() async throws {
-        let first = try await repository.getOrCreateCurrent()
-        let second = try await repository.getOrCreateCurrent()
-
+    @Test("a fresh store holds no previous installations")
+    func emptyByDefault() async throws {
         let previous = try await repository.getPrevious()
-        #expect(first == second)
+
         #expect(previous.isEmpty)
     }
 
-    @Test("concurrent first callers all get the same current installation")
-    func concurrentCurrent() async throws {
-        let ids = try await withThrowingTaskGroup(of: CoinageInstallationId.self) { group in
-            for _ in 0 ..< 16 {
-                group.addTask { try await repository.getOrCreateCurrent() }
-            }
-            return try await group.reduce(into: Set<CoinageInstallationId>()) { $0.insert($1) }
-        }
-
-        #expect(ids.count == 1)
-    }
-
-    @Test("previous installations skip the current one and repeats")
+    @Test("previous installations are recorded once, repeats are skipped")
     func addPrevious() async throws {
-        let current = try await repository.getOrCreateCurrent()
-
-        try await repository.addPrevious([current, .other, .other])
+        try await repository.addPrevious([.other, .other])
         try await repository.addPrevious([.other, .fixed(0x22)])
 
         let previous = try await repository.getPrevious()
-        #expect(Set(previous.map(\.id)) == [.other, .fixed(0x22)])
+        #expect(previous.map(\.id) == [.other, .fixed(0x22)].sorted { $0.hex < $1.hex })
         #expect(previous.allSatisfy { !$0.initialScanCompleted })
         #expect(previous.allSatisfy { $0.coinScanNextIndex == 0 && $0.voucherScanNextIndex == 0 })
     }

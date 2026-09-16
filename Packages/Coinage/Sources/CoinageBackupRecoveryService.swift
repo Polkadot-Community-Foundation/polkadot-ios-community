@@ -32,6 +32,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         static let deepSearchBatchCount = 10
     }
 
+    private let currentInstallationStore: any CoinageCurrentInstallationStoring
     private let installationRepository: any CoinageInstallationRepositoryProtocol
     private let configProvider: any AccountDataStoreConfigProviding
     private let dataStoreRepository: any AccountDataStoreRepositoryProtocol
@@ -43,6 +44,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     private nonisolated let progress = AsyncCurrentValueSubject<BackupProgress>(.unknown)
 
     init(
+        currentInstallationStore: any CoinageCurrentInstallationStoring,
         installationRepository: any CoinageInstallationRepositoryProtocol,
         configProvider: any AccountDataStoreConfigProviding,
         dataStoreRepository: any AccountDataStoreRepositoryProtocol,
@@ -51,6 +53,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         completedStore: any DeepRecoveryCompletedStoring,
         logger: (any SDKLoggerProtocol)?
     ) {
+        self.currentInstallationStore = currentInstallationStore
         self.installationRepository = installationRepository
         self.configProvider = configProvider
         self.dataStoreRepository = dataStoreRepository
@@ -134,7 +137,8 @@ private extension CoinageBackupRecoveryService {
         do {
             let registered = try await dataStoreRepository.fetchRegisteredInstallations(contract: contract, at: nil)
             logger?.info("Recovery: contract lists \(registered.count) installation(s) for this seed")
-            try await installationRepository.addPrevious(Array(registered))
+            let current = try currentInstallationStore.getOrCreateCurrent()
+            try await installationRepository.addPrevious(registered.filter { $0 != current })
         } catch {
             logger?
                 .warning("Recovery: could not read registered installations, scanning the ones already known: \(error)")

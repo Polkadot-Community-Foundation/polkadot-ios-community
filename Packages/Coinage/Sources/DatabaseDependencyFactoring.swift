@@ -34,6 +34,4 @@ public protocol DatabaseDependencyFactoring: Sendable {
 
     /// The installations this seed owns — see ``CoinageInstallationRepositoryProtocol``.
     func makeInstallationRepository() -> any CoinageInstallationRepositoryProtocol
-    /// The highest allocated item per installation, for the allocators' `max + 1`.
-    func makeKeyIndexQueries() -> any CoinageKeyIndexQuerying
 }

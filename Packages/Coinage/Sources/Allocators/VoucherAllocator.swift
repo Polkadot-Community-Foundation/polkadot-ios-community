@@ -8,27 +8,24 @@ protocol VoucherAllocating: Actor {
     func allocate(exponent: Int16) async throws -> Voucher
 }
 
-/// Hands out the next voucher item in the current installation: `max(item) + 1` over what is stored
-/// there, so a previous installation's vouchers never move this installation's counter. The serial
-/// queue keeps the read-then-save atomic across suspension points; a single shared instance is the
-/// only safe configuration.
+/// Hands out the next voucher item in the current installation from the Keychain-backed counter, so a
+/// previous installation's vouchers never move this installation's counter. The serial queue keeps
+/// the reserve-then-save atomic across suspension points; a single shared instance is the only safe
+/// configuration.
 actor VoucherAllocator: VoucherAllocating {
-    private let installationRepository: any CoinageInstallationRepositoryProtocol
-    private let keyIndexQueries: any CoinageKeyIndexQuerying
+    private let installationStore: any CoinageCurrentInstallationStoring
     private let delayProvider: VoucherDelayProviderProtocol
     private let voucherRepository: AnyDataProviderRepository<Voucher>
     private let keyFactory: any VoucherKeyDeriving
     private let queue = SerialOperationQueue()
 
     init(
-        installationRepository: any CoinageInstallationRepositoryProtocol,
-        keyIndexQueries: any CoinageKeyIndexQuerying,
+        installationStore: any CoinageCurrentInstallationStoring,
         delayProvider: VoucherDelayProviderProtocol,
         voucherRepository: AnyDataProviderRepository<Voucher>,
         keyFactory: any VoucherKeyDeriving
     ) {
-        self.installationRepository = installationRepository
-        self.keyIndexQueries = keyIndexQueries
+        self.installationStore = installationStore
         self.delayProvider = delayProvider
         self.voucherRepository = voucherRepository
         self.keyFactory = keyFactory
@@ -56,10 +53,9 @@ actor VoucherAllocator: VoucherAllocating {
 }
 
 private extension VoucherAllocator {
-    func nextIndex() async throws -> CoinageKeyIndex {
-        let installation = try await installationRepository.getOrCreateCurrent()
-        let item = try await keyIndexQueries.maxVoucherItem(in: installation).map { $0 + 1 } ?? 0
-        return CoinageKeyIndex(installation: installation, item: item)
+    func nextIndex() throws -> CoinageKeyIndex {
+        let installation = try installationStore.getOrCreateCurrent()
+        return try CoinageKeyIndex(installation: installation, item: installationStore.nextVoucherItem())
     }
 }
 

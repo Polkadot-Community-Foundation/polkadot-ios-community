@@ -9,25 +9,22 @@ protocol CoinAllocating: Actor {
     func allocate(exponent: Int16, provenance: CoinProvenance) async throws -> Coin
 }
 
-/// Hands out the next coin item in the current installation: `max(item) + 1` over what is stored there,
-/// so a previous installation's coins never move this installation's counter. The serial queue keeps
-/// the read-then-save atomic across suspension points; a single shared instance is the only safe
+/// Hands out the next coin item in the current installation from the Keychain-backed counter, so a
+/// previous installation's coins never move this installation's counter. The serial queue keeps the
+/// reserve-then-save atomic across suspension points; a single shared instance is the only safe
 /// configuration.
 actor CoinAllocator: CoinAllocating {
-    private let installationRepository: any CoinageInstallationRepositoryProtocol
-    private let keyIndexQueries: any CoinageKeyIndexQuerying
+    private let installationStore: any CoinageCurrentInstallationStoring
     private let coinRepository: AnyDataProviderRepository<Coin>
     private let keyFactory: any CoinKeyDeriving
     private let queue = SerialOperationQueue()
 
     init(
-        installationRepository: any CoinageInstallationRepositoryProtocol,
-        keyIndexQueries: any CoinageKeyIndexQuerying,
+        installationStore: any CoinageCurrentInstallationStoring,
         coinRepository: AnyDataProviderRepository<Coin>,
         keyFactory: any CoinKeyDeriving
     ) {
-        self.installationRepository = installationRepository
-        self.keyIndexQueries = keyIndexQueries
+        self.installationStore = installationStore
         self.coinRepository = coinRepository
         self.keyFactory = keyFactory
     }
@@ -52,9 +49,8 @@ actor CoinAllocator: CoinAllocating {
 }
 
 private extension CoinAllocator {
-    func nextIndex() async throws -> CoinageKeyIndex {
-        let installation = try await installationRepository.getOrCreateCurrent()
-        let item = try await keyIndexQueries.maxCoinItem(in: installation).map { $0 + 1 } ?? 0
-        return CoinageKeyIndex(installation: installation, item: item)
+    func nextIndex() throws -> CoinageKeyIndex {
+        let installation = try installationStore.getOrCreateCurrent()
+        return try CoinageKeyIndex(installation: installation, item: installationStore.nextCoinItem())
     }
 }

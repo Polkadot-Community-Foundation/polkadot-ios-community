@@ -6,14 +6,13 @@ import Operation_iOS
 @testable import Coinage
 
 struct VoucherAllocatorTests {
-    private let queries = StubKeyIndexQueries()
+    private let store = StubCurrentInstallationStore(current: .test)
     private let mockDelay = MockDelayProvider()
     private let allocator: VoucherAllocator
 
     init() {
         allocator = VoucherAllocator(
-            installationRepository: InMemoryInstallations(current: .test),
-            keyIndexQueries: queries,
+            installationStore: store,
             delayProvider: mockDelay,
             voucherRepository: AnyDataProviderRepository(StubRepository<Voucher>()),
             keyFactory: VoucherKeypairFactory(entropyManager: MockEntropyManager(entropy: Data(
@@ -23,9 +22,9 @@ struct VoucherAllocatorTests {
         )
     }
 
-    @Test("an allocated voucher takes the next index of the current installation")
+    @Test("an allocated voucher takes the next item of the current installation")
     func allocateVoucher() async throws {
-        queries.maxVoucherItem = 6
+        store.voucherItem = 7
         mockDelay.interval = 3_600
 
         let startTime = Date()
@@ -33,7 +32,8 @@ struct VoucherAllocatorTests {
         let endTime = Date()
 
         #expect(voucher.derivationIndex == CoinageKeyIndex(installation: .test, item: 7))
-        #expect(queries.voucherQueries == [.test])
+        #expect(store.voucherRequests == 1)
+        #expect(store.coinRequests == 0)
         #expect(voucher.exponent == -2)
         #expect(voucher.recycler == nil)
         #expect(voucher.allocatedAt >= startTime)
@@ -41,18 +41,18 @@ struct VoucherAllocatorTests {
         #expect(voucher.readyAt == voucher.allocatedAt.addingTimeInterval(3_600))
     }
 
-    @Test("an installation with no vouchers yet starts at item zero")
-    func firstItem() async throws {
-        queries.maxVoucherItem = nil
+    @Test("an installation with no vouchers yet starts at item zero and never repeats an item")
+    func consecutiveItems() async throws {
+        let first = try await allocator.allocate(exponent: 0)
+        let second = try await allocator.allocate(exponent: 0)
 
-        let voucher = try await allocator.allocate(exponent: 0)
-
-        #expect(voucher.derivationIndex == CoinageKeyIndex(installation: .test, item: 0))
+        #expect(first.derivationIndex == CoinageKeyIndex(installation: .test, item: 0))
+        #expect(second.derivationIndex == CoinageKeyIndex(installation: .test, item: 1))
     }
 
-    @Test("propagates errors from the index query")
+    @Test("propagates errors from the installation store")
     func allocationFailures() async throws {
-        queries.error = InstallationStubError.unreachable
+        store.error = InstallationStubError.unreachable
 
         await #expect(throws: InstallationStubError.unreachable) {
             try await allocator.allocate(exponent: 0)

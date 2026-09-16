@@ -43,7 +43,7 @@ final class CoinageInstallationRegistrar: CoinageInstallationRegistering, @unche
         var clock: any Clock<Duration> = ContinuousClock()
     }
 
-    private let installationRepository: any CoinageInstallationRepositoryProtocol
+    private let currentInstallationStore: any CoinageCurrentInstallationStoring
     private let configProvider: any AccountDataStoreConfigProviding
     private let engine: any DurableTxServicing
     private let submitter: any InstallationRegistrationSubmitting
@@ -56,7 +56,7 @@ final class CoinageInstallationRegistrar: CoinageInstallationRegistering, @unche
     private let completed = OSAllocatedUnfairLock(initialState: false)
 
     init(
-        installationRepository: any CoinageInstallationRepositoryProtocol,
+        currentInstallationStore: any CoinageCurrentInstallationStoring,
         configProvider: any AccountDataStoreConfigProviding,
         engine: any DurableTxServicing,
         submitter: any InstallationRegistrationSubmitting,
@@ -64,7 +64,7 @@ final class CoinageInstallationRegistrar: CoinageInstallationRegistering, @unche
         timing: Timing = Timing(),
         logger: (any SDKLoggerProtocol)?
     ) {
-        self.installationRepository = installationRepository
+        self.currentInstallationStore = currentInstallationStore
         self.configProvider = configProvider
         self.engine = engine
         self.submitter = submitter
@@ -128,7 +128,7 @@ private extension CoinageInstallationRegistrar {
     func awaitTarget() async -> InstallationRegistrationTarget? {
         while !Task.isCancelled {
             do {
-                let installation = try await installationRepository.getOrCreateCurrent()
+                let installation = try currentInstallationStore.getOrCreateCurrent()
                 if let contract = await configProvider.contractAddress() {
                     return InstallationRegistrationTarget(contract: contract, installation: installation)
                 }

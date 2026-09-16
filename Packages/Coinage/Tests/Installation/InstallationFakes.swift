@@ -11,24 +11,80 @@ import SubstrateSdk
 
 // MARK: - Installations
 
-/// An in-memory ``CoinageInstallationRepositoryProtocol`` with a fixed current installation.
-final class InMemoryInstallations: CoinageInstallationRepositoryProtocol, @unchecked Sendable {
-    private let current: CoinageInstallationId
-    private let state = OSAllocatedUnfairLock<[CoinageInstallationId: PreviousInstallation]>(initialState: [:])
-    private let order = OSAllocatedUnfairLock<[CoinageInstallationId]>(initialState: [])
+/// A fixed current installation whose counters hand out consecutive items from a settable start.
+final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @unchecked Sendable {
+    private struct State {
+        var current: CoinageInstallationId
+        var coinItem: UInt32 = 0
+        var voucherItem: UInt32 = 0
+        var error: Error?
+        var coinRequests = 0
+        var voucherRequests = 0
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
 
     init(current: CoinageInstallationId = .test) {
-        self.current = current
+        state = OSAllocatedUnfairLock(initialState: State(current: current))
     }
+
+    /// The item the next coin allocation receives.
+    var coinItem: UInt32 {
+        get { state.withLock { $0.coinItem } }
+        set { state.withLock { $0.coinItem = newValue } }
+    }
+
+    /// The item the next voucher allocation receives.
+    var voucherItem: UInt32 {
+        get { state.withLock { $0.voucherItem } }
+        set { state.withLock { $0.voucherItem = newValue } }
+    }
+
+    var error: Error? {
+        get { state.withLock { $0.error } }
+        set { state.withLock { $0.error = newValue } }
+    }
+
+    var coinRequests: Int { state.withLock { $0.coinRequests } }
+    var voucherRequests: Int { state.withLock { $0.voucherRequests } }
+
+    func getOrCreateCurrent() throws -> CoinageInstallationId {
+        try state.withLock { state in
+            if let error = state.error { throw error }
+            return state.current
+        }
+    }
+
+    func nextCoinItem() throws -> UInt32 {
+        try state.withLock { state in
+            if let error = state.error { throw error }
+            state.coinRequests += 1
+            defer { state.coinItem += 1 }
+            return state.coinItem
+        }
+    }
+
+    func nextVoucherItem() throws -> UInt32 {
+        try state.withLock { state in
+            if let error = state.error { throw error }
+            state.voucherRequests += 1
+            defer { state.voucherItem += 1 }
+            return state.voucherItem
+        }
+    }
+}
+
+/// An in-memory ``CoinageInstallationRepositoryProtocol`` holding previous installations only.
+final class InMemoryInstallations: CoinageInstallationRepositoryProtocol, @unchecked Sendable {
+    private let state = OSAllocatedUnfairLock<[CoinageInstallationId: PreviousInstallation]>(initialState: [:])
+    private let order = OSAllocatedUnfairLock<[CoinageInstallationId]>(initialState: [])
 
     func previous(_ id: CoinageInstallationId) -> PreviousInstallation? {
         state.withLock { $0[id] }
     }
 
-    func getOrCreateCurrent() async throws -> CoinageInstallationId { current }
-
     func addPrevious(_ installations: [CoinageInstallationId]) async throws {
-        for installation in installations where installation != current {
+        for installation in installations {
             let added = state.withLock { previous -> Bool in
                 guard previous[installation] == nil else { return false }
                 previous[installation] = PreviousInstallation(
