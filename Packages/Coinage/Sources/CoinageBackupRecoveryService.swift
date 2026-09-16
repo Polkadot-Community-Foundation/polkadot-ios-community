@@ -110,7 +110,8 @@ private extension CoinageBackupRecoveryService {
             }
             logger?.info("Recovery finished: \(recovered.describe()) across \(pending.count) installation(s)")
 
-            // Newly found balance is worth another look, even if the last one was acknowledged.
+            // An installation scanned for the first time is worth another look, even if the last one
+            // was acknowledged.
             await completedStore.setDeepRecoveryCompleted(false)
         }
 

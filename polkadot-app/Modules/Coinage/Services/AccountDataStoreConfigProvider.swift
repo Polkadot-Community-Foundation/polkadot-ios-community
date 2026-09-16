@@ -8,16 +8,25 @@ final class AccountDataStoreConfigProvider: AccountDataStoreConfigProviding, @un
     private static let addressSize = 20
 
     private let remoteConfig: @Sendable () -> RemoteAppConfig?
+    private let logger: LoggerProtocol
 
-    init(remoteConfig: @escaping @Sendable () -> RemoteAppConfig? = { AppConfigProvider.shared.getRemoteConfig() }) {
+    init(
+        remoteConfig: @escaping @Sendable () -> RemoteAppConfig? = { AppConfigProvider.shared.getRemoteConfig() },
+        logger: LoggerProtocol = Logger.shared
+    ) {
         self.remoteConfig = remoteConfig
+        self.logger = logger
     }
 
     func contractAddress() async -> Data? {
-        guard let hex = remoteConfig()?.accountDataStoreContract,
-              let address = try? Data(hexString: hex),
-              address.count == Self.addressSize
-        else { return nil }
+        guard let hex = remoteConfig()?.accountDataStoreContract else { return nil }
+
+        // A delivered address that cannot be used is a config mistake, not a payload still on its way:
+        // both stall registration, and only the log tells them apart.
+        guard let address = try? Data(hexString: hex), address.count == Self.addressSize else {
+            logger.error("Remote config carries an unusable AccountDataStore contract address: \(hex)")
+            return nil
+        }
         return address
     }
 }

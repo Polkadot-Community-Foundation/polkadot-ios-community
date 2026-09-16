@@ -268,15 +268,13 @@ final class FakeRegistrationSubmitter: InstallationRegistrationSubmitting, @unch
     private let state = OSAllocatedUnfairLock<(attempts: [InstallationRegistrationTarget], failNext: Int)>(
         initialState: ([], 0)
     )
-    private let gate = OSAllocatedUnfairLock<AsyncStream<Void>.Continuation?>(initialState: nil)
+    private let gate: AsyncStream<Void>.Continuation
     private let gateStream: AsyncStream<Void>
     private var gated = false
 
     init(engine: FakeRegistrationEngine) {
         self.engine = engine
-        var continuation: AsyncStream<Void>.Continuation?
-        gateStream = AsyncStream<Void> { continuation = $0 }
-        gate.withLock { $0 = continuation }
+        (gateStream, gate) = AsyncStream<Void>.makeStream()
     }
 
     var attempts: [InstallationRegistrationTarget] { state.withLock { $0.attempts } }
@@ -292,7 +290,7 @@ final class FakeRegistrationSubmitter: InstallationRegistrationSubmitting, @unch
 
     func openGate() {
         gated = false
-        gate.withLock { $0?.yield(()) }
+        gate.yield(())
     }
 
     func submitAttempt(target: InstallationRegistrationTarget) async throws -> DurableTxId {

@@ -41,6 +41,9 @@ public protocol CoinageInstallationRepositoryProtocol: Sendable {
 }
 
 /// Reads the highest item allocated under an installation, so an allocator can hand out the next one.
+///
+/// This is the whole record of what an installation has handed out: coin and voucher rows are marked,
+/// never deleted, and `max + 1` would re-issue a key already in someone else's hands if one ever were.
 public protocol CoinageKeyIndexQuerying: Sendable {
     func maxCoinItem(in installation: CoinageInstallationId) async throws -> UInt32?
     func maxVoucherItem(in installation: CoinageInstallationId) async throws -> UInt32?

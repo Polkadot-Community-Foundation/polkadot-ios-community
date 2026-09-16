@@ -55,4 +55,11 @@ struct AccountDataStoreAbiTests {
         let decoded = try AccountDataStoreAbi.decodeGetInstallations(output: Data(hexString: Self.returnedEmpty))
         #expect(decoded.isEmpty)
     }
+
+    @Test("an unreadable answer fails instead of passing for an empty list")
+    func decodeGarbage() {
+        #expect(throws: AccountDataStoreAbiError.self) {
+            try AccountDataStoreAbi.decodeGetInstallations(output: Data([0x01, 0x02, 0x03]))
+        }
+    }
 }

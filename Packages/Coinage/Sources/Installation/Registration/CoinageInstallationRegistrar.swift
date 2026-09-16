@@ -102,15 +102,20 @@ private extension CoinageInstallationRegistrar {
         reportCompleted()
     }
 
+    /// Under the lock, so the overdue timer cannot overwrite a `completed` that lands between its check
+    /// and its send — that would leave the warning up for a registration that has already finalized.
     func reportDelayedUnlessCompleted() {
-        let stillRegistering = completed.withLock { !$0 }
-        guard stillRegistering else { return }
-        send(.delayed)
+        completed.withLock { completed in
+            guard !completed else { return }
+            send(.delayed)
+        }
     }
 
     func reportCompleted() {
-        completed.withLock { $0 = true }
-        send(.completed)
+        completed.withLock { completed in
+            completed = true
+            send(.completed)
+        }
     }
 
     func send(_ newStatus: CoinageAccountBackupStatus) {

@@ -35,7 +35,7 @@ final class AccountDataStoreRepository: AccountDataStoreRepositoryProtocol {
         let account = try await accountKeys.account()
         let input = try AccountDataStoreAbi.encodeGetInstallations(owner: account.evmAccountId)
         let output = try await reviveApi.callReadOnly(contract: contract, input: input, at: blockHash)
-        let records = AccountDataStoreAbi.decodeGetInstallations(output: output)
+        let records = try AccountDataStoreAbi.decodeGetInstallations(output: output)
 
         let opened = Set(records.compactMap { InstallationRecordCipher.open($0, key: account.encryptionKey) })
         if opened.count < records.count {

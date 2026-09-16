@@ -4,6 +4,7 @@ import Web3Core
 public enum AccountDataStoreAbiError: Error {
     case encodingFailed(function: String)
     case invalidAddress(Data)
+    case decodingFailed(function: String)
 }
 
 /// ABI of the `AccountDataStore` contract (`account-data-store-contract`, `abi/AccountDataStore.json`).
@@ -37,9 +38,16 @@ public enum AccountDataStoreAbi {
         return try encode(getFunction, parameters: [address])
     }
 
-    public static func decodeGetInstallations(output: Data) -> [Data] {
-        guard let decoded = ABI.Element.function(getFunction).decodeReturnData(output) else { return [] }
-        return decoded["0"] as? [Data] ?? []
+    /// Throws rather than reporting an empty list: an unreadable answer is not evidence that the seed
+    /// has no installations registered, and treating it as one would skip recovery and re-register.
+    public static func decodeGetInstallations(output: Data) throws -> [Data] {
+        guard
+            let decoded = ABI.Element.function(getFunction).decodeReturnData(output),
+            let records = decoded["0"] as? [Data]
+        else {
+            throw AccountDataStoreAbiError.decodingFailed(function: getFunction.name ?? "unknown")
+        }
+        return records
     }
 }
 

@@ -1,6 +1,13 @@
 import Foundation
 import SDKLogger
 
+enum InstallationAssetScanError: Error, Equatable {
+    /// The chain read came back with a different number of answers than keys asked about, so no answer
+    /// can be tied to the key it belongs to. Failing the batch leaves the scan for the next launch;
+    /// pairing them up anyway would drop or misattribute recoverable balance.
+    case misalignedBatch(asked: Int, answered: Int)
+}
+
 /// Reads one batch of a previous installation's subtree from chain: the coins and vouchers that exist
 /// there, keyed to the indices they were derived from.
 protocol InstallationAssetScanning: Sendable {
@@ -34,6 +41,7 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
         guard !indexedKeys.isEmpty else { return [] }
 
         let onChain = try await coinOnChainQuery.fetchCoins(for: indexedKeys.map(\.publicKey), atBlockHash: nil)
+        try Self.requireAligned(asked: indexedKeys.count, answered: onChain.count)
 
         return zip(indexedKeys, onChain).compactMap { key, info -> Coin? in
             guard let info else { return nil }
@@ -58,6 +66,7 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
         guard !indices.isEmpty else { return [] }
 
         let onChain = try await voucherOnChainQuery.fetchVouchers(for: indices)
+        try Self.requireAligned(asked: indices.count, answered: onChain.count)
 
         return zip(indices, onChain).compactMap { index, info -> Voucher? in
             guard let info, let state = Self.recoverableState(of: info) else { return nil }
@@ -76,6 +85,12 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
 }
 
 private extension InstallationAssetScanner {
+    static func requireAligned(asked: Int, answered: Int) throws {
+        guard asked == answered else {
+            throw InstallationAssetScanError.misalignedBatch(asked: asked, answered: answered)
+        }
+    }
+
     static func indices(
         of installation: CoinageInstallationId,
         from startIndex: UInt32,

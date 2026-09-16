@@ -285,6 +285,10 @@
         <fetchIndex name="byCoinPublicKey">
             <fetchIndexElement property="publicKey" type="Binary" order="ascending"/>
         </fetchIndex>
+        <fetchIndex name="byCoinInstallationAndIndex">
+            <fetchIndexElement property="installationId" type="Binary" order="ascending"/>
+            <fetchIndexElement property="derivationIndex" type="Binary" order="descending"/>
+        </fetchIndex>
     </entity>
     <entity name="CDVoucher" representedClassName="CDVoucher" syncable="YES" codeGenerationType="class">
         <attribute name="allocatedAt" attributeType="Date" usesScalarValueType="NO"/>
@@ -305,6 +309,10 @@
         <relationship name="coinageTxOutput" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCoinageTxOutput" inverseName="voucher" inverseEntity="CDCoinageTxOutput"/>
         <fetchIndex name="byVoucherPublicKey">
             <fetchIndexElement property="publicKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byVoucherInstallationAndIndex">
+            <fetchIndexElement property="installationId" type="Binary" order="ascending"/>
+            <fetchIndexElement property="derivationIndex" type="Binary" order="descending"/>
         </fetchIndex>
     </entity>
     <entity name="CDDurableTx" representedClassName="CDDurableTx" syncable="YES" codeGenerationType="class" elementID="CDCoinageTxEntry">

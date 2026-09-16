@@ -1,6 +1,6 @@
 import BigInt
 import Foundation
-import SubstrateSdk
+@preconcurrency import SubstrateSdk
 
 /// What a contract call would do if `origin` sent it now: its output and the limits a real call must
 /// declare.
