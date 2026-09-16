@@ -32,6 +32,11 @@ on:
     # gate at all on the one lane that can actually validate them.
     branches:
       - main
+      # `develop` mirrors upstream's integration branch. Without it a PR targeting develop
+      # would get NO fork gate at all: upstream's pr.yml has no branch filter so it runs and
+      # fails (Parity Match PAT + a plist pinned to io.parity.polkadotapp.develop), while this
+      # lane - the only one that can actually validate a PCF build - would be skipped.
+      - develop
       - 'chore/sync-upstream-**'
 
 concurrency:
