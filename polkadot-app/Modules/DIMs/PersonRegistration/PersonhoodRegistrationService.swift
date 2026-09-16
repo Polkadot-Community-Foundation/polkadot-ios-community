@@ -9,6 +9,7 @@ import CommonService
 import KeyDerivation
 import SubstrateOperation
 import ChainRegistry
+import Individuality
 import Products
 
 protocol PersonhoodRegistrationServicing: ApplicationServiceProtocol,
@@ -72,6 +73,10 @@ final class PersonhoodRegistrationService: @unchecked Sendable {
     }
 
     private(set) var extrinsicSubmissionMonitor: ExtrinsicSubmitMonitorFactoryProtocol?
+
+    /// Ring keys page size, a runtime constant read once. Until it arrives a member's page-local ring
+    /// position cannot be compared against the ring-wide included count, so alias submission waits.
+    private(set) var ringKeysPageSize: Int?
 
     init(
         chain: ChainProtocol,
@@ -158,6 +163,7 @@ final class PersonhoodRegistrationService: @unchecked Sendable {
 
 extension PersonhoodRegistrationService: PersonhoodRegistrationServicing {
     func setup() {
+        fetchRingKeysPageSize()
         applyState()
     }
 
@@ -196,6 +202,26 @@ extension PersonhoodRegistrationService: PersonhoodRegistrationSyncObserver {
 }
 
 private extension PersonhoodRegistrationService {
+    func fetchRingKeysPageSize() {
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let runtimeProvider = try chainRegistry.getRuntimeProviderOrError(for: chain.chainId)
+                let pageSize = try await runtimeProvider.fetchRingKeysPageSize()
+
+                syncQueue.async { [weak self] in
+                    self?.ringKeysPageSize = pageSize
+                    self?.applyState()
+                }
+            } catch {
+                logger.error("Can't fetch ring keys page size: \(error)")
+            }
+        }
+    }
+
     func initializeRemoteStateIfPossible(with change: PersonhoodRegistrationSyncChange) {
         guard
             case let .defined(proofOfInkCandidate) = change.proofOfInkCandidate,
