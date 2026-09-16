@@ -22,9 +22,9 @@ struct ReviveContractResult: Decodable {
 /// `gas_limit`, and both runtimes are live, so either spelling is accepted.
 struct ReviveDryRunResult: Decodable {
     enum CodingKeys: String, CodingKey {
-        case weightRequired = "weight_required"
-        case gasRequired = "gas_required"
-        case storageDeposit = "storage_deposit"
+        case weightRequired
+        case gasRequired
+        case storageDeposit
         case result
     }
 

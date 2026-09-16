@@ -224,10 +224,6 @@ private extension ServiceCoordinator {
             logger.error("Installation registration: Asset Hub \(assetHubChainId) is not in the chain registry")
             return nil
         }
-        guard let operationFactory = try? extrinsicMonitorFacade.createOperationFactory(chain: assetHub) else {
-            logger.error("Installation registration: no extrinsic operation factory for Asset Hub")
-            return nil
-        }
         let pgasProvisioner = PGASAccountProvisioner.forDataStoreAccount(
             allowanceManager: allowanceManager,
             chainRegistry: chainRegistry
@@ -245,7 +241,11 @@ private extension ServiceCoordinator {
             reviveApi: CoinageReviveContractApi(chainId: assetHubChainId, chainRegistry: chainRegistry),
             configProvider: AccountDataStoreConfigProvider(),
             pgasProvisioner: pgasProvisioner,
-            feeEstimator: CoinageRegistrationFeeEstimator(operationFactory: operationFactory),
+            feeEstimator: CoinageRegistrationFeeEstimator(
+                chain: assetHub,
+                extrinsicFacade: extrinsicMonitorFacade,
+                versionProvider: ExtrinsicVersionProvider()
+            ),
             deepRecoveryCompletedStore: CoinageDeepRecoveryCompletedStore()
         )
     }
