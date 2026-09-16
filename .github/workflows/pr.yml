@@ -13,7 +13,8 @@ permissions:
   pull-requests: write
 
 env:
-  IOS_BUNDLE_ID: "io.parity.polkadotapp.develop"
+  # Matches the DevCI pinning in polkadot-app/Configs/polkadot-app.devci.xcconfig.
+  IOS_BUNDLE_ID: "io.pcf.polkadotapp"
   IOS_EXTENSION_BUNDLE_ID: "io.parity.polkadotapp.develop.NotificationServiceExtension"
   PROVISIONING_PROFILE_SPECIFIER: "match Development io.parity.polkadotapp.develop"
   EXTENSION_PROVISIONING_PROFILE_SPECIFIER: "match Development io.parity.polkadotapp.develop.NotificationServiceExtension"
@@ -44,91 +45,13 @@ jobs:
             const skip = pr ? labels.includes('skip-ci') : false;
             core.setOutput('skip', skip.toString());
 
-  build:
-    needs: check-skip-label
-    if: needs.check-skip-label.outputs.skip == 'false' && !startsWith(github.head_ref, 'release/')
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v6
 
-      - name: Setup iOS Environment
-        uses: ./.github/actions/install
-        with:
-          match_auth_required: "true"
-          match_repository_pat: ${{ secrets.FASTLANE_RO_PAT }}
-
-      - name: Configure Google services
-        uses: ./.github/actions/configure-google-services
-        with:
-          google_service_info_base64: ${{ secrets.GOOGLE_SERVICE_INFO_DEV_BASE64 }}
-          expected_bundle_id: ${{ env.IOS_BUNDLE_ID }}
-
-      - name: Configure secrets
-        uses: ./.github/actions/configure-secrets
-        with:
-          sentry_dsn: ${{ secrets.SENTRY_DSN }}
-          meld_basic_auth_token: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
-
-      - name: Build app
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        run: |
-          # Pass debug flag to fastlane if DEBUG_CI is enabled
-          if [ "${{ env.DEBUG_CI }}" = "true" ]; then
-            echo "🔍 Building app in debug mode..."
-            bundle exec fastlane build_app_ci debug:true
-          else
-            bundle exec fastlane build_app_ci
-          fi
-
-      # Warning ratchet: extract warnings from the .xcresult and compare against
-      # the committed baseline. Fails the PR on any newly-introduced warning.
-      - name: Warning ratchet
-        id: ratchet
-        continue-on-error: true
-        run: |
-          Runscripts/extract_xcresult.sh \
-            --out current_warnings.json \
-            --baseline build-logs/warnings.json \
-            --rdjson warnings.rdjson
-
-      - name: Setup reviewdog
-        if: always()
-        uses: reviewdog/action-setup@v1
-
-      - name: Annotate new warnings (reviewdog)
-        if: always() && hashFiles('warnings.rdjson') != ''
-        env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          reviewdog -f=rdjson -name="warning-ratchet" \
-            -reporter=github-pr-review -fail-level=none < warnings.rdjson
-
-      - name: Annotate out-of-diff warnings (reviewdog)
-        if: always() && hashFiles('warnings.rdjson') != ''
-        env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          reviewdog -f=rdjson -name="warning-ratchet-out-of-diff" \
-            -reporter=github-check -filter-mode=nofilter -fail-level=none < warnings.rdjson
-
-      - name: Fail on new warnings
-        if: always() && steps.ratchet.outcome == 'failure'
-        run: |
-          echo "New build warnings introduced. See the annotations above."
-          echo "Fix them, or regenerate & commit build-logs/warnings.json if intentional."
-          exit 1
-
-      # Upload build artifacts for debugging - only when DEBUG_CI is enabled
-      - name: Upload build artifacts
-        if: env.DEBUG_CI == 'true' && (failure() || success())
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-artifacts-${{ github.run_number }}
-          path: |
-            ./fastlane/build_logs/
-          retention-days: 3
+  # ⭐ FORK NOTE — upstream's `build` job was REMOVED here. It runs fastlane Match against
+  # paritytech/fastlane-polkadotapp-develop and needs secrets.FASTLANE_RO_PAT, a Parity-owned
+  # credential this fork cannot hold, so it failed in ~13s on every PR and made this whole lane
+  # permanently red. Compiling is already covered by build-dev.yml, which builds the Dev
+  # configuration unsigned. The warning-ratchet steps went with it; they never ran here either.
+  # This leaves pr.yml as the fork's TEST lane, which can actually go green.
 
   test:
     needs: check-skip-label
@@ -143,7 +66,7 @@ jobs:
       - name: Configure Google services
         uses: ./.github/actions/configure-google-services
         with:
-          google_service_info_base64: ${{ secrets.GOOGLE_SERVICE_INFO_DEV_BASE64 }}
+          google_service_info_base64: ${{ secrets.GOOGLE_SERVICE_INFO_DEV_BASE64 || secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
           expected_bundle_id: ${{ env.IOS_BUNDLE_ID }}
 
       - name: Configure secrets
