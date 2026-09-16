@@ -29,9 +29,10 @@ name: Build (Production, unsigned)
 #
 # Lane isolation (must be runnable at the same time as the devnet lane):
 #   concurrency group  build-production-*        (devnet: build-dev-*, release-dev)
-#   artifact name      polkadot-ios-production-unsigned
-#                                                (devnet: polkadot-ios-dev, dev-icon-evidence,
-#                                                 storage-migration-test-results)
+#   output             private bucket, prefix ios/   (devnet: Actions artifacts polkadot-ios-dev,
+#                                                 dev-icon-evidence, storage-migration-test-results)
+#                      Never an Actions artifact: this repository is public and its artifacts are
+#                      downloadable by any signed-in GitHub user.
 #   configuration      Release                   (devnet: Dev)
 #   environment        production                (devnet declares only tester-distribution, and
 #                                                 only on its `distribute` job)
@@ -96,9 +97,28 @@ jobs:
     # without an approval click and therefore in parallel with a devnet build. Key material
     # lives in `production-distribution`, which the `sign` job declares.
     environment: production
+    permissions:
+      contents: read
+      id-token: write
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
     steps:
+      # The build and its evidence go to a private bucket. Refuse to build without one.
+      - name: Require the private output configuration
+        env:
+          BUILD_BUCKET: ${{ vars.BUILD_BUCKET }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          missing=0
+          for name in BUILD_BUCKET GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set in the production environment; refusing to build without a private output"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       # Fails BEFORE the expensive build, so nobody waits 40 minutes to learn PCF cannot sign.
       # When PCF-29 lands: delete this step, and the `sign` job below becomes reachable.
       - name: Refuse a production-signed build until PCF-29 lands
@@ -303,16 +323,36 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$app" production-evidence/polkadot-app-Release-unsigned.zip
           ls -la production-evidence/
 
-      # upload-artifact ONLY. No softprops/action-gh-release, no upload_to_testflight, no
-      # firebase appdistribution:distribute, no aws s3 cp. Nothing leaves this run.
-      - name: Upload the unsigned production build
+      # Private bucket ONLY (keyless sign-in, create and read under `ios/` only). No Actions
+      # artifact, no softprops/action-gh-release, no upload_to_testflight, no firebase
+      # appdistribution:distribute, no aws s3 cp.
+      - uses: google-github-actions/auth@v3
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: polkadot-ios-production-unsigned
-          path: production-evidence
-          retention-days: 14
-          if-no-files-found: warn
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        if: always()
+
+      - name: Upload the unsigned production build to the private bucket
+        if: always()
+        env:
+          BUILD_BUCKET: ${{ vars.BUILD_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ ! -d production-evidence ] || [ -z "$(ls -A production-evidence)" ]; then
+            echo "::warning::no production evidence was produced"
+            exit 0
+          fi
+          PREFIX="ios/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gcloud storage cp --if-generation-match=0 production-evidence/* "gs://${BUILD_BUCKET}/${PREFIX}/"
+          {
+            echo "### Unsigned build stored privately"
+            echo '```'
+            echo "gs://${BUILD_BUCKET}/${PREFIX}/"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Where real signing will live. UNREACHABLE TODAY: the guard in `build` fails the run first,
   # so this job is never scheduled and nobody is asked to approve a job that can only fail.
