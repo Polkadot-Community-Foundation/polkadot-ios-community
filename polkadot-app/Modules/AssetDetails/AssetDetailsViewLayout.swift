@@ -7,40 +7,31 @@ struct AssetDetailsView: View {
     @State var viewModel: AssetDetailsViewModelProtocol
     var isExpanded: Bool = false
     var onCardTapped: () -> Void
+    var overscroll: CGFloat = 0
     var onCollapse: (() -> Void)?
 
     init(
         viewModel: AssetDetailsViewModelProtocol = AssetDetailsViewModel(),
         isExpanded: Bool = false,
         onCardTapped: @escaping () -> Void,
+        overscroll: CGFloat = 0,
         onCollapse: (() -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.isExpanded = isExpanded
         self.onCardTapped = onCardTapped
+        self.overscroll = overscroll
         self.onCollapse = onCollapse
     }
 
     var body: some View {
         DSExpandableCardLayout(
             isExpanded: isExpanded,
+            overscroll: overscroll,
             onCollapse: onCollapse,
             card: { headerCard },
             details: { expandedBody }
         )
-        .safeAreaInset(edge: .bottom) {
-            if !viewModel.fundingStates.isEmpty {
-                AssetFundingStatusView(
-                    states: $viewModel.fundingStates,
-                    isExpanded: $viewModel.isFundingExpanded,
-                    configuration: .fundingDigitalDollarConfiguration(
-                        onCompletedAction: viewModel.onFundingCompleted,
-                        onFailedAction: viewModel.onFundingFailed
-                    )
-                )
-                .frame(maxWidth: .infinity)
-            }
-        }
     }
 
     @ViewBuilder
@@ -76,12 +67,6 @@ struct AssetDetailsView: View {
                 testnetTopUpButton()
             #endif
         }
-        // The expanded card is sized to the whole screen, so the bottom of its content lands under
-        // the tab bar chrome, which is an overlay: content there is drawn but cannot be tapped. The
-        // chrome's inset does not reach this hierarchy, so clear it explicitly from the height the
-        // bar itself publishes, on top of the device's own inset.
-        .safeAreaPadding(.bottom)
-        .padding(.bottom, DSTabBarView.preferredHeight())
     }
 
     private func balanceCard(
@@ -168,6 +153,25 @@ struct AssetDetailsView: View {
             .disabled(viewModel.isTestnetTopUpInProgress)
         }
     #endif
+}
+
+/// Funding progress banner. Pinned by the wallet host while the asset card is expanded.
+struct AssetDetailsFundingBar: View {
+    @Bindable var viewModel: AssetDetailsViewModel
+
+    var body: some View {
+        if !viewModel.fundingStates.isEmpty {
+            AssetFundingStatusView(
+                states: $viewModel.fundingStates,
+                isExpanded: $viewModel.isFundingExpanded,
+                configuration: .fundingDigitalDollarConfiguration(
+                    onCompletedAction: viewModel.onFundingCompleted,
+                    onFailedAction: viewModel.onFundingFailed
+                )
+            )
+            .frame(maxWidth: .infinity)
+        }
+    }
 }
 
 private struct CoinageBalanceBreakdownView: View {
