@@ -54,6 +54,7 @@ extension SearchAccountInteractor: SearchAccountInteractorInputProtocol {
     func setup() {
         accountSearching.setup()
         subscribeToSourcesChanged()
+        loadIdleState()
     }
 
     func searchAccount(for input: String?) {
