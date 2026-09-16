@@ -2,6 +2,7 @@ import BigInt
 import DurableTransactions
 import ExtrinsicService
 import Foundation
+import KeyDerivation
 import Individuality
 import SDKLogger
 import SubstrateSdk
@@ -155,7 +156,8 @@ private extension InstallationRegistrationSubmitter {
     }
 
     func origin(for call: InstallationRegistrationCall) async throws -> any ExtrinsicOriginDefining {
-        let wallet = try CoinDerivedWallet(privateKey: call.account.privateKey, publicKey: call.account.publicKey)
+        let privateKey = call.account.privateKey
+        let wallet = DynamicDerivedWallet(secretKeyProvider: { privateKey })
         return try await originFactory.createSignedOrigin(for: wallet, chainId: chainId)
     }
 

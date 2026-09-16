@@ -30,11 +30,23 @@ struct CoinageBackupRecoveryServiceTests {
         )
     }
 
+    @Test("start runs the launch pass once and ignores later calls")
+    func startRunsOnce() async throws {
+        dataStore.listed([Self.previous])
+
+        await service.start()
+        await service.start()
+        await service.awaitLaunchPass()
+
+        #expect(dataStore.reads == 1)
+        #expect(scanner.scannedInstallations == [Self.previous])
+    }
+
     @Test("the current installation is never scanned")
     func currentNeverScanned() async throws {
         dataStore.listed([.test, Self.previous])
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(scanner.scannedInstallations == [Self.previous])
     }
@@ -44,7 +56,7 @@ struct CoinageBackupRecoveryServiceTests {
         dataStore.listed([Self.previous])
         scanner.coinsOnChain = [CoinageKeyIndex(installation: Self.previous, item: 1_234)]
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(assetStore.savedCoins.map(\.derivationIndex) == [CoinageKeyIndex(
             installation: Self.previous,
@@ -58,7 +70,7 @@ struct CoinageBackupRecoveryServiceTests {
         // Non-empty batches 0, 3 and 6; with a counter that never reset, batch 6 would be missed.
         scanner.coinsOnChain = Set([10, 1_600, 3_100].map { CoinageKeyIndex(installation: Self.previous, item: $0) })
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(assetStore.savedCoins.map(\.derivationIndex.item) == [10, 1_600, 3_100])
         let expectedNext = 3_100 / Self.batchSize * Self.batchSize + (Self.emptyBatches + 1) * Self.batchSize
@@ -68,10 +80,10 @@ struct CoinageBackupRecoveryServiceTests {
     @Test("a scanned installation is not scanned again on the next launch")
     func scannedOnce() async throws {
         dataStore.listed([Self.previous])
-        await service.start()
+        await service.runLaunchPass()
         scanner.clearScanned()
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(scanner.scannedInstallations.isEmpty)
     }
@@ -79,11 +91,11 @@ struct CoinageBackupRecoveryServiceTests {
     @Test("an installation registered after the last launch is scanned on this one")
     func newInstallationScanned() async throws {
         dataStore.listed([Self.previous])
-        await service.start()
+        await service.runLaunchPass()
         scanner.clearScanned()
 
         dataStore.listed([Self.previous, Self.anotherPrevious])
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(scanner.scannedInstallations == [Self.anotherPrevious])
     }
@@ -93,7 +105,7 @@ struct CoinageBackupRecoveryServiceTests {
         try await installations.addPrevious([Self.previous])
         dataStore.failing()
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(scanner.scannedInstallations == [Self.previous])
     }
@@ -102,11 +114,11 @@ struct CoinageBackupRecoveryServiceTests {
     func failedScanRetried() async throws {
         dataStore.listed([Self.previous])
         scanner.failing = true
-        await service.start()
+        await service.runLaunchPass()
         #expect(installations.previous(Self.previous)?.initialScanCompleted == false)
 
         scanner.failing = false
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(installations.previous(Self.previous)?.initialScanCompleted == true)
     }
@@ -115,7 +127,7 @@ struct CoinageBackupRecoveryServiceTests {
     func asksToConfirm() async throws {
         dataStore.listed([Self.previous])
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(try await progress() == .initial(.completed))
     }
@@ -124,7 +136,7 @@ struct CoinageBackupRecoveryServiceTests {
     func nothingToConfirm() async throws {
         dataStore.listed([.test])
 
-        await service.start()
+        await service.runLaunchPass()
 
         #expect(try await progress() == .completed)
         #expect(assetStore.savedCoins.isEmpty)
@@ -133,7 +145,7 @@ struct CoinageBackupRecoveryServiceTests {
     @Test("deep search continues every previous installation from where it stopped")
     func deepSearch() async throws {
         dataStore.listed([Self.previous, Self.anotherPrevious])
-        await service.start()
+        await service.runLaunchPass()
         let resumeFrom = try #require(installations.previous(Self.previous)?.coinScanNextIndex)
 
         await service.deepSearch()
@@ -147,13 +159,13 @@ struct CoinageBackupRecoveryServiceTests {
     @Test("accepting the balance completes recovery until a new installation is found")
     func markAsCompleted() async throws {
         dataStore.listed([Self.previous])
-        await service.start()
+        await service.runLaunchPass()
 
         await service.markAsCompleted()
         #expect(try await progress() == .completed)
 
         dataStore.listed([Self.previous, Self.anotherPrevious])
-        await service.start()
+        await service.runLaunchPass()
         #expect(try await progress() == .initial(.completed))
     }
 }

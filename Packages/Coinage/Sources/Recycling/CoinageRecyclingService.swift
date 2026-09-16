@@ -161,10 +161,8 @@ private extension CoinageRecyclingService {
             memberKey: memberKey,
             proofOfOwnership: proof
         )
-        let coinWallet = try CoinDerivedWallet(
-            privateKey: coinKeypairFactory.derivePrivateKey(for: coin),
-            publicKey: coinPublicKey
-        )
+        let coinPrivateKey = try coinKeypairFactory.derivePrivateKey(for: coin)
+        let coinWallet = DynamicDerivedWallet(secretKeyProvider: { coinPrivateKey })
         let origin = try originFactory.createAsCoinOrigin(for: coinWallet)
         let builder: ExtrinsicBuilderClosure = { try $0.adding(call: call.callAsFunction()) }
 

@@ -8,8 +8,9 @@ import SubstrateSdk
 public protocol CoinageBackupRecoveryServicing: Sendable {
     func subscribeProgress() -> AnyAsyncSequence<BackupProgress>
 
-    /// The launch pass: lists the seed's installations in the contract and gap-scans every previous one
-    /// whose initial scan has not completed.
+    /// Starts the launch pass in the background, once per process; later calls are no-ops. The pass lists
+    /// the seed's installations in the contract and gap-scans every previous one whose initial scan has
+    /// not completed.
     func start() async
 
     /// Another look, `deepSearchBatchCount` batches past every previous installation's cursor.
@@ -42,6 +43,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     private let logger: (any SDKLoggerProtocol)?
 
     private nonisolated let progress = AsyncCurrentValueSubject<BackupProgress>(.unknown)
+    private var launchPass: Task<Void, Never>?
 
     init(
         currentInstallationStore: any CoinageCurrentInstallationStoring,
@@ -67,8 +69,18 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         progress.eraseToAnyAsyncSequence()
     }
 
-    func start() async {
+    func start() {
+        guard launchPass == nil else { return }
+        launchPass = Task { await self.runLaunchPass() }
+    }
+
+    func runLaunchPass() async {
         await recoverNewInstallations()
+    }
+
+    /// Waits for the launch pass `start()` kicked off, if any.
+    func awaitLaunchPass() async {
+        await launchPass?.value
     }
 
     func deepSearch() async {

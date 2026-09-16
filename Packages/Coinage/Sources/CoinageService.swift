@@ -133,7 +133,6 @@ public actor CoinageService {
     private let voucherLocationService: VoucherLocationService
     private let recoveryService: any CoinageBackupRecoveryServicing
     private let installationRegistrar: any CoinageInstallationRegistering
-    private var backupRecoveryTask: Task<Void, Never>?
     public nonisolated let recyclingService: any CoinageRecyclingServicing
 
     // Recycling strategy evaluation — the evaluator is built lazily once the context resolves.
@@ -307,7 +306,7 @@ extension CoinageService: CoinageServicing {
             // is decided against a mark that is about to disappear.
             try await txService.releaseUncommittedHandoffs()
 
-            startInstallationBackup()
+            await startInstallationBackup()
 
         } catch {
             // Reset so a subsequent setup(with:) call triggers a fresh fetch
@@ -463,15 +462,11 @@ extension CoinageService: CoinageServicing {
 // MARK: - Installation backup
 
 private extension CoinageService {
-    /// Registers this installation and recovers the previous ones, once per process: `setup(with:)`
-    /// may run again to update the asset precision, and neither run should start over.
-    func startInstallationBackup() {
+    /// Registers this installation and recovers the previous ones. `setup(with:)` may run again to update
+    /// the asset precision; both services run once per process and ignore later starts.
+    func startInstallationBackup() async {
         installationRegistrar.start()
-
-        guard backupRecoveryTask == nil else { return }
-        backupRecoveryTask = Task { [recoveryService] in
-            await recoveryService.start()
-        }
+        await recoveryService.start()
     }
 }
 
