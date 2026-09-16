@@ -136,6 +136,27 @@ struct AccountSearchProviderTests {
         #expect(remoteSearch.receivedSearchQuery == "alice")
     }
 
+    @Test("Interior .dot is preserved when normalizing the query")
+    func trimmingDotPreservesInteriorMatch() async throws {
+        let localSearch = MockLocalContactSearch()
+        let remoteSearch = MockRemoteContactOperationFactory()
+        let ownAccountId = try Data.randomOrError(of: 32)
+
+        let provider: AccountSearchProvider<Int> = AccountSearchProvider(
+            recentRowsStream: { AsyncStream<[SearchRow<Int>]> { _ in }.eraseToAnyAsyncSequence() },
+            localContactSearch: localSearch,
+            remoteContactSearch: remoteSearch,
+            ownAccountId: ownAccountId,
+            logger: MockLogger()
+        )
+        provider.setup()
+
+        _ = try await provider.search(query: "alice.dotty")
+
+        #expect(localSearch.receivedUsernamePrefix == "alice.dotty")
+        #expect(remoteSearch.receivedSearchQuery == "alice.dotty")
+    }
+
     // MARK: - Filtering: blocked contacts
 
     @Test("Blocked contacts are filtered from results")

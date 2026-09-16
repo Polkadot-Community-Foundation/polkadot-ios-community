@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 import AsyncExtensions
 import StructuredConcurrency
 import os

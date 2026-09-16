@@ -161,9 +161,11 @@ private extension AccountSearchProvider {
 
     func fetchGlobalContacts(query: String, accountId: AccountId?) async throws -> [SearchRow<MatchPayload>] {
         do {
-            if let accountId, let account = try? await remoteContactSearch.fetch(by: accountId) {
+            if let accountId {
+                let account = try await remoteContactSearch.fetch(by: accountId)
                 try Task.checkCancellation()
-                return [makeRemoteRow(contact: account)]
+
+                return account.map { [makeRemoteRow(contact: $0)] } ?? []
             }
 
             let contacts = try await remoteContactSearch.search(by: query).asyncExecute()
