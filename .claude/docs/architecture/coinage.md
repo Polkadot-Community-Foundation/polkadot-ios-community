@@ -96,4 +96,5 @@ Transfer plans determine how coins are spent:
 | External payments       | `Packages/Coinage/Sources/ExternalPayment/` | Offramp identity, retry, status, planner scope |
 | Coinage UI              | `Modules/Coinage/`            | Coinage screen changes           |
 | Backup sync             | ServiceCoordinator             | Backup/restore flow changes      |
+| Durability (oracle, asset ledger) | `Packages/Coinage/Sources/CoinageTx/` | Coin/voucher evidence or invariants; the engine itself is `Packages/DurableTransactions` (see architecture/durable-transactions.md) |
 | Instance ID config      | `AppConfig.Coinage.instanceId` | Remote config schema or app instance strategy changes |

@@ -285,7 +285,7 @@ private extension TabBarBottomChromeController {
 
         setSelectedIndex(selectedTabIndex)
         updateActiveActionIndex()
-        tipController.refreshAnchor()
+        tipController.setBarLaidOut(false)
     }
 
     func updateActiveActionIndex() {
@@ -357,6 +357,10 @@ private extension TabBarBottomChromeController {
                 return
             }
             togglePanel(action == .spaTabs ? .spaTabs : .content(action))
+        }
+
+        barView.onItemsLaidOut = { [weak self] in
+            self?.tipController.setBarLaidOut(true)
         }
     }
 

@@ -301,9 +301,9 @@ extension CoinageService: CoinageServicing {
 
             ensureRecyclingEvaluator(context: context)
 
+            // Before the engine's first recovery pass, which the app starts once setup returns, so nothing
+            // is decided against a mark that is about to disappear.
             try await txService.releaseUncommittedHandoffs()
-
-            txService.start()
 
         } catch {
             // Reset so a subsequent setup(with:) call triggers a fresh fetch
