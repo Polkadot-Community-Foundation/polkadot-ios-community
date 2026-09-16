@@ -429,9 +429,9 @@ final class StubFeeEstimator: RegistrationFeeEstimating, @unchecked Sendable {
 }
 
 struct StubReviveCallArguments: ReviveCallArgumentsProviding {
-    var name = "weight_limit"
+    var argument: RevivePallet.WeightLimitArgument = .weightLimit
 
-    func weightLimitArgumentName() async throws -> String { name }
+    func weightLimitArgument() async throws -> RevivePallet.WeightLimitArgument { argument }
 }
 
 /// Records what the submitter hands to the engine.

@@ -16,9 +16,9 @@ public protocol RegistrationFeeEstimating: Sendable {
         -> BigUInt
 }
 
-/// Which name the runtime gives `Revive.call`'s weight limit — see ``RevivePallet/weightLimitArgumentName(in:)``.
+/// Which name the runtime gives `Revive.call`'s weight limit — see ``RevivePallet/weightLimitArgument(in:)``.
 public protocol ReviveCallArgumentsProviding: Sendable {
-    func weightLimitArgumentName() async throws -> String
+    func weightLimitArgument() async throws -> RevivePallet.WeightLimitArgument
 }
 
 final class RuntimeReviveCallArguments: ReviveCallArgumentsProviding, @unchecked Sendable {
@@ -28,9 +28,9 @@ final class RuntimeReviveCallArguments: ReviveCallArgumentsProviding, @unchecked
         self.runtimeService = runtimeService
     }
 
-    func weightLimitArgumentName() async throws -> String {
+    func weightLimitArgument() async throws -> RevivePallet.WeightLimitArgument {
         let metadata = try await runtimeService.fetchCoderFactoryOperation().asyncExecute().metadata
-        return RevivePallet.weightLimitArgumentName(in: metadata)
+        return RevivePallet.weightLimitArgument(in: metadata)
     }
 }
 
@@ -115,15 +115,17 @@ private extension InstallationRegistrationSubmitter {
             input: call.input
         )
         let depositLimit = Self.withMargin(dryRun.storageDeposit)
-        let reviveCall = try await RevivePallet.CallCall(
+        let reviveCall = RevivePallet.Call(
             dest: call.contract,
             value: .zero,
             weightLimit: Self.withMargin(dryRun.weightRequired),
-            weightLimitArgumentName: callArguments.weightLimitArgumentName(),
             storageDepositLimit: depositLimit,
             data: call.input
         )
-        let builder: ExtrinsicBuilderClosure = { try $0.adding(call: reviveCall.runtimeCall) }
+        let weightLimitArgument = try await callArguments.weightLimitArgument()
+        let builder: ExtrinsicBuilderClosure = {
+            try reviveCall.add(to: $0, weightLimitArgument: weightLimitArgument)
+        }
 
         let fee = try await feeEstimator.estimateFee(builder, origin: origin(for: call))
         let required = depositLimit + fee
