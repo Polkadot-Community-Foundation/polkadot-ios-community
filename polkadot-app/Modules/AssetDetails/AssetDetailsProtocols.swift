@@ -38,7 +38,6 @@ protocol AssetDetailsPresenterProtocol: AnyObject {
 
     #if TESTNET_FEATURE
         func onTestnetTopUp()
-        func onMakeAllVouchersReady()
     #endif
 }
 
@@ -53,7 +52,6 @@ protocol AssetDetailsInteractorInputProtocol: AnyObject {
 
     #if TESTNET_FEATURE
         func topUp()
-        func makeAllVouchersReady()
     #endif
 }
 

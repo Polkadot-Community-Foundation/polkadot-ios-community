@@ -108,5 +108,7 @@ __pycache__
 # temp
 tmp/
 
+.scratch/
+
 # Merge leftovers
 *.orig

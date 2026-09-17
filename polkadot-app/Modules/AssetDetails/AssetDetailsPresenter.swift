@@ -135,10 +135,6 @@ extension AssetDetailsPresenter: AssetDetailsPresenterProtocol {
 
             interactor?.topUp()
         }
-
-        func onMakeAllVouchersReady() {
-            interactor?.makeAllVouchersReady()
-        }
     #endif
 }
 

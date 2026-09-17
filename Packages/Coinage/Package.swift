@@ -106,6 +106,7 @@ let package = Package(
             dependencies: [
                 "Coinage",
                 .product(name: "Keystore-iOS", package: "keystore-ios"),
+                "FoundationExt",
                 "BackgroundExecution",
                 "ExtrinsicServiceExt",
                 "DurableTransactions",

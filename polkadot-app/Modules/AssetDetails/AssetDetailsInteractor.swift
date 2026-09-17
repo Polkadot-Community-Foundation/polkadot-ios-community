@@ -40,7 +40,6 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
 
     #if TESTNET_FEATURE
         var backgroundExecutor: BackgroundExecuting?
-        var voucherRepository: AnyDataProviderRepository<Voucher>?
         var topupService: TopUpService?
         var faucetTask: Task<Void, Error>?
     #endif
@@ -150,41 +149,6 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
                 }
             }
         }
-
-        func makeAllVouchersReady() {
-            Task { [weak self] in
-                guard let self, let voucherRepository else { return }
-                do {
-                    let vouchers = try await voucherRepository
-                        .fetchAllOperation(with: RepositoryFetchOptions())
-                        .asyncExecute()
-
-                    let updatedVouchers = vouchers.map { voucher in
-                        guard voucher.readyAt > .now else { return voucher }
-
-                        // Every field has to be carried over: this is a whole-model save, so any
-                        // omission is written back as the initialiser's default.
-                        return Voucher(
-                            exponent: voucher.exponent,
-                            derivationIndex: voucher.derivationIndex,
-                            allocatedAt: voucher.allocatedAt,
-                            readyAt: .now,
-                            remoteState: voucher.remoteState,
-                            recyclerFungibility: voucher.recyclerFungibility,
-                            maxRecyclerFungibility: voucher.maxRecyclerFungibility,
-                            publicKey: voucher.publicKey
-                        )
-                    }
-
-                    try await voucherRepository
-                        .saveOperation({ updatedVouchers }, { [] })
-                        .asyncExecute()
-                } catch {
-                    Logger.shared.error("Failed to make all vouchers ready: \(error)")
-                }
-            }
-        }
-
     #endif
 
     /// Needed to price individual holdings, so a failure here degrades to amount-less rows rather

@@ -32,11 +32,6 @@ enum AssetDetailsViewFactory {
         )
 
         #if TESTNET_FEATURE
-            let databaseFactory = CoinageDatabaseDependencyFactory(
-                storageFacade: UserDataStorageFacade.shared
-            )
-
-            interactor.voucherRepository = databaseFactory.makeVoucherRepository()
             interactor.backgroundExecutor = ConnectionRetainingExecutor(
                 provider: ChainRegistryFacade.sharedRegistry
             )

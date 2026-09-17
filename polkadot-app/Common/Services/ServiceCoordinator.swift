@@ -10,6 +10,8 @@ import Coinage
 import DurableTransactions
 import Products
 import SubstrateSdk
+import SubstrateOperation
+import SubstrateStorageQuery
 import FoundationExt
 import Individuality
 import UniqueDevice
@@ -352,8 +354,7 @@ extension ServiceCoordinator {
             return nil
         }
 
-        let statementDeliveryTracker = StatementDeliveryTracker()
-        let chatRequestCoordinator = createChatRequestCoordinator(statementTracker: statementDeliveryTracker)
+        let chatRequestCoordinator = createChatRequestCoordinator()
         let audioSessionManager = AudioSessionManager()
 
         let paymentsSupport = PaymentsSupport(coinageService: coinageServices.coinageService)
@@ -418,10 +419,16 @@ extension ServiceCoordinator {
             logger: logger
         )
 
+        let chainLivenessAnchorProvider = ChainLivenessAnchorProvider(
+            blockInfoProviders: createBlockInfoProviders(),
+            chainTimeProviders: createChainTimeProviders()
+        )
+
         let chainStatusProvider = ChainStatusProvider(
             networkStatusService: networkStatusService,
             blockProvider: chainBlockProvider,
-            statementTracker: statementDeliveryTracker,
+            anchorProvider: chainLivenessAnchorProvider,
+            appStateStreamFactory: ApplicationStateStreamFactory(),
             logger: logger
         )
 
@@ -509,9 +516,7 @@ private extension ServiceCoordinator {
 }
 
 private extension ServiceCoordinator {
-    static func createChatRequestCoordinator(
-        statementTracker: StatementDeliveryTracking
-    ) -> ChatRequestCoordinatorServicing {
+    static func createChatRequestCoordinator() -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let logger = Logger.shared
@@ -534,8 +539,7 @@ private extension ServiceCoordinator {
                         remoteAccountOperation(chatChainId: AppConfig.Chains.usernameChain)
                     ],
                     logger: Logger.shared
-                ),
-                statementTracker: statementTracker
+                )
             ),
             logger: Logger.shared
         )
@@ -611,6 +615,39 @@ private extension ServiceCoordinator {
             operationQueue: OperationManagerFacade.sharedDefaultQueue,
             logger: logger
         )
+    }
+
+    private static func createBlockInfoProviders() -> [ChainConnectionTarget: BlockInfoProviding] {
+        ChainConnectionTarget.allCases
+            .reduce(into: [ChainConnectionTarget: BlockInfoProviding]()) { accumulator, target in
+                accumulator[target] = BlockInfoProvider(
+                    chainRegistry: ChainRegistryFacade.sharedRegistry,
+                    operationQueue: OperationManagerFacade.sharedDefaultQueue,
+                    chainId: target.chainId
+                )
+            }
+    }
+
+    private static func createChainTimeProviders() -> [ChainConnectionTarget: ChainTimeProviding] {
+        let chainRegistry = ChainRegistryFacade.sharedRegistry
+        let operationQueue = OperationManagerFacade.sharedDefaultQueue
+
+        let storageRequestFactory = StorageRequestFactory(
+            remoteFactory: StorageKeyFactory(),
+            operationManager: OperationManager(operationQueue: operationQueue)
+        )
+
+        var providers: [ChainConnectionTarget: ChainTimeProviding] = [:]
+
+        for target in ChainConnectionTarget.allCases {
+            providers[target] = ChainTimeProvider(
+                chainId: target.chainId,
+                chainRegistry: chainRegistry,
+                storageRequestFactory: storageRequestFactory
+            )
+        }
+
+        return providers
     }
 }
 
