@@ -27,7 +27,6 @@ enum AssetDetailsViewFactory {
             chainAsset: chainAsset,
             coinageService: context.coinageService,
             coinageBackupSyncService: context.coinageBackupSyncService,
-            balanceSyncStateStorage: context.balanceSyncStateStorage,
             fundingDomainProvider: FundingDomainProvider(hostProvider: context.flowState.hostProvider)
         )
 

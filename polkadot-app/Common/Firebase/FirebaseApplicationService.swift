@@ -4,6 +4,7 @@ import FirebaseCore
 import FirebaseRemoteConfig
 import Combine
 import ChainRegistry
+import Revive
 
 protocol RemoteConfigDelegate: AnyObject {
     func remoteConfig(didFinishLoading result: Result<Void, Error>)
@@ -109,7 +110,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             coinageInstanceId: coinageInstanceId(),
             fundingDomain: nonEmptyString(for: .fundingDomain),
             fundingUrl: fundingConfigValue(.onrampUrl),
-            offrampUrl: fundingConfigValue(.offrampUrl)
+            offrampUrl: fundingConfigValue(.offrampUrl),
+            accountDataStoreContract: accountDataStoreContractAddress()
         )
     }
 
@@ -168,6 +170,20 @@ private extension FirebaseApplicationService {
         let json = remoteConfig[.fundingConfig].jsonValue as? [String: String]
         guard let value = json?[field], !value.isEmpty else { return nil }
         return value
+    }
+
+    /// One JSON object shared with Android: `{ "contractAddress": "0x…" }`, decoded to an EVM address
+    /// here so consumers never see a malformed one. A delivered address that cannot be used is a
+    /// config mistake, not a payload still on its way: both stall registration, only the log tells them apart.
+    func accountDataStoreContractAddress() -> EvmAddress? {
+        let json = remoteConfig[.accountDataStoreConfig].jsonValue as? [String: String]
+        guard let hex = json?[.contractAddress], !hex.isEmpty else { return nil }
+
+        guard let address = try? EvmAddressFormat.validate(Data(hexString: hex)) else {
+            logger.error("Remote config carries an unusable AccountDataStore contract address: \(hex)")
+            return nil
+        }
+        return address
     }
 
     func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {
@@ -261,4 +277,6 @@ private extension String {
     static let fundingConfig = "funding_config"
     static let onrampUrl = "onrampUrl"
     static let offrampUrl = "offrampUrl"
+    static let accountDataStoreConfig = "account_data_store_config"
+    static let contractAddress = "contractAddress"
 }
