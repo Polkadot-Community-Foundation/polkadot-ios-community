@@ -29,13 +29,13 @@
 		A57CAF662F45ECB70066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF652F45ECB70066D722 /* StructuredConcurrency */; };
 		A57CAF682F45ED940066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF672F45ED940066D722 /* StructuredConcurrency */; };
 		A5A948F02F4CA925001E514C /* Coinage in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948EF2F4CA925001E514C /* Coinage */; };
-		A5C0DE022FDB2A5C00000002 /* Revive in Frameworks */ = {isa = PBXBuildFile; productRef = A5C0DE012FDB2A5C00000001 /* Revive */; };
 		A5A948F22F4CA925001E5150 /* ExtrinsicServiceExt in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */; };
 		A5B2502E2F47481900E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502D2F47481900E46E09 /* KeyDerivation */; };
 		A5B250302F47482000E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502F2F47482000E46E09 /* KeyDerivation */; };
 		A5B436FF2E96B82700CFF21D /* AppDependencies in Frameworks */ = {isa = PBXBuildFile; productRef = A5B436FE2E96B82700CFF21D /* AppDependencies */; };
 		A5B437012E96B82E00CFF21D /* MessageExchangeKit in Frameworks */ = {isa = PBXBuildFile; productRef = A5B437002E96B82E00CFF21D /* MessageExchangeKit */; };
 		A5B5899C2F5F0F4E00A9458D /* OperationExt in Frameworks */ = {isa = PBXBuildFile; productRef = A5B5899B2F5F0F4E00A9458D /* OperationExt */; };
+		A5C0DE022FDB2A5C00000002 /* Revive in Frameworks */ = {isa = PBXBuildFile; productRef = A5C0DE012FDB2A5C00000001 /* Revive */; };
 		A5FB979E2F855E9D001A2D6A /* FoundationExt in Frameworks */ = {isa = PBXBuildFile; productRef = A5FB979D2F855E9D001A2D6A /* FoundationExt */; };
 		B10000022F7C000000000AAA /* Products in Frameworks */ = {isa = PBXBuildFile; productRef = B10000012F7C000000000AAA /* Products */; };
 		B10000042F7C000000000BBB /* BulletinChain in Frameworks */ = {isa = PBXBuildFile; productRef = B10000032F7C000000000BBB /* BulletinChain */; };
@@ -1905,10 +1905,6 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Coinage;
 		};
-		A5C0DE012FDB2A5C00000001 /* Revive */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Revive;
-		};
 		A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ExtrinsicServiceExt;
@@ -1932,6 +1928,10 @@
 		A5B5899B2F5F0F4E00A9458D /* OperationExt */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = OperationExt;
+		};
+		A5C0DE012FDB2A5C00000001 /* Revive */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Revive;
 		};
 		A5FB979D2F855E9D001A2D6A /* FoundationExt */ = {
 			isa = XCSwiftPackageProductDependency;

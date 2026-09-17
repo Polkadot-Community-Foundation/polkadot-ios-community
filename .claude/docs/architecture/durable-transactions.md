@@ -36,8 +36,9 @@ Coinage (`Packages/Coinage/Sources/CoinageTx/`) is the first domain; installatio
   opens the one write transaction and hands `CoreDataRegistrationScope` to the domain hook.
 - `DurableTxRowObserving` lets a domain react to a status write in the same transaction (coinage
   touches its coin/voucher rows so snapshot subscribers re-emit).
-- `DurableChainToolsProvider` resolves extrinsic tools per chain from the chain registry, with the
-  extrinsic format decided by `ExtrinsicVersionProvider`.
+- `DurableChainToolsProvider` resolves extrinsic tools from the chain registry, with the extrinsic
+  format decided by `ExtrinsicVersionProvider` on every request (from the current runtime) and the tools
+  cached per (chain, format), so a runtime upgrade mid-process switches formats.
   Chains in `signedChains` (Asset Hub, for installation registration) are treated as signed; all others
   as general transactions. One chain cannot host both kinds until the engine models the format per request.
 - `ServiceCoordinator.createDurableTransactionEngine` builds the engine once; every domain shares it, and the coordinator alone calls `start()` (after coinage setup) and `stop()` (on throttle). No domain starts or stops the engine.

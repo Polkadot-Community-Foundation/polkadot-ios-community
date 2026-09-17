@@ -24,10 +24,7 @@ struct RemoteAppConfig {
     let fundingUrl: String?
     let offrampUrl: String?
     /// The `AccountDataStore` contract on Asset Hub from the `account_data_store_config` remote object,
-    /// already checked to be an EVM address by `FirebaseApplicationService` (this file is shared with the
-    /// notification extension, which does not link `Revive`). Not part of `isValid`: without it
-    /// installation registration waits and reports itself delayed, and recovery scans only the
-    /// installations already known.
+    /// already checked to be an EVM address by `FirebaseApplicationService`
     let accountDataStoreContract: Data?
 }
 
