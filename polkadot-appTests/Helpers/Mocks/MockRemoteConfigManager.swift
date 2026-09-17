@@ -16,7 +16,6 @@ final class MockRemoteConfigManager: RemoteConfigManaging {
         dotNsResolver: nil,
         dotNsNameRegistry: nil,
         coinageInstanceId: nil,
-        fundingDomain: nil,
         fundingUrl: nil,
         offrampUrl: nil,
         accountDataStoreContract: nil
