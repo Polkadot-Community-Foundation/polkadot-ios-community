@@ -56,7 +56,7 @@ struct OriginPersonProviderTests {
 
         _ = try await makeProvider().pickPersonOrigins()
 
-        #expect(waiter.waits.first?.timeout == .seconds(15))
+        #expect(waiter.waits.first?.timeout == .seconds(20))
     }
 
     @Test("a lite person that never lands within the delay is no person")
