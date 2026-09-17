@@ -4,10 +4,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# PCF production branch: upstream workflow kept with ONLY the workflow_dispatch trigger (upstream's
+# pull_request / schedule triggers removed) so nothing publishes or mutates the repository unattended.
+# The jobs are upstream's, unchanged. Production builds come from build-production.yml.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 10 * * *" # 10:00 AM every day
 
 jobs:
   update_signing_data:

@@ -13,12 +13,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# PCF production branch: upstream workflow kept with ONLY the workflow_dispatch trigger (upstream's
+# pull_request / schedule triggers removed) so nothing publishes or mutates the repository unattended.
+# The jobs are upstream's, unchanged. Production builds come from build-production.yml.
 on:
-  schedule:
-    # 02:30 UTC — runs after the nightly Firebase distribution on develop
-    # (typically completes by ~01:00 UTC after the day's last merge), so
-    # the simulator artifact reflects the same code that Firebase shipped.
-    - cron: "30 2 * * *"
   workflow_dispatch:
 
 permissions:

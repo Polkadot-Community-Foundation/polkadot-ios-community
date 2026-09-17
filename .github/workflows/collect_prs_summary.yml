@@ -1,5 +1,8 @@
 name: PR Summary Report
 
+# PCF production branch: upstream workflow kept with ONLY the workflow_dispatch trigger (upstream's
+# pull_request / schedule triggers removed) so nothing publishes or mutates the repository unattended.
+# The jobs are upstream's, unchanged. Production builds come from build-production.yml.
 on:
   workflow_dispatch:
     inputs:
@@ -8,8 +11,6 @@ on:
         required: false
         default: 30
         type: number
-  schedule:
-    - cron: "0 7 1 * *" # 1st of every month at 08:00 CET (UTC+1)
 
 jobs:
   pr-summary:

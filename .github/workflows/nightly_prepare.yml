@@ -4,6 +4,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# PCF production branch: upstream workflow kept with ONLY the workflow_dispatch trigger (upstream's
+# pull_request / schedule triggers removed) so nothing publishes or mutates the repository unattended.
+# The jobs are upstream's, unchanged. Production builds come from build-production.yml.
 on:
   workflow_dispatch:
     inputs:
@@ -17,8 +20,6 @@ on:
         type: string
         required: false
         default: ""
-  schedule:
-    - cron: "0 16 * * 1-5" # 16:00 UTC Monday-Friday
 
 permissions:
   contents: write

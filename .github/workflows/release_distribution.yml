@@ -1,10 +1,9 @@
 name: Release Distribution
 
+# PCF production branch: upstream workflow kept with ONLY the workflow_dispatch trigger (upstream's
+# pull_request / schedule triggers removed) so nothing publishes or mutates the repository unattended.
+# The jobs are upstream's, unchanged. Production builds come from build-production.yml.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       release_branch:
