@@ -103,6 +103,7 @@ let package = Package(
             name: "CoinageTests",
             dependencies: [
                 "Coinage",
+                "FoundationExt",
                 "BackgroundExecution",
                 "ExtrinsicServiceExt",
                 "DurableTransactions",
