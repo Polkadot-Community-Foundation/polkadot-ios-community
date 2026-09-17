@@ -10,7 +10,7 @@ protocol ProductContentPrewarming {
 
 @MainActor
 final class ProductContentPrewarmer {
-    private let makeLabel: () -> String
+    private let makeLabels: () -> [String]
     private let chainRegistryClosure: ChainRegistryLazyClosure
     private let flowStateProvider: any SPAFlowStateProviding
     private let logger: LoggerProtocol
@@ -18,12 +18,12 @@ final class ProductContentPrewarmer {
     private var prewarmTask: Task<Void, Never>?
 
     init(
-        makeLabel: @escaping () -> String,
+        makeLabels: @escaping () -> [String],
         chainRegistryClosure: @escaping ChainRegistryLazyClosure,
         flowStateProvider: any SPAFlowStateProviding,
         logger: LoggerProtocol = Logger.shared
     ) {
-        self.makeLabel = makeLabel
+        self.makeLabels = makeLabels
         self.chainRegistryClosure = chainRegistryClosure
         self.flowStateProvider = flowStateProvider
         self.logger = logger
@@ -47,12 +47,13 @@ extension ProductContentPrewarmer: ProductContentPrewarming {
 
 private extension ProductContentPrewarmer {
     func warmContent() async {
-        // Resolved lazily: the domain may depend on remote config that isn't available yet at
+        // Resolved lazily: the labels may depend on remote config that isn't available yet at
         // prewarmer construction. By warm time the prewarm trigger has run past remote config.
-        let label = makeLabel()
+        var seen = Set<String>()
+        let labels = makeLabels().filter { !$0.isEmpty && seen.insert($0).inserted }
 
-        guard !label.isEmpty else {
-            logger.error("Product prewarm skipped: empty label")
+        guard !labels.isEmpty else {
+            logger.error("Product prewarm skipped: no labels")
             return
         }
 
@@ -60,6 +61,12 @@ private extension ProductContentPrewarmer {
 
         let flowState = flowStateProvider.flowState()
 
+        for label in labels {
+            await warm(label: label, flowState: flowState)
+        }
+    }
+
+    func warm(label: String, flowState: SPAFlowState) async {
         guard let host = try? await flowState.hostProvider.resolveHost(label: label) else {
             logger.error("Product prewarm skipped: could not resolve TLD for \(label)")
             return

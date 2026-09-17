@@ -74,8 +74,14 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
 
         let chainRegistryClosure = { ChainRegistryFacade.sharedRegistry }
 
-        let browsePrewarmer = ProductContentPrewarmer(
-            makeLabel: { AppConfig.DotNs.dotNsBrowse },
+        let productPrewarmer = ProductContentPrewarmer(
+            makeLabels: {
+                [
+                    AppConfig.DotNs.dotNsBrowse,
+                    AppConfig.DotNs.dotNsGetSome,
+                    AppConfig.DotNs.dotNsOfframp
+                ]
+            },
             chainRegistryClosure: chainRegistryClosure,
             flowStateProvider: flowStateProvider
         )
@@ -86,7 +92,7 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
             logger: Logger.shared,
             resolver: resolver,
             tokenManager: JWTTokenManager.shared,
-            browsePrewarmer: browsePrewarmer
+            productPrewarmer: productPrewarmer
         )
 
         let presenter = RootPresenter(

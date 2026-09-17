@@ -37,10 +37,19 @@ extension AppConfig {
         /// `funding_domain` key while both are published.
         static var dotNsGetSome: String {
             let config = AppConfigProvider.shared.getRemoteConfig()
-            let fromUrl = config?.fundingUrl.flatMap { destination in
-                ProductHost.name(fromDotDomain: URL(string: destination)?.host() ?? destination)
-            }
-            return fromUrl ?? config?.fundingDomain ?? ""
+            return label(fromDestination: config?.fundingUrl) ?? config?.fundingDomain ?? ""
+        }
+
+        /// The offramp product's label: the host name of the withdraw page URL.
+        static var dotNsOfframp: String {
+            let config = AppConfigProvider.shared.getRemoteConfig()
+            return label(fromDestination: config?.offrampUrl) ?? ""
+        }
+
+        /// A destination is published either as a dot-domain ("getcash.dot") or as a full URL whose
+        /// host carries it ("https://getcash.dot/offramp"); the label is the name part of that host.
+        private static func label(fromDestination destination: String?) -> String? {
+            destination.flatMap { ProductHost.name(fromDotDomain: URL(string: $0)?.host() ?? $0) }
         }
 
         static let dotNsGameWebview = "game-webview"
