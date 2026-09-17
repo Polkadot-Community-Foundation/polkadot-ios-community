@@ -191,9 +191,7 @@ final class TabBarBottomChromeController: UIViewController {
     }
 
     func setContentPanel(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction) {
-        guard panelController.open == .content(action) else {
-            return
-        }
+        guard panelController.open == .content(action) else { return }
 
         detachHostedController()
         chromeSurface.setContentConfiguration(configuration)
@@ -267,9 +265,7 @@ final class TabBarBottomChromeController: UIViewController {
     }
 
     func detachWidget(for id: AppWidgetID) {
-        guard let controller = widgetControllers.removeValue(forKey: id) else {
-            return
-        }
+        guard let controller = widgetControllers.removeValue(forKey: id) else { return }
 
         floatingWidgetContainerView.removeArrangedSubview(controller.view)
         controller.view.removeFromSuperview()
@@ -302,9 +298,7 @@ private extension TabBarBottomChromeController {
     }
 
     func detachHostedController() {
-        guard let controller = hostedPanelController else {
-            return
-        }
+        guard let controller = hostedPanelController else { return }
 
         controller.willMove(toParent: nil)
         controller.view.removeFromSuperview()
