@@ -1,8 +1,8 @@
 import Foundation
 import NovaCrypto
 import KeyDerivation
+import Revive
 import SubstrateSdk
-import SubstrateSdkExt
 
 /// The `//datastore` sr25519 account that owns this seed's list in the `AccountDataStore` contract,
 /// with the key its records are sealed under.
@@ -10,12 +10,12 @@ public struct DataStoreAccount: Sendable {
     public let privateKey: PrivateKey
     public let publicKey: PublicKey
     /// The pallet-revive H160 the contract keys the list by: the last 20 bytes of `keccak256(accountId)`.
-    public let evmAccountId: Data
+    public let evmAccountId: EvmAddress
     public let encryptionKey: Data
 
     public var accountId: AccountId { publicKey }
 
-    public init(privateKey: PrivateKey, publicKey: PublicKey, evmAccountId: Data, encryptionKey: Data) {
+    public init(privateKey: PrivateKey, publicKey: PublicKey, evmAccountId: EvmAddress, encryptionKey: Data) {
         self.privateKey = privateKey
         self.publicKey = publicKey
         self.evmAccountId = evmAccountId
@@ -54,7 +54,7 @@ public actor DataStoreAccountKeys: DataStoreAccountKeysProviding {
         let account = try DataStoreAccount(
             privateKey: secret,
             publicKey: publicKey,
-            evmAccountId: Self.evmAccountId(for: publicKey),
+            evmAccountId: publicKey.toH160(),
             encryptionKey: Self.deriveEncryptionKey(sr25519Secret: Self.ed25519Form(of: secret))
         )
         derived = account
@@ -66,10 +66,6 @@ public actor DataStoreAccountKeys: DataStoreAccountKeysProviding {
     /// keypair. ``ed25519Form(of:)`` converts the iOS SDK's canonical scalar.
     public static func deriveEncryptionKey(sr25519Secret: Data) throws -> Data {
         try encryptionContext.blake2b32WithKey(sr25519Secret)
-    }
-
-    public static func evmAccountId(for accountId: AccountId) throws -> Data {
-        try accountId.toH160()
     }
 
     /// The secret as polkadot-js and the Android SDK hold it (`sr25519_to_ed25519_bytes`).

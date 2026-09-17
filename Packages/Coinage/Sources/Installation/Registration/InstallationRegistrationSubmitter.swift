@@ -4,6 +4,7 @@ import ExtrinsicService
 import Foundation
 import KeyDerivation
 import Individuality
+import Revive
 import SDKLogger
 import SubstrateSdk
 
@@ -15,24 +16,6 @@ public protocol InstallationRegistrationSubmitting: Sendable {
 public protocol RegistrationFeeEstimating: Sendable {
     func estimateFee(_ builder: @escaping ExtrinsicBuilderClosure, origin: any ExtrinsicOriginDefining) async throws
         -> BigUInt
-}
-
-/// Which name the runtime gives `Revive.call`'s weight limit — see ``RevivePallet/weightLimitArgument(in:)``.
-public protocol ReviveCallArgumentsProviding: Sendable {
-    func weightLimitArgument() async throws -> RevivePallet.WeightLimitArgument
-}
-
-final class RuntimeReviveCallArguments: ReviveCallArgumentsProviding, @unchecked Sendable {
-    private let runtimeService: any RuntimeCodingServiceProtocol
-
-    init(runtimeService: any RuntimeCodingServiceProtocol) {
-        self.runtimeService = runtimeService
-    }
-
-    func weightLimitArgument() async throws -> RevivePallet.WeightLimitArgument {
-        let metadata = try await runtimeService.fetchCoderFactoryOperation().asyncExecute().metadata
-        return RevivePallet.weightLimitArgument(in: metadata)
-    }
 }
 
 public struct DataStoreAccountUnmappedError: Error, Equatable {

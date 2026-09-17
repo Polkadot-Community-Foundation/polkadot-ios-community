@@ -15,14 +15,14 @@ public enum RevivePallet {
 
     /// `Revive.call`: runs `data` against the contract at `dest` from the signed origin.
     public struct Call: Sendable {
-        public let dest: Data
+        public let dest: EvmAddress
         public let value: BigUInt
         public let weightLimit: Substrate.WeightV2
         public let storageDepositLimit: BigUInt
         public let data: Data
 
         public init(
-            dest: Data,
+            dest: EvmAddress,
             value: BigUInt,
             weightLimit: Substrate.WeightV2,
             storageDepositLimit: BigUInt,
@@ -55,7 +55,7 @@ public enum RevivePallet {
 
     /// `Revive.call` arguments on runtimes that name the weight limit `weight_limit`.
     public struct CallArgs: Codable {
-        @BytesCodable public var dest: Data
+        @BytesCodable public var dest: EvmAddress
         @StringCodable public var value: BigUInt
         public var weightLimit: Substrate.WeightV2
         @StringCodable public var storageDepositLimit: BigUInt
@@ -80,7 +80,7 @@ public enum RevivePallet {
 
     /// `Revive.call` arguments on runtimes from before the rename, which still say `gas_limit`.
     public struct LegacyCallArgs: Codable {
-        @BytesCodable public var dest: Data
+        @BytesCodable public var dest: EvmAddress
         @StringCodable public var value: BigUInt
         public var gasLimit: Substrate.WeightV2
         @StringCodable public var storageDepositLimit: BigUInt

@@ -1,7 +1,7 @@
 import Foundation
 import SubstrateSdk
 import Testing
-@testable import Products
+@testable import Revive
 
 struct NameHashTests {
     @Test func emptyNameReturns32ZeroBytes() throws {

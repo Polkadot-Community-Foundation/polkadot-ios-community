@@ -1,17 +1,21 @@
 import Foundation
+import Revive
 import SDKLogger
 import SubstrateSdk
 
 public struct InstallationRegistrationCall: Sendable {
     public let account: DataStoreAccount
-    public let contract: Data
+    public let contract: EvmAddress
     public let input: Data
 }
 
 public protocol AccountDataStoreRepositoryProtocol: Sendable {
     /// Records this seed cannot open are skipped rather than failing the read: the list belongs to the
     /// account, and nothing guarantees every entry in it was written by this app.
-    func fetchRegisteredInstallations(contract: Data, at blockHash: Data?) async throws -> Set<CoinageInstallationId>
+    func fetchRegisteredInstallations(
+        contract: EvmAddress,
+        at blockHash: Data?
+    ) async throws -> Set<CoinageInstallationId>
 
     func registrationCall(target: InstallationRegistrationTarget) async throws -> InstallationRegistrationCall
 }
@@ -31,7 +35,10 @@ final class AccountDataStoreRepository: AccountDataStoreRepositoryProtocol {
         self.logger = logger
     }
 
-    func fetchRegisteredInstallations(contract: Data, at blockHash: Data?) async throws -> Set<CoinageInstallationId> {
+    func fetchRegisteredInstallations(
+        contract: EvmAddress,
+        at blockHash: Data?
+    ) async throws -> Set<CoinageInstallationId> {
         let account = try await accountKeys.account()
         let input = try AccountDataStoreAbi.encodeGetInstallations(owner: account.evmAccountId)
         let output = try await reviveApi.callReadOnly(contract: contract, input: input, at: blockHash)

@@ -29,6 +29,7 @@
 		A57CAF662F45ECB70066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF652F45ECB70066D722 /* StructuredConcurrency */; };
 		A57CAF682F45ED940066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF672F45ED940066D722 /* StructuredConcurrency */; };
 		A5A948F02F4CA925001E514C /* Coinage in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948EF2F4CA925001E514C /* Coinage */; };
+		A5C0DE022FDB2A5C00000002 /* Revive in Frameworks */ = {isa = PBXBuildFile; productRef = A5C0DE012FDB2A5C00000001 /* Revive */; };
 		A5A948F22F4CA925001E5150 /* ExtrinsicServiceExt in Frameworks */ = {isa = PBXBuildFile; productRef = A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */; };
 		A5B2502E2F47481900E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502D2F47481900E46E09 /* KeyDerivation */; };
 		A5B250302F47482000E46E09 /* KeyDerivation in Frameworks */ = {isa = PBXBuildFile; productRef = A5B2502F2F47482000E46E09 /* KeyDerivation */; };
@@ -338,6 +339,7 @@
 				A5B5899C2F5F0F4E00A9458D /* OperationExt in Frameworks */,
 				A5B436FF2E96B82700CFF21D /* AppDependencies in Frameworks */,
 				A5A948F02F4CA925001E514C /* Coinage in Frameworks */,
+				A5C0DE022FDB2A5C00000002 /* Revive in Frameworks */,
 				D0D0D0022FDA0000000D0002 /* DurableTransactions in Frameworks */,
 				A5A948F22F4CA925001E5150 /* ExtrinsicServiceExt in Frameworks */,
 				0C2A9D532F868F4F00E753AE /* SubstrateSdkExt in Frameworks */,
@@ -531,6 +533,7 @@
 				A5B2502D2F47481900E46E09 /* KeyDerivation */,
 				0C62514B2F50808100A92259 /* HandoffService */,
 				A5A948EF2F4CA925001E514C /* Coinage */,
+				A5C0DE012FDB2A5C00000001 /* Revive */,
 				D0D0D0012FDA0000000D0001 /* DurableTransactions */,
 				A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */,
 				A5B5899B2F5F0F4E00A9458D /* OperationExt */,
@@ -1901,6 +1904,10 @@
 		A5A948EF2F4CA925001E514C /* Coinage */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Coinage;
+		};
+		A5C0DE012FDB2A5C00000001 /* Revive */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Revive;
 		};
 		A5A948F12F4CA925001E5150 /* ExtrinsicServiceExt */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -26,16 +26,24 @@ public struct ReviveContractRevertedError: Error, Equatable {
     }
 }
 
-/// Coinage's view of pallet-revive on the chain the `AccountDataStore` contract lives on. The app
-/// implements it over its revive caller with the chain fixed.
+public enum ReviveContractError: Error {
+    /// `ReviveApi_call` on this runtime does not take an argument by this name; encoding by position
+    /// instead could put a value under the wrong parameter, so the call is refused.
+    case unexpectedRuntimeApiSignature(missingArgument: String)
+    /// The pallet rejected the call before the contract ran, with its dispatch error as decoded.
+    case callFailed(JSON)
+}
+
+/// pallet-revive on one chain. Contract addresses are ``EvmAddress``es; call input and output stay
+/// raw bytes, encoded by the caller's contract ABI.
 public protocol ReviveContractApiProtocol: Sendable {
     /// Evaluates a read-only call against the state at `blockHash`, or at the node's latest block when
     /// nil. A revert fails with ``ReviveContractRevertedError``.
-    func callReadOnly(contract: Data, input: Data, at blockHash: Data?) async throws -> Data
+    func callReadOnly(contract: EvmAddress, input: Data, at blockHash: Data?) async throws -> Data
 
     /// Simulates `input` as `origin` would send it. A revert fails with ``ReviveContractRevertedError``.
     /// The origin matters: limits simulated from any other account describe a different call.
-    func dryRun(origin: AccountId, contract: Data, input: Data) async throws -> ReviveDryRun
+    func dryRun(origin: AccountId, contract: EvmAddress, input: Data) async throws -> ReviveDryRun
 
     /// Whether `account` has an H160 the pallet recognises as its own. An unmapped origin is rejected by
     /// every contract call, and a dry-run cannot tell: the pallet maps the origin for the length of the

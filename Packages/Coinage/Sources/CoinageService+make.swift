@@ -12,6 +12,7 @@ import FoundationExt
 import BackgroundExecution
 import Individuality
 import DurableTransactions
+import Revive
 
 public extension CoinageService {
     /// Creates a CoinageService instance.

@@ -1,5 +1,6 @@
 import DurableTransactions
 import Foundation
+import Revive
 import SubstrateSdk
 
 public extension TxDomainId {
@@ -14,10 +15,10 @@ public struct InstallationRegistrationTarget: Hashable, Sendable {
     static let groupSeparator: Character = "/"
     private static let logIdBytes = 4
 
-    public let contract: Data
+    public let contract: EvmAddress
     public let installation: CoinageInstallationId
 
-    public init(contract: Data, installation: CoinageInstallationId) {
+    public init(contract: EvmAddress, installation: CoinageInstallationId) {
         self.contract = contract
         self.installation = installation
     }
@@ -25,8 +26,7 @@ public struct InstallationRegistrationTarget: Hashable, Sendable {
     public init?(groupId: DurableTxGroupId) {
         let parts = groupId.split(separator: Self.groupSeparator)
         guard parts.count == 2,
-              let contract = try? Data(hexString: String(parts[0])),
-              !contract.isEmpty,
+              let contract = try? EvmAddressFormat.validate(Data(hexString: String(parts[0]))),
               let installation = try? CoinageInstallationId(hex: String(parts[1]))
         else { return nil }
         self.init(contract: contract, installation: installation)

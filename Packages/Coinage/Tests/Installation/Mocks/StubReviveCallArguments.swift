@@ -6,6 +6,7 @@ import Foundation
 import Individuality
 import KeyDerivation
 import os
+import Revive
 import SubstrateSdk
 @testable import Coinage
 

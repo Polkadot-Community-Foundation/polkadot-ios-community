@@ -1,6 +1,7 @@
 import DurableTransactions
 import DurableTransactionsTestSupport
 import Foundation
+import Revive
 import Testing
 @testable import Coinage
 
@@ -116,13 +117,13 @@ struct CoinageInstallationRegistrationOracleTests {
 }
 
 private extension CoinageInstallationRegistrationOracleTests {
-    func listed(_ contract: Data, at blockHash: Data, _ installations: Set<CoinageInstallationId>) {
+    func listed(_ contract: EvmAddress, at blockHash: Data, _ installations: Set<CoinageInstallationId>) {
         repository.listed(installations, contract: contract, at: blockHash)
     }
 
     func registration(
         of installation: CoinageInstallationId,
-        contract: Data = TestContracts.contract
+        contract: EvmAddress = TestContracts.contract
     ) -> DurableTxEntry {
         .registration(InstallationRegistrationTarget(contract: contract, installation: installation), status: .pending)
     }

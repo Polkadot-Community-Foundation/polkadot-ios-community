@@ -1,57 +1,40 @@
 import Foundation
 import os
+import Revive
 import SubstrateSdk
-import Products
-import ChainRegistry
 
-// Implementation of DotNsContractApiProtocol that calls the Revive pallet on Asset Hub.
-final class ReviveDotNsContractApi: Sendable {
-    private let chainRegistry: ChainRegistryProtocol
+/// ``DotNsContractApiProtocol`` over pallet-revive: the resolver and name-registry contracts are read
+/// through a ``ReviveContractApiProtocol`` bound to the contracts chain.
+public final class ReviveDotNsContractApi: Sendable {
+    private let contractApi: any ReviveContractApiProtocol
     private let configProvider: @Sendable () throws -> DotNsConfig
-    private let caller: ReviveContractCalling
 
     // Every text or content read costs a name-registry lookup first, and one product resolution
     // reads four names. `.some(nil)` is a name the registry has no entry for, cached as
     // deliberately as a hit — legacy names have none and are read constantly.
-    private let resolverCache = OSAllocatedUnfairLock(initialState: [String: Data?]())
+    private let resolverCache = OSAllocatedUnfairLock(initialState: [String: EvmAddress?]())
 
-    init(
-        chainRegistry: ChainRegistryProtocol,
-        configProvider: @Sendable @escaping () throws -> DotNsConfig,
-        caller: ReviveContractCalling = ReviveContractCaller()
+    public init(
+        contractApi: any ReviveContractApiProtocol,
+        configProvider: @Sendable @escaping () throws -> DotNsConfig
     ) {
-        self.chainRegistry = chainRegistry
+        self.contractApi = contractApi
         self.configProvider = configProvider
-        self.caller = caller
     }
 }
 
 private extension ReviveDotNsContractApi {
-    func callReviveContract(contract: Data, inputData: Data) async throws -> Data {
-        let config = try configProvider()
-
-        guard let connection = chainRegistry.getConnection(for: config.contractsChainId) else {
-            throw DotNsContractError.runtimeApiNotFound
+    func callReviveContract(contract: EvmAddress, inputData: Data) async throws -> Data {
+        do {
+            return try await contractApi.callReadOnly(contract: contract, input: inputData, at: nil)
+        } catch {
+            throw DotNsContractError.contractCallFailed(error)
         }
-
-        guard let runtimeProvider = chainRegistry.getRuntimeProvider(for: config.contractsChainId) else {
-            throw DotNsContractError.runtimeApiNotFound
-        }
-
-        let origin = AppConfig.reviveAccountId
-
-        return try await caller.callReadOnly(
-            connection: connection,
-            runtimeProvider: runtimeProvider,
-            caller: origin,
-            contract: contract,
-            input: inputData
-        )
     }
 
     /// Where a name's content hash is read from. Legacy names have no registry entry of their own
     /// and keep resolving through the fixed address.
-    func contentResolver(for node: Data, dotNsName: String) async throws -> Data {
+    func contentResolver(for node: Data, dotNsName: String) async throws -> EvmAddress {
         let config = try configProvider()
 
         return try await nameRegistryResolver(for: node, dotNsName: dotNsName)
@@ -91,7 +74,7 @@ private extension ReviveDotNsContractApi {
 
     /// The resolver a name registered for itself, or nil when it has no registry entry. Callers
     /// that need content specifically want ``contentResolver(for:dotNsName:)`` and its fallback.
-    func nameRegistryResolver(for node: Data, dotNsName: String) async throws -> Data? {
+    func nameRegistryResolver(for node: Data, dotNsName: String) async throws -> EvmAddress? {
         let config = try configProvider()
 
         // An unconfigured name registry disables manifest resolution without breaking legacy names.
@@ -116,7 +99,7 @@ private extension ReviveDotNsContractApi {
 }
 
 extension ReviveDotNsContractApi: DotNsContractApiProtocol {
-    func resolveContentHash(dotNsName: String) async throws -> Data {
+    public func resolveContentHash(dotNsName: String) async throws -> Data {
         let node = try NameHash.nameHash(dotNsName)
         let outputBytes = try await readContentHash(node: node, dotNsName: dotNsName)
 
@@ -127,7 +110,7 @@ extension ReviveDotNsContractApi: DotNsContractApiProtocol {
         return try Eip1577.stripPrefix(contentHash)
     }
 
-    func getMetadata(dotNsName: String, key: String) async throws -> String? {
+    public func getMetadata(dotNsName: String, key: String) async throws -> String? {
         let node = try NameHash.nameHash(dotNsName)
 
         // Text records live only on a name's own resolver, so a name without one has none.
@@ -148,7 +131,7 @@ extension ReviveDotNsContractApi: DotNsContractApiProtocol {
         return DotNsAbi.decodeText(output: outputBytes)
     }
 
-    func clearCache() {
+    public func clearCache() {
         resolverCache.withLock { $0.removeAll() }
     }
 }

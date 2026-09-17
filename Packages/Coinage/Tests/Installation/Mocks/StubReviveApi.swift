@@ -6,6 +6,7 @@ import Foundation
 import Individuality
 import KeyDerivation
 import os
+import Revive
 import SubstrateSdk
 @testable import Coinage
 
@@ -18,12 +19,12 @@ final class StubReviveApi: ReviveContractApiProtocol, @unchecked Sendable {
             storageDeposit: 413_000_000
         )
     )
-    private(set) var dryRuns: [(origin: AccountId, contract: Data, input: Data)] = []
+    private(set) var dryRuns: [(origin: AccountId, contract: EvmAddress, input: Data)] = []
     private(set) var mappingChecks: [AccountId] = []
 
-    func callReadOnly(contract _: Data, input _: Data, at _: Data?) async throws -> Data { Data() }
+    func callReadOnly(contract _: EvmAddress, input _: Data, at _: Data?) async throws -> Data { Data() }
 
-    func dryRun(origin: AccountId, contract: Data, input: Data) async throws -> ReviveDryRun {
+    func dryRun(origin: AccountId, contract: EvmAddress, input: Data) async throws -> ReviveDryRun {
         dryRuns.append((origin, contract, input))
         return try dryRunResult.get()
     }

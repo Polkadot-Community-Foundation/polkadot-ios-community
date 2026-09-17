@@ -6,13 +6,14 @@ import Foundation
 import Individuality
 import KeyDerivation
 import os
+import Revive
 import SubstrateSdk
 @testable import Coinage
 
 /// Registered installations per (contract, block hash); a read of an unlisted pair fails.
 final class StubDataStoreRepository: AccountDataStoreRepositoryProtocol, @unchecked Sendable {
     struct Key: Hashable {
-        let contract: Data
+        let contract: EvmAddress
         let blockHash: Data?
     }
 
@@ -22,7 +23,7 @@ final class StubDataStoreRepository: AccountDataStoreRepositoryProtocol, @unchec
     var account = DataStoreAccount(
         privateKey: Data(repeating: 0x0A, count: 64),
         publicKey: Data(repeating: 0x0A, count: 32),
-        evmAccountId: Data(repeating: 0x0E, count: 20),
+        evmAccountId: EvmAddress(repeating: 0x0E, count: EvmAddressFormat.size),
         encryptionKey: Data(repeating: 0, count: 32)
     )
 
@@ -30,21 +31,24 @@ final class StubDataStoreRepository: AccountDataStoreRepositoryProtocol, @unchec
 
     func listed(
         _ installations: Set<CoinageInstallationId>,
-        contract: Data = TestContracts.contract,
+        contract: EvmAddress = TestContracts.contract,
         at blockHash: Data? = nil
     ) {
         lists.withLock { $0[Key(contract: contract, blockHash: blockHash)] = .success(installations) }
     }
 
     func failing(
-        contract: Data = TestContracts.contract,
+        contract: EvmAddress = TestContracts.contract,
         at blockHash: Data? = nil,
         error: Error = InstallationStubError.unreachable
     ) {
         lists.withLock { $0[Key(contract: contract, blockHash: blockHash)] = .failure(error) }
     }
 
-    func fetchRegisteredInstallations(contract: Data, at blockHash: Data?) async throws -> Set<CoinageInstallationId> {
+    func fetchRegisteredInstallations(
+        contract: EvmAddress,
+        at blockHash: Data?
+    ) async throws -> Set<CoinageInstallationId> {
         readCount.withLock { $0 += 1 }
         guard let result = lists.withLock({ $0[Key(contract: contract, blockHash: blockHash)] }) else {
             throw InstallationStubError.unreachable

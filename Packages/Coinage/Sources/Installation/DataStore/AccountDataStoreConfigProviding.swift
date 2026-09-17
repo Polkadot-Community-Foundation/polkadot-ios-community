@@ -1,7 +1,7 @@
 import Foundation
+import Revive
 
-/// The `AccountDataStore` contract address (20-byte EVM address) from remote config; `nil` until it
-/// is delivered.
+/// The `AccountDataStore` contract address from remote config; `nil` until it is delivered.
 public protocol AccountDataStoreConfigProviding: Sendable {
-    func contractAddress() async -> Data?
+    func contractAddress() async -> EvmAddress?
 }

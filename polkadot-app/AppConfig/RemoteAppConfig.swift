@@ -23,9 +23,11 @@ struct RemoteAppConfig {
     /// CASH card entry points report unavailable.
     let fundingUrl: String?
     let offrampUrl: String?
-    /// The `AccountDataStore` contract on Asset Hub, as a hex H160, from the `account_data_store_config`
-    /// remote object. Not part of `isValid`: without it installation registration waits and reports
-    /// itself delayed, and recovery scans only the installations already known.
+    /// The `AccountDataStore` contract on Asset Hub from the `account_data_store_config` remote object,
+    /// already checked to be an EVM address by `FirebaseApplicationService` (this file is shared with the
+    /// notification extension, which does not link `Revive`). Not part of `isValid`: without it
+    /// installation registration waits and reports itself delayed, and recovery scans only the
+    /// installations already known.
     let accountDataStoreContract: Data?
 }
 

@@ -1,5 +1,7 @@
 import Coinage
 import Foundation
+import Revive
+import Operation_iOS
 import KeyDerivation
 import Keystore_iOS
 import FoundationExt
@@ -238,7 +240,11 @@ private extension ServiceCoordinator {
             currentInstallationStore: currentInstallationStore,
             chainId: assetHubChainId,
             runtimeService: runtimeProvider,
-            reviveApi: CoinageReviveContractApi(chainId: assetHubChainId, chainRegistry: chainRegistry),
+            reviveApi: ReviveContractApi(
+                chainId: assetHubChainId,
+                chainResource: chainRegistry,
+                operationQueue: OperationManagerFacade.sharedDefaultQueue
+            ),
             configProvider: AccountDataStoreConfigProvider(),
             pgasProvisioner: pgasProvisioner,
             feeEstimator: CoinageRegistrationFeeEstimator(

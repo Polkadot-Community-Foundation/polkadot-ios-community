@@ -1,6 +1,7 @@
 import DurableTransactions
 import Foundation
 import Individuality
+import Revive
 import SubstrateSdk
 
 /// The app-side pieces installation allocation, registration and recovery run on: the Keychain store

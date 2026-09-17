@@ -4,6 +4,7 @@ import FirebaseCore
 import FirebaseRemoteConfig
 import Combine
 import ChainRegistry
+import Revive
 
 protocol RemoteConfigDelegate: AnyObject {
     func remoteConfig(didFinishLoading result: Result<Void, Error>)
@@ -24,7 +25,6 @@ final class FirebaseApplicationService: RemoteConfigManaging {
 
     weak var delegate: (any RemoteConfigDelegate)?
     private let logger: LoggerProtocol = Logger.shared
-    private static let accountDataStoreAddressSize = 20
 
     // MARK: Initial methods
 
@@ -172,14 +172,14 @@ private extension FirebaseApplicationService {
         return value
     }
 
-    /// One JSON object shared with Android: `{ "contractAddress": "0x…" }`, decoded to the 20-byte H160
-    /// here so consumers never see a malformed address. A delivered address that cannot be used is a
+    /// One JSON object shared with Android: `{ "contractAddress": "0x…" }`, decoded to an EVM address
+    /// here so consumers never see a malformed one. A delivered address that cannot be used is a
     /// config mistake, not a payload still on its way: both stall registration, only the log tells them apart.
-    func accountDataStoreContractAddress() -> Data? {
+    func accountDataStoreContractAddress() -> EvmAddress? {
         let json = remoteConfig[.accountDataStoreConfig].jsonValue as? [String: String]
         guard let hex = json?[.contractAddress], !hex.isEmpty else { return nil }
 
-        guard let address = try? Data(hexString: hex), address.count == Self.accountDataStoreAddressSize else {
+        guard let address = try? EvmAddressFormat.validate(Data(hexString: hex)) else {
             logger.error("Remote config carries an unusable AccountDataStore contract address: \(hex)")
             return nil
         }

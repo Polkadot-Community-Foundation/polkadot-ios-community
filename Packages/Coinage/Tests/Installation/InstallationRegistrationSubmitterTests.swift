@@ -2,6 +2,7 @@ import BigInt
 import DurableTransactions
 import Foundation
 import Individuality
+import Revive
 import Testing
 @testable import Coinage
 

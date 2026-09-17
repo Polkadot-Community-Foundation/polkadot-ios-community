@@ -3,7 +3,7 @@ import Foundation
 import SubstrateSdk
 import Testing
 
-@testable import polkadot_app
+@testable import Revive
 
 struct ReviveDryRunResultTests {
     @Test("a runtime after the rename reports the weight as weight_required")

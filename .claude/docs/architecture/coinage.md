@@ -52,7 +52,9 @@ against polkadot-js and Android in `DataStoreKeyParityTests`; the encryption key
 schnorrkel's ed25519 form via `DataStoreAccountKeys.ed25519Form(of:)` over NovaCrypto's `SNPrivateKey.toEd25519Data()`,
 since the iOS SDK holds the canonical scalar) registers each installation in the `AccountDataStore`
 contract on Asset Hub (record = ChaCha20-Poly1305 of the id under `"encryption".blake2b32WithKey(secret64)`,
-deterministic nonce). Registration is a durable-transaction domain (`coinage-installation`, see
+deterministic nonce). Contract reads and the `Revive.call` extrinsic go through the `Revive` package
+(`ReviveContractApiProtocol`, `RevivePallet.Call`; see architecture/revive.md); the contract ABI table is
+`AccountDataStoreAbi` over `EvmAbi`, and the address is an `EvmAddress`. Registration is a durable-transaction domain (`coinage-installation`, see
 architecture/durable-transactions.md); `CoinageInstallationRegistrar` runs it once per process and
 reports `CoinageAccountBackupStatus` (`registering / delayed / completed`) — Asset Details shows a warning
 row while `delayed`. Recovery (`CoinageBackupRecoveryService`) lists the contract on every launch, records
@@ -135,6 +137,7 @@ Transfer plans determine how coins are spent:
 | Installation identity   | `Packages/Coinage/Sources/Installation/`, `CoinageKeychainInstallationStore` (current + counters), `CoinageInstallationCoreDataRepository` (previous) | Key index / page format, allocator counters |
 | Installation Keychain tags | `Common/Crypto/KeystoreTag.swift`, `Modules/Coinage/Model/Keychain/CoinageInstallationKeychainTags.swift` | Tag layout, key-id scoping |
 | Installation registration | `.../Installation/Registration/`, `ServiceCoordinator.createInstallationDependency` | Contract ABI, PGAS provisioning, registrar timing |
+| Contract calls          | `Packages/Revive/` (see architecture/revive.md) | Runtime API encoding, revert handling, `EvmAddress` |
 | Backup recovery         | `Packages/Coinage/Sources/Backup/`, `CoinageBackupSyncService` | Scan rules, progress model, restored-balance card |
 | Durability (oracle, asset ledger) | `Packages/Coinage/Sources/CoinageTx/` | Coin/voucher evidence or invariants; the engine itself is `Packages/DurableTransactions` (see architecture/durable-transactions.md) |
 | Instance ID config      | `AppConfig.Coinage.instanceId` | Remote config schema or app instance strategy changes |
