@@ -25,16 +25,9 @@ extension CoinMapper: CoreDataMapperProtocol {
             throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDCoin.publicKey))
         }
 
-        guard let installationHex = entity.installationId else {
-            throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDCoin.installationId))
-        }
-
         return try Coin(
             exponent: entity.exponent,
-            derivationIndex: CoinageKeyIndex(
-                installation: CoinageInstallationId(hex: installationHex),
-                item: UInt64(bitPattern: entity.derivationIndex)
-            ),
+            derivationIndex: entity.keyIndex(),
             age: entity.age?.int16Value,
             isOnchain: entity.isOnchain,
             handoffMark: handoffMark,

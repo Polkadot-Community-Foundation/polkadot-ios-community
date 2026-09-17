@@ -109,6 +109,6 @@ public extension Voucher {
     /// The storage identifier for a voucher at `derivationIndex`. Single source of truth so no
     /// call site hand-writes the string form.
     static func identifier(for derivationIndex: CoinageKeyIndex) -> String {
-        derivationIndex.identifier
+        derivationIndex.toString()
     }
 }

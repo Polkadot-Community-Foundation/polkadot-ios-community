@@ -62,20 +62,13 @@ final class ExternalPaymentMapper: CoreDataMapperProtocol {
         entity.updatedAt = model.updatedAt
     }
 
-    /// Comma-separated derivation indices; nil for none.
+    /// Comma-separated key indices in their string form; nil for none.
     static func encodeVoucherIndices(_ indices: [CoinageKeyIndex]) -> String? {
-        indices.isEmpty ? nil : indices.map(\.identifier).joined(separator: ",")
+        indices.isEmpty ? nil : indices.map { $0.toString() }.joined(separator: ",")
     }
 
     static func decodeVoucherIndices(_ encoded: String?) throws -> [CoinageKeyIndex] {
-        try encoded?.split(separator: ",").map { identifier in
-            guard let index = CoinageKeyIndex(identifier: String(identifier)) else {
-                throw CoreDataMapperError.missingRequiredData(
-                    keyPath: #keyPath(CDExternalPayment.plannedVoucherIndices)
-                )
-            }
-            return index
-        } ?? []
+        try encoded?.split(separator: ",").map { try CoinageKeyIndex.fromString(String($0)) } ?? []
     }
 }
 

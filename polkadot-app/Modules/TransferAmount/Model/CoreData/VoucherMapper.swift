@@ -51,16 +51,9 @@ extension VoucherMapper: CoreDataMapperProtocol {
             throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDVoucher.publicKey))
         }
 
-        guard let installationHex = entity.installationId else {
-            throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDVoucher.installationId))
-        }
-
         return try Voucher(
             exponent: entity.exponent,
-            derivationIndex: CoinageKeyIndex(
-                installation: CoinageInstallationId(hex: installationHex),
-                item: UInt64(bitPattern: entity.derivationIndex)
-            ),
+            derivationIndex: entity.keyIndex(),
             allocatedAt: allocatedAt,
             readyAt: readyAt,
             remoteState: state,

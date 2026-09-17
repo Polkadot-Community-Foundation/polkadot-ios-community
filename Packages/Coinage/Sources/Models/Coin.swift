@@ -97,7 +97,7 @@ public extension Coin {
     /// The storage identifier for a coin at `derivationIndex`. Single source of truth so no
     /// call site hand-writes the string form.
     static func identifier(for derivationIndex: CoinageKeyIndex) -> String {
-        derivationIndex.identifier
+        derivationIndex.toString()
     }
 
     var hasEverBeenOnChain: Bool {

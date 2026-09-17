@@ -138,14 +138,21 @@ extension VoucherLocationService {
                 logger: logger
             )
 
+        // Member updates arrive keyed by the voucher's public key, the way they were subscribed.
+        let indexByPublicKey = Dictionary(
+            vouchers.map { ($0.publicKey, $0.derivationIndex) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         let positionsStream = memberStream
             .scan([CoinageKeyIndex: UncertainStorage<MembersPallet.RingPosition?>]()) { positions, result in
                 var positions = positions
                 for update in result.ringPositionUpdates {
+                    guard let index = indexByPublicKey[update.publicKey] else { continue }
                     // The update was delivered, so it is `.defined`; a delivered empty reading is
                     // `.defined(nil)` (retraction) rather than a dropped key, so it can revert the voucher.
                     // A key never delivered stays absent — that, not `.undefined`, is "not changed".
-                    positions[update.derivationIndex] = .defined(update.ringPosition)
+                    positions[index] = .defined(update.ringPosition)
                 }
                 return positions
             }
@@ -238,7 +245,7 @@ private extension VoucherLocationService {
         vouchers.map { voucher in
             let publicKey = voucher.publicKey
             let collectionId = RecyclerCollectionIdentifier.identifier(instanceId: instanceId, for: voucher.exponent)
-            let mappingKey = SubscriptionKey.member(derivationIndex: voucher.derivationIndex).mappingKey
+            let mappingKey = SubscriptionKey.member(publicKey: publicKey).mappingKey
 
             let innerRequest = DoubleMapSubscriptionRequest(
                 storagePath: MembersPallet.Storage.members(),

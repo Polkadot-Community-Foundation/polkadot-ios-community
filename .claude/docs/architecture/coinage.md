@@ -31,7 +31,9 @@ A coin (`Packages/Coinage/Sources/Models/Coin.swift`) has:
 Every installation draws a random 32-byte `CoinageInstallationId` (`Packages/Coinage/Sources/Installation/`)
 and allocates coins and vouchers under it: `//coinage//4294967295//0x{id}/{item}` for coins,
 `//coinage-ring-vrf//4294967295//0x{id}//{item}` for vouchers. A `CoinageKeyIndex(installation, item)`
-addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifier`. `item` is a
+addresses one key; its string form `"{idHex}/{item}"` (`toString()` / `fromString(_:)`) is the CoreData
+`identifier`, written but never parsed back — rows carry the split `installationId` / `derivationIndex` columns
+(`CDCoin.keyIndex()`), and the location pipeline keys member subscriptions by voucher public key. `item` is a
 `DerivationIndex` (`UInt64`); CoreData holds it as `Int64(bitPattern:)` and reads it back with
 `UInt64(bitPattern:)`, the same for the scan cursors.
 

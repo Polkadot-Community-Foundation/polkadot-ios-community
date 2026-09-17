@@ -1,9 +1,9 @@
 import Foundation
 
 /// Locates one own coin or voucher key: the installation subtree it was allocated in, and its item
-/// there. Persisted as the identifier `"{installationHex}/{item}"`.
+/// there.
 public struct CoinageKeyIndex: Hashable, Sendable {
-    public static let identifierSeparator: Character = "/"
+    private static let separator: Character = "/"
 
     public let installation: CoinageInstallationId
     public let item: DerivationIndex
@@ -13,18 +13,23 @@ public struct CoinageKeyIndex: Hashable, Sendable {
         self.item = item
     }
 
-    public init?(identifier: String) {
-        let parts = identifier.split(separator: Self.identifierSeparator, maxSplits: 1)
-        guard parts.count == 2,
-              let installation = try? CoinageInstallationId(hex: String(parts[0])),
-              let item = DerivationIndex(parts[1])
-        else { return nil }
-        self.init(installation: installation, item: item)
+    /// `"{installationHex}/{item}"`: the row identifier of the coin or voucher and the form the index
+    /// is persisted in where a column holds a list of them.
+    public func toString() -> String {
+        "\(installation.hex)\(Self.separator)\(item)"
     }
 
-    public var identifier: String {
-        "\(installation.hex)\(Self.identifierSeparator)\(item)"
+    public static func fromString(_ string: String) throws -> CoinageKeyIndex {
+        let parts = string.split(separator: separator, maxSplits: 1)
+        guard parts.count == 2, let item = DerivationIndex(parts[1]) else {
+            throw CoinageKeyIndexError.malformed(string)
+        }
+        return try CoinageKeyIndex(installation: CoinageInstallationId(hex: String(parts[0])), item: item)
     }
+}
+
+public enum CoinageKeyIndexError: Error, Equatable {
+    case malformed(String)
 }
 
 extension CoinageKeyIndex: Comparable {
@@ -37,5 +42,5 @@ extension CoinageKeyIndex: Comparable {
 }
 
 extension CoinageKeyIndex: CustomStringConvertible {
-    public var description: String { identifier }
+    public var description: String { toString() }
 }
