@@ -88,6 +88,11 @@ concurrency:
   group: build-production-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Uploads to the private bucket must not use parallel composite uploads: their temporary parts live outside
+  # this repository's prefix and need delete to clean up, which the build identity deliberately lacks.
+  CLOUDSDK_STORAGE_PARALLEL_COMPOSITE_UPLOAD_ENABLED: "False"
+
 jobs:
   build:
     name: Build Release (unsigned)
