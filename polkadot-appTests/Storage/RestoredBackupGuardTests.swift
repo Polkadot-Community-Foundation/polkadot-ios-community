@@ -15,7 +15,7 @@ struct RestoredBackupGuardTests {
 
         try guardStep.migrate()
 
-        #expect(eraser.calls.isEmpty)
+        #expect(eraser.calls == 0)
     }
 
     @Test("a key id whose entropy is in the Keychain is left alone")
@@ -26,27 +26,16 @@ struct RestoredBackupGuardTests {
 
         try makeGuard(keychain: keychain).migrate()
 
-        #expect(eraser.calls.isEmpty)
+        #expect(eraser.calls == 0)
     }
 
-    @Test("a key id without entropy erases the databases first and the defaults second")
+    @Test("a key id without entropy erases the wallet state and keeps the key id")
     func restoredOntoAnotherDevice() throws {
         keyIdStore.saveInstallationKeyId("restored-from-backup")
 
         try makeGuard(keychain: InMemoryKeychain()).migrate()
 
-        #expect(eraser.calls == [.databases, .userDefaults])
-    }
-
-    @Test("a failed directory removal keeps the key id so the next launch retries")
-    func databaseRemovalFailure() throws {
-        keyIdStore.saveInstallationKeyId("restored-from-backup")
-        eraser.databaseError = RecordingLocalStateEraser.Error.removalFailed
-
-        #expect(throws: RecordingLocalStateEraser.Error.removalFailed) {
-            try makeGuard(keychain: InMemoryKeychain()).migrate()
-        }
-        #expect(eraser.calls == [.databases])
+        #expect(eraser.calls == 1)
         #expect(keyIdStore.getInstallationKeyId() == "restored-from-backup")
     }
 
@@ -57,7 +46,7 @@ struct RestoredBackupGuardTests {
         #expect(throws: ThrowingKeychain.Error.unavailable) {
             try makeGuard(keychain: ThrowingKeychain()).migrate()
         }
-        #expect(eraser.calls.isEmpty)
+        #expect(eraser.calls == 0)
     }
 }
 
@@ -72,25 +61,10 @@ private extension RestoredBackupGuardTests {
     }
 
     final class RecordingLocalStateEraser: LocalStateErasing {
-        enum Call: Equatable {
-            case userDefaults
-            case databases
-        }
+        private(set) var calls = 0
 
-        enum Error: Swift.Error, Equatable {
-            case removalFailed
-        }
-
-        private(set) var calls: [Call] = []
-        var databaseError: Error?
-
-        func eraseUserDefaults() {
-            calls.append(.userDefaults)
-        }
-
-        func eraseDatabases() throws {
-            calls.append(.databases)
-            if let databaseError { throw databaseError }
+        func eraseUserState() {
+            calls += 1
         }
     }
 

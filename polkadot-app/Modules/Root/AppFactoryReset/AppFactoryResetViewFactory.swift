@@ -9,7 +9,6 @@
             let interactor = AppFactoryResetInteractor(
                 resetService: AppFactoryResetService(
                     mnemonicBackupHelper: MnemonicBackupHelper(),
-                    eraser: LocalStateEraser(logger: Logger.shared),
                     logger: Logger.shared
                 )
             )

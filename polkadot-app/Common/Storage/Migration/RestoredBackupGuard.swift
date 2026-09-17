@@ -1,14 +1,14 @@
 import Foundation
 import KeyDerivation
 
-/// Detects a device backup restored onto another device and wipes what it carried.
+/// Detects a device backup restored onto another device and drops the wallet state it carried.
 ///
 /// The installation key id comes back with the App Group defaults, but the root entropy it indexes is a
-/// this-device-only Keychain item and does not. Everything else the backup carried (both UserDefaults
-/// suites; the CoreData directory is created backup-excluded by `CoreDataService`) then belongs to a
-/// wallet this device cannot use, so it is erased before the migrators or the wallet gate read it. The
-/// CoreData directory is removed from disk as well — no store is open yet — so the same condition reached
-/// any other way still ends in a fresh install.
+/// this-device-only Keychain item and does not. The wallet gate already sends such a launch to onboarding
+/// or iCloud recovery, and wallet creation writes a new key id; what would survive is the old wallet's
+/// identity and progress in UserDefaults — the username gate would pass the new wallet under the old
+/// name — so those values are erased before the gates read them. The CoreData directory is
+/// backup-excluded and is not carried over; the Keychain is not restored at all.
 /// A same-device restore brings the Keychain back as well and matches nothing here. A Keychain read
 /// error propagates: nothing is erased on an unknown state.
 final class RestoredBackupGuard: Migrating {
@@ -38,10 +38,10 @@ final class RestoredBackupGuard: Migrating {
             return
         }
 
-        logger.warning("Installation key id found without root entropy: erasing state restored from a device backup")
-        // Databases first: the key id is the only trigger, so it must outlive a failed directory removal
-        // and let the next launch retry.
-        try eraser.eraseDatabases()
-        eraser.eraseUserDefaults()
+        logger
+            .warning(
+                "Installation key id found without root entropy: erasing the wallet state a device backup restored"
+            )
+        eraser.eraseUserState()
     }
 }

@@ -6,21 +6,19 @@
     import Keystore_iOS
     import Operation_iOS
     import AlarmKit
+    import Products
 
     final class AppFactoryResetService {
         private let mnemonicBackupHelper: MnemonicBackupHelperProtocol
-        private let eraser: LocalStateErasing
         private let notificationCenter: UNUserNotificationCenter
         private let logger: LoggerProtocol
 
         init(
             mnemonicBackupHelper: MnemonicBackupHelperProtocol,
-            eraser: LocalStateErasing,
             notificationCenter: UNUserNotificationCenter = .current(),
             logger: LoggerProtocol
         ) {
             self.mnemonicBackupHelper = mnemonicBackupHelper
-            self.eraser = eraser
             self.notificationCenter = notificationCenter
             self.logger = logger
         }
@@ -30,7 +28,7 @@
                 clearAlarmKitAlarms()
             }
             deleteAllKeychainItems()
-            eraser.eraseUserDefaults()
+            eraseAllUserDefaults()
             clearAllNotifications()
             deleteCloudBackup()
             deleteCoreDataDatabases()
@@ -85,7 +83,17 @@
             }
         }
 
-        // The stores are open at this point, so they go through the services rather than the eraser.
+        func eraseAllUserDefaults() {
+            SettingsManager.shared.removeAll()
+
+            for suiteName in [SharedContainerGroup.name, ContentHashCache.suiteName] {
+                let defaults = UserDefaults(suiteName: suiteName)
+                defaults?.removePersistentDomain(forName: suiteName)
+                defaults?.synchronize()
+            }
+        }
+
+        // The stores are open at this point, so they go through the services.
         func deleteCoreDataDatabases() {
             let stores: [(String, CoreDataServiceProtocol)] = [
                 ("UserData", UserDataStorageFacade.shared.databaseService),
