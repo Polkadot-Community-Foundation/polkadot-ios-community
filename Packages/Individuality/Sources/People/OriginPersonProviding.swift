@@ -19,7 +19,7 @@ public enum NoPersonStrategy: Sendable {
     /// watch its status for up to the delay before failing.
     case waitLight(Duration)
 
-    public static let `default`: NoPersonStrategy = .waitLight(.seconds(15))
+    public static let `default`: NoPersonStrategy = .waitLight(.seconds(20))
 }
 
 // Returns all origins the person is a member of, full first. Checks ring status of both lite and full person.

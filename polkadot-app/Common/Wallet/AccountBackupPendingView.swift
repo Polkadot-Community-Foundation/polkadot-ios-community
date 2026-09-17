@@ -11,9 +11,13 @@ struct AccountBackupPendingView: View {
             contentPadding: 16
         ) {
             Label {
+                // The expandable layout measures the details with a proposed height, which would clip
+                // this to one line without the fixed vertical size.
                 Text(.BalanceSync.accountBackupPending)
                     .typography(.bodyMedium)
                     .foregroundStyle(.fgPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(.iconInfo20)
                     .renderingMode(.template)
