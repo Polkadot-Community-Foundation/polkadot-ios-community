@@ -917,7 +917,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start a conversation with someone \nby typing their username"
+            "value": "Tap + below to find someone by\nusername"
           }
         }
       }
@@ -928,7 +928,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No active chats"
+            "value": "Add your first contact"
           }
         }
       }
