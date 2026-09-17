@@ -31,13 +31,15 @@ A coin (`Packages/Coinage/Sources/Models/Coin.swift`) has:
 Every installation draws a random 32-byte `CoinageInstallationId` (`Packages/Coinage/Sources/Installation/`)
 and allocates coins and vouchers under it: `//coinage//4294967295//0x{id}/{item}` for coins,
 `//coinage-ring-vrf//4294967295//0x{id}//{item}` for vouchers. A `CoinageKeyIndex(installation, item)`
-addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifier`.
+addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifier`. `item` is a
+`DerivationIndex` (`UInt64`); CoreData holds it as `Int64(bitPattern:)` and reads it back with
+`UInt64(bitPattern:)`, the same for the scan cursors.
 
 The *current* installation and its two allocation counters live in the Keychain
 (`CoinageKeychainInstallationStore`, behind `CoinageCurrentInstallationStoring`), under tags scoped by the
 app's installation key id — the same UUID that scopes the root entropy:
 `io.polkadotapp:<installationKeyId>:coinage.installation` (32 raw bytes), `…:coinage.coin.index` and
-`…:coinage.voucher.index` (SCALE `UInt32`, the next unissued item). The app supplies the tags
+`…:coinage.voucher.index` (SCALE `UInt64`, the next unissued item). The app supplies the tags
 (`CoinageInstallationKeychainTags` over `InstallationKeyIdStore`), so the package never sees the id, and a
 new wallet (new id) starts a fresh page with zeroed counters. Each `next…Item` call reserves an item for
 good, so a crash before the coin is saved costs one unused key, never a reused one; previous
@@ -45,7 +47,10 @@ installations' rows never move the counters. The database (`CDCoinageInstallatio
 installations only, with their scan cursors. The `coinageSyncNeeded` / scan-horizon settings are gone.
 This is a deliberate divergence from Android, which keeps the current installation in Room.
 
-Backup: the seed's `//datastore` sr25519 account registers each installation in the `AccountDataStore`
+Backup: the seed's `//datastore` sr25519 account (public key, 64-byte secret and encryption key pinned
+against polkadot-js and Android in `DataStoreKeyParityTests`; the encryption key is keyed by the secret in
+schnorrkel's ed25519 form via `DataStoreAccountKeys.ed25519Form(of:)` over NovaCrypto's `SNPrivateKey.toEd25519Data()`,
+since the iOS SDK holds the canonical scalar) registers each installation in the `AccountDataStore`
 contract on Asset Hub (record = ChaCha20-Poly1305 of the id under `"encryption".blake2b32WithKey(secret64)`,
 deterministic nonce). Registration is a durable-transaction domain (`coinage-installation`, see
 architecture/durable-transactions.md); `CoinageInstallationRegistrar` runs it once per process and
@@ -53,8 +58,9 @@ reports `CoinageAccountBackupStatus` (`registering / delayed / completed`) — A
 row while `delayed`. Recovery (`CoinageBackupRecoveryService`) lists the contract on every launch, records
 the other installations as previous ones (`CDCoinageInstallation`) and gap-scans them (batches of 500,
 stop after 4 empty in a row, cursors persisted); "Update" deep-searches 10 more batches, "Close" persists
-the acknowledgement. Recovered coins keep their absolute index; rows the store already holds are never
-overwritten. The contract address comes from remote config `account_data_store_config`.
+the acknowledgement. A scan that could not read the chain ends the phase as `.failed`: no balance is
+offered for acceptance, the app's recovery state is `failed`, and the next launch scans again. Recovered
+coins keep their absolute index; rows the store already holds are never overwritten. The contract address comes from remote config `account_data_store_config`.
 
 ## Key Rules
 

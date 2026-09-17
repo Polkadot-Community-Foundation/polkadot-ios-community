@@ -75,7 +75,7 @@ extension CoreDataMapperTests {
             let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
             let original = Voucher(
                 exponent: 10,
-                derivationIndex: CoinageKeyIndex(installation: .test, item: 700 + UInt32(value)),
+                derivationIndex: CoinageKeyIndex(installation: .test, item: 700 + UInt64(value)),
                 allocatedAt: now,
                 readyAt: now.addingTimeInterval(3_600),
                 recyclerFungibility: value,

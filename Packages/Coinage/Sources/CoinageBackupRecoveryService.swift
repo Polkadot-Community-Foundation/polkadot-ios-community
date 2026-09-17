@@ -28,7 +28,7 @@ public protocol CoinageBackupRecoveryServicing: Sendable {
 /// installation alone, so nothing found here can move the index this installation hands out next.
 actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     enum Config {
-        static let batchSize: UInt32 = 500
+        static let batchSize: DerivationIndex = 500
         static let emptyBatchCount = 4
         static let deepSearchBatchCount = 10
     }
@@ -97,7 +97,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         }
         logger?.info("Deep recovery finished: \(recovered.describe()) across \(previous.count) installation(s)")
 
-        progress.send(.deep(.completed))
+        progress.send(.deep(recovered.allSatisfy(\.isComplete) ? .completed : .failed))
     }
 
     func markAsCompleted() async {
@@ -141,6 +141,13 @@ private extension CoinageBackupRecoveryService {
                 await recovered.append(initialScan(installation))
             }
             logger?.info("Recovery finished: \(recovered.describe()) across \(pending.count) installation(s)")
+
+            // A scan that failed vouches for nothing: the launch reports the failure and the next one
+            // scans again, instead of offering a balance it never read.
+            guard recovered.allSatisfy(\.isComplete) else {
+                progress.send(.initial(.failed))
+                return
+            }
 
             // An installation scanned for the first time is worth another look, even if the last one
             // was acknowledged.
@@ -214,7 +221,7 @@ private extension CoinageBackupRecoveryService {
     }
 
     struct GapScanResult {
-        let nextIndex: UInt32
+        let nextIndex: DerivationIndex
         let found: Int
     }
 
@@ -245,7 +252,7 @@ private extension CoinageBackupRecoveryService {
 
     func gapScanCoins(
         _ installation: CoinageInstallationId,
-        from startIndex: UInt32,
+        from startIndex: DerivationIndex,
         limit: ScanLimit
     ) async -> Result<Int, Error> {
         let scanned = await gapScan(from: startIndex, limit: limit) { [scanner, assetStore] batchStart in
@@ -272,7 +279,7 @@ private extension CoinageBackupRecoveryService {
 
     func gapScanVouchers(
         _ installation: CoinageInstallationId,
-        from startIndex: UInt32,
+        from startIndex: DerivationIndex,
         limit: ScanLimit
     ) async -> Result<Int, Error> {
         let scanned = await gapScan(from: startIndex, limit: limit) { [scanner, assetStore] batchStart in
@@ -298,9 +305,9 @@ private extension CoinageBackupRecoveryService {
     }
 
     func gapScan(
-        from startIndex: UInt32,
+        from startIndex: DerivationIndex,
         limit: ScanLimit,
-        scanBatch: (_ batchStart: UInt32) async throws -> Int
+        scanBatch: (_ batchStart: DerivationIndex) async throws -> Int
     ) async -> Result<GapScanResult, Error> {
         var nextIndex = startIndex
         var batches = 0

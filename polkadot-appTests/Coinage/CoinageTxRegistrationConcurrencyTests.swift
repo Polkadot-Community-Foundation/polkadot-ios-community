@@ -329,5 +329,5 @@ private func testKey(_ index: CoinageKeyIndex) -> PublicKey {
 }
 
 private func keyIndex(_ item: Int) -> CoinageKeyIndex {
-    CoinageKeyIndex(installation: .test, item: UInt32(item))
+    CoinageKeyIndex(installation: .test, item: UInt64(item))
 }

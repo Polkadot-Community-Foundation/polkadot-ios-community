@@ -41,20 +41,23 @@ final class CoinageInstallationCoreDataRepository: CoinageInstallationRepository
             return try context.fetch(request).map { row in
                 try PreviousInstallation(
                     id: CoinageInstallationId(hex: Self.identifier(of: row)),
-                    coinScanNextIndex: UInt32(clamping: row.coinScanNextIndex),
-                    voucherScanNextIndex: UInt32(clamping: row.voucherScanNextIndex),
+                    coinScanNextIndex: UInt64(bitPattern: row.coinScanNextIndex),
+                    voucherScanNextIndex: UInt64(bitPattern: row.voucherScanNextIndex),
                     initialScanCompleted: row.initialScanCompleted
                 )
             }
         }
     }
 
-    func updateCoinScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws {
-        try await update(installation) { $0.coinScanNextIndex = Int64(nextIndex) }
+    func updateCoinScanNextIndex(_ nextIndex: DerivationIndex, for installation: CoinageInstallationId) async throws {
+        try await update(installation) { $0.coinScanNextIndex = Int64(bitPattern: nextIndex) }
     }
 
-    func updateVoucherScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws {
-        try await update(installation) { $0.voucherScanNextIndex = Int64(nextIndex) }
+    func updateVoucherScanNextIndex(
+        _ nextIndex: DerivationIndex,
+        for installation: CoinageInstallationId
+    ) async throws {
+        try await update(installation) { $0.voucherScanNextIndex = Int64(bitPattern: nextIndex) }
     }
 
     func markInitialScanCompleted(_ installation: CoinageInstallationId) async throws {

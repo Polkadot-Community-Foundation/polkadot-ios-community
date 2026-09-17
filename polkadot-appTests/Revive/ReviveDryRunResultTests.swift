@@ -8,7 +8,7 @@ import Testing
 struct ReviveDryRunResultTests {
     @Test("a runtime after the rename reports the weight as weight_required")
     func weightRequired() throws {
-        let result = try decode(weightKey: "weight_required")
+        let result = try decode(weightKey: "weightRequired")
 
         #expect(result.weightRequired == Substrate.WeightV2(refTime: 11, proofSize: 22))
         #expect(result.storageDeposit.charged == 5)
@@ -16,7 +16,7 @@ struct ReviveDryRunResultTests {
 
     @Test("a runtime before the rename still reports it as gas_required")
     func gasRequired() throws {
-        let result = try decode(weightKey: "gas_required")
+        let result = try decode(weightKey: "gasRequired")
 
         #expect(result.weightRequired == Substrate.WeightV2(refTime: 11, proofSize: 22))
     }
@@ -28,15 +28,16 @@ struct ReviveDryRunResultTests {
 }
 
 private extension ReviveDryRunResultTests {
-    /// The shape the dynamic SCALE decoder hands to `Decodable`: structs as objects, enums as
-    /// `[variant, payload]`, integers as strings, byte vectors as arrays of byte strings.
+    /// The shape the dynamic SCALE decoder hands to `Decodable`: field names camel-cased by the runtime
+    /// registry's `ScaleInfoCamelCaseMapper`, structs as objects, enums as `[variant, payload]`, integers
+    /// as strings, byte vectors as arrays of byte strings.
     func decode(weightKey: String?) throws -> ReviveDryRunResult {
         var json: [String: Any] = [
-            "storage_deposit": ["Charge", "5"],
+            "storageDeposit": ["Charge", "5"],
             "result": ["Ok", ["flags": ["bits": "0"], "data": ["1", "2"]]]
         ]
         if let weightKey {
-            json[weightKey] = ["ref_time": "11", "proof_size": "22"]
+            json[weightKey] = ["refTime": "11", "proofSize": "22"]
         }
         let data = try JSONSerialization.data(withJSONObject: json)
         return try JSONDecoder().decode(ReviveDryRunResult.self, from: data)

@@ -4,9 +4,9 @@ import Testing
 @testable import Coinage
 
 struct CoinageBackupRecoveryServiceTests {
-    private static let batchSize: UInt32 = 500
-    private static let emptyBatches: UInt32 = 4
-    private static let deepBatches: UInt32 = 10
+    private static let batchSize: DerivationIndex = 500
+    private static let emptyBatches: DerivationIndex = 4
+    private static let deepBatches: DerivationIndex = 10
     private static let previous = CoinageInstallationId.fixed(0x01)
     private static let anotherPrevious = CoinageInstallationId.fixed(0x02)
 
@@ -130,11 +130,25 @@ struct CoinageBackupRecoveryServiceTests {
         scanner.failing = true
         await service.runLaunchPass()
         #expect(installations.previous(Self.previous)?.initialScanCompleted == false)
+        #expect(try await progress() == .initial(.failed))
 
         scanner.failing = false
         await service.runLaunchPass()
 
         #expect(installations.previous(Self.previous)?.initialScanCompleted == true)
+    }
+
+    @Test("a deep search that could not read the chain reports the failure instead of a balance")
+    func failedDeepSearch() async throws {
+        dataStore.listed([Self.previous])
+        await service.runLaunchPass()
+        scanner.failing = true
+
+        await service.deepSearch()
+
+        let reported = try #require(await progress())
+        #expect(reported == .deep(.failed))
+        #expect(!reported.awaitsAcknowledgement)
     }
 
     @Test("with previous installations recovered the user is asked to confirm the balance")
@@ -232,7 +246,11 @@ private final class StubScanner: InstallationAssetScanning, @unchecked Sendable 
         state.withLock { $0.scanned = [] }
     }
 
-    func scanCoins(installation: CoinageInstallationId, startIndex: UInt32, count: UInt32) async throws -> [Coin] {
+    func scanCoins(
+        installation: CoinageInstallationId,
+        startIndex: DerivationIndex,
+        count: DerivationIndex
+    ) async throws -> [Coin] {
         let (coins, failing) = state.withLock { state -> (Set<CoinageKeyIndex>, Bool) in
             state.scanned.append(installation)
             return (state.coins, state.failing)
@@ -255,8 +273,8 @@ private final class StubScanner: InstallationAssetScanning, @unchecked Sendable 
 
     func scanVouchers(
         installation: CoinageInstallationId,
-        startIndex: UInt32,
-        count: UInt32
+        startIndex: DerivationIndex,
+        count: DerivationIndex
     ) async throws -> [Voucher] {
         let (vouchers, failing) = state.withLock { state -> (Set<CoinageKeyIndex>, Bool) in
             state.scanned.append(installation)

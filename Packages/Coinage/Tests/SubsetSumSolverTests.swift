@@ -334,7 +334,7 @@ struct SubsetSumSolverTests {
         var coins: [Coin] = []
         for i in 0 ..< 50 {
             let exponent = exponents[i % exponents.count]
-            coins.append(makeCoin(exponent: exponent, derivationIndex: CoinageKeyIndex.harness(UInt32(i + 1))))
+            coins.append(makeCoin(exponent: exponent, derivationIndex: CoinageKeyIndex.harness(UInt64(i + 1))))
         }
 
         struct TimedOut: Error {}

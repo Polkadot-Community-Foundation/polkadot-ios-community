@@ -11,8 +11,8 @@ import SubstrateSdk
 
 extension PreviousInstallation {
     func changing(
-        coinScanNextIndex: UInt32? = nil,
-        voucherScanNextIndex: UInt32? = nil,
+        coinScanNextIndex: DerivationIndex? = nil,
+        voucherScanNextIndex: DerivationIndex? = nil,
         initialScanCompleted: Bool? = nil
     ) -> PreviousInstallation {
         PreviousInstallation(

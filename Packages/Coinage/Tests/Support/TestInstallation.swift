@@ -15,11 +15,11 @@ extension CoinageInstallationId {
 
 /// Lets the suites write an item as a plain number: it names that item in the test installation.
 extension CoinageKeyIndex: ExpressibleByIntegerLiteral {
-    public init(integerLiteral value: UInt32) {
+    public init(integerLiteral value: UInt64) {
         self.init(installation: .test, item: value)
     }
 
-    static func harness(_ item: UInt32) -> CoinageKeyIndex {
+    static func harness(_ item: UInt64) -> CoinageKeyIndex {
         CoinageKeyIndex(installation: .test, item: item)
     }
 }

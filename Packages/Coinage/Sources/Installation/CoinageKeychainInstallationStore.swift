@@ -4,7 +4,7 @@ import os
 import SubstrateSdk
 
 /// Keychain-backed ``CoinageCurrentInstallationStoring``: the installation id as its 32 raw bytes, each
-/// counter as a SCALE `UInt32` holding the next unissued item. One lock serialises every operation, so
+/// counter as a SCALE `UInt64` holding the next unissued item. One lock serialises every operation, so
 /// the two allocators and the registrar can never create two installations or hand out one item twice.
 ///
 /// Tags are resolved on every call: a new installation key id (a new wallet) starts a fresh page and
@@ -32,11 +32,11 @@ public final class CoinageKeychainInstallationStore: CoinageCurrentInstallationS
         }
     }
 
-    public func nextCoinItem() throws -> UInt32 {
+    public func nextCoinItem() throws -> DerivationIndex {
         try lock.withLock { try reserveNextItem(tag: tags.coinIndexTag()) }
     }
 
-    public func nextVoucherItem() throws -> UInt32 {
+    public func nextVoucherItem() throws -> DerivationIndex {
         try lock.withLock { try reserveNextItem(tag: tags.voucherIndexTag()) }
     }
 }
@@ -51,9 +51,9 @@ private extension CoinageKeychainInstallationStore {
         }
     }
 
-    func reserveNextItem(tag: String) throws -> UInt32 {
+    func reserveNextItem(tag: String) throws -> DerivationIndex {
         let item = try storedNextItem(tag: tag) ?? 0
-        guard item < UInt32.max else {
+        guard item < DerivationIndex.max else {
             throw CoinageKeychainInstallationStoreError.counterExhausted(tag)
         }
 
@@ -61,7 +61,7 @@ private extension CoinageKeychainInstallationStore {
         return item
     }
 
-    func storedNextItem(tag: String) throws -> UInt32? {
+    func storedNextItem(tag: String) throws -> DerivationIndex? {
         guard try keystore.checkKey(for: tag) else {
             return nil
         }
@@ -69,7 +69,7 @@ private extension CoinageKeychainInstallationStore {
         let record = try keystore.fetchKey(for: tag)
         do {
             let decoder = try ScaleDecoder(data: record)
-            let item = try UInt32(scaleDecoder: decoder)
+            let item = try DerivationIndex(scaleDecoder: decoder)
             guard decoder.remained == 0 else {
                 throw CoinageKeychainInstallationStoreError.corruptedRecord(tag)
             }

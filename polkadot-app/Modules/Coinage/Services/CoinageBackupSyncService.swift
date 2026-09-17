@@ -10,6 +10,8 @@ enum CoinageRecoveryState: Equatable {
     case idle
     case inProgress
     case completed
+    /// The last scan could not read the chain; nothing is offered until a later scan succeeds.
+    case failed
 }
 
 // MARK: - Protocol
@@ -96,7 +98,17 @@ private extension CoinageBackupSyncService {
             balanceSyncStateStorage.isRestorePending = restorePending
         }
 
-        stateSubject.send(progress.isInProgress ? .inProgress : (restorePending ? .completed : .idle))
+        let state: CoinageRecoveryState =
+            if progress.isInProgress {
+                .inProgress
+            } else if restorePending {
+                .completed
+            } else if progress.isFailed {
+                .failed
+            } else {
+                .idle
+            }
+        stateSubject.send(state)
     }
 }
 

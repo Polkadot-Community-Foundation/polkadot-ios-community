@@ -4,14 +4,14 @@ import Foundation
 /// is only ever scanned for balance, and the scan progress belongs to it.
 public struct PreviousInstallation: Hashable, Sendable {
     public let id: CoinageInstallationId
-    public let coinScanNextIndex: UInt32
-    public let voucherScanNextIndex: UInt32
+    public let coinScanNextIndex: DerivationIndex
+    public let voucherScanNextIndex: DerivationIndex
     public let initialScanCompleted: Bool
 
     public init(
         id: CoinageInstallationId,
-        coinScanNextIndex: UInt32,
-        voucherScanNextIndex: UInt32,
+        coinScanNextIndex: DerivationIndex,
+        voucherScanNextIndex: DerivationIndex,
         initialScanCompleted: Bool
     ) {
         self.id = id
@@ -31,9 +31,9 @@ public protocol CoinageInstallationRepositoryProtocol: Sendable {
 
     func getPrevious() async throws -> [PreviousInstallation]
 
-    func updateCoinScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws
+    func updateCoinScanNextIndex(_ nextIndex: DerivationIndex, for installation: CoinageInstallationId) async throws
 
-    func updateVoucherScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws
+    func updateVoucherScanNextIndex(_ nextIndex: DerivationIndex, for installation: CoinageInstallationId) async throws
 
     func markInitialScanCompleted(_ installation: CoinageInstallationId) async throws
 }

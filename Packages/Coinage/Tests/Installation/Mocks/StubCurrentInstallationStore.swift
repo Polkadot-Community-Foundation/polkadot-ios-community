@@ -13,8 +13,8 @@ import SubstrateSdk
 final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @unchecked Sendable {
     private struct State {
         var current: CoinageInstallationId
-        var coinItem: UInt32 = 0
-        var voucherItem: UInt32 = 0
+        var coinItem: DerivationIndex = 0
+        var voucherItem: DerivationIndex = 0
         var error: Error?
         var coinRequests = 0
         var voucherRequests = 0
@@ -27,13 +27,13 @@ final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @un
     }
 
     /// The item the next coin allocation receives.
-    var coinItem: UInt32 {
+    var coinItem: DerivationIndex {
         get { state.withLock { $0.coinItem } }
         set { state.withLock { $0.coinItem = newValue } }
     }
 
     /// The item the next voucher allocation receives.
-    var voucherItem: UInt32 {
+    var voucherItem: DerivationIndex {
         get { state.withLock { $0.voucherItem } }
         set { state.withLock { $0.voucherItem = newValue } }
     }
@@ -53,7 +53,7 @@ final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @un
         }
     }
 
-    func nextCoinItem() throws -> UInt32 {
+    func nextCoinItem() throws -> DerivationIndex {
         try state.withLock { state in
             if let error = state.error { throw error }
             state.coinRequests += 1
@@ -62,7 +62,7 @@ final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @un
         }
     }
 
-    func nextVoucherItem() throws -> UInt32 {
+    func nextVoucherItem() throws -> DerivationIndex {
         try state.withLock { state in
             if let error = state.error { throw error }
             state.voucherRequests += 1

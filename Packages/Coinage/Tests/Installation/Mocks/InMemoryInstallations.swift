@@ -36,11 +36,14 @@ final class InMemoryInstallations: CoinageInstallationRepositoryProtocol, @unche
         return state.withLock { previous in ids.compactMap { previous[$0] } }
     }
 
-    func updateCoinScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws {
+    func updateCoinScanNextIndex(_ nextIndex: DerivationIndex, for installation: CoinageInstallationId) async throws {
         update(installation) { $0.changing(coinScanNextIndex: nextIndex) }
     }
 
-    func updateVoucherScanNextIndex(_ nextIndex: UInt32, for installation: CoinageInstallationId) async throws {
+    func updateVoucherScanNextIndex(
+        _ nextIndex: DerivationIndex,
+        for installation: CoinageInstallationId
+    ) async throws {
         update(installation) { $0.changing(voucherScanNextIndex: nextIndex) }
     }
 

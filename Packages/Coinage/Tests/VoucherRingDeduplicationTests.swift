@@ -102,7 +102,7 @@ private extension VoucherRingDeduplicationTests {
 
         for (index, placement) in placements {
             voucherByIndex[index] = voucher(index, exponent: placement.exponent)
-            positions[index] = .defined(included(ring: placement.ring, position: index.item))
+            positions[index] = .defined(included(ring: placement.ring, position: UInt32(index.item)))
         }
 
         return VoucherLocationService.recyclers(

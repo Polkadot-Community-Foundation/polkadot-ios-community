@@ -6,9 +6,9 @@ public struct CoinageKeyIndex: Hashable, Sendable {
     public static let identifierSeparator: Character = "/"
 
     public let installation: CoinageInstallationId
-    public let item: UInt32
+    public let item: DerivationIndex
 
-    public init(installation: CoinageInstallationId, item: UInt32) {
+    public init(installation: CoinageInstallationId, item: DerivationIndex) {
         self.installation = installation
         self.item = item
     }
@@ -17,7 +17,7 @@ public struct CoinageKeyIndex: Hashable, Sendable {
         let parts = identifier.split(separator: Self.identifierSeparator, maxSplits: 1)
         guard parts.count == 2,
               let installation = try? CoinageInstallationId(hex: String(parts[0])),
-              let item = UInt32(parts[1])
+              let item = DerivationIndex(parts[1])
         else { return nil }
         self.init(installation: installation, item: item)
     }

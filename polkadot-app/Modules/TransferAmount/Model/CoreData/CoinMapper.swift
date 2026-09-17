@@ -33,7 +33,7 @@ extension CoinMapper: CoreDataMapperProtocol {
             exponent: entity.exponent,
             derivationIndex: CoinageKeyIndex(
                 installation: CoinageInstallationId(hex: installationHex),
-                item: UInt32(clamping: entity.derivationIndex)
+                item: UInt64(bitPattern: entity.derivationIndex)
             ),
             age: entity.age?.int16Value,
             isOnchain: entity.isOnchain,
@@ -51,7 +51,7 @@ extension CoinMapper: CoreDataMapperProtocol {
     ) throws {
         entity.identifier = model.identifier
         entity.installationId = model.derivationIndex.installation.hex
-        entity.derivationIndex = Int64(model.derivationIndex.item)
+        entity.derivationIndex = Int64(bitPattern: model.derivationIndex.item)
         entity.exponent = model.exponent
         entity.age = model.age.map { NSNumber(value: $0) }
         entity.isOnchain = model.isOnchain

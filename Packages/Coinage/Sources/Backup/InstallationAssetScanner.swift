@@ -4,9 +4,17 @@ import SDKLogger
 /// Reads one batch of a previous installation's subtree from chain: the coins and vouchers that exist
 /// there, keyed to the indices they were derived from.
 protocol InstallationAssetScanning: Sendable {
-    func scanCoins(installation: CoinageInstallationId, startIndex: UInt32, count: UInt32) async throws -> [Coin]
+    func scanCoins(
+        installation: CoinageInstallationId,
+        startIndex: DerivationIndex,
+        count: DerivationIndex
+    ) async throws -> [Coin]
 
-    func scanVouchers(installation: CoinageInstallationId, startIndex: UInt32, count: UInt32) async throws -> [Voucher]
+    func scanVouchers(
+        installation: CoinageInstallationId,
+        startIndex: DerivationIndex,
+        count: DerivationIndex
+    ) async throws -> [Voucher]
 }
 
 final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Sendable {
@@ -27,7 +35,11 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
         self.logger = logger
     }
 
-    func scanCoins(installation: CoinageInstallationId, startIndex: UInt32, count: UInt32) async throws -> [Coin] {
+    func scanCoins(
+        installation: CoinageInstallationId,
+        startIndex: DerivationIndex,
+        count: DerivationIndex
+    ) async throws -> [Coin] {
         let indexedKeys = try Self.indices(of: installation, from: startIndex, count: count).map {
             try (index: $0, publicKey: coinKeypairFactory.derivePublicKey(index: $0))
         }
@@ -51,8 +63,8 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
 
     func scanVouchers(
         installation: CoinageInstallationId,
-        startIndex: UInt32,
-        count: UInt32
+        startIndex: DerivationIndex,
+        count: DerivationIndex
     ) async throws -> [Voucher] {
         let indices = Self.indices(of: installation, from: startIndex, count: count)
         guard !indices.isEmpty else { return [] }
@@ -78,8 +90,8 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
 private extension InstallationAssetScanner {
     static func indices(
         of installation: CoinageInstallationId,
-        from startIndex: UInt32,
-        count: UInt32
+        from startIndex: DerivationIndex,
+        count: DerivationIndex
     ) -> [CoinageKeyIndex] {
         (startIndex ..< startIndex + count).map { CoinageKeyIndex(installation: installation, item: $0) }
     }

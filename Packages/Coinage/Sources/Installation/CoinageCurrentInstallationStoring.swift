@@ -17,7 +17,7 @@ public protocol CoinageCurrentInstallationStoring: Sendable {
     /// The current installation, created on first call.
     func getOrCreateCurrent() throws -> CoinageInstallationId
 
-    func nextCoinItem() throws -> UInt32
+    func nextCoinItem() throws -> DerivationIndex
 
-    func nextVoucherItem() throws -> UInt32
+    func nextVoucherItem() throws -> DerivationIndex
 }

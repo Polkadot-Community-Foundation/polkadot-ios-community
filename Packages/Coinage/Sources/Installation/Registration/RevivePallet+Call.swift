@@ -1,6 +1,6 @@
 import BigInt
 import Foundation
-import SubstrateSdk
+@preconcurrency import SubstrateSdk
 
 public enum RevivePallet {
     public static let name = "Revive"
