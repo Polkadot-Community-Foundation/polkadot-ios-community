@@ -94,4 +94,26 @@ struct ProductPageTests {
     @Test func fromNavigationDestinationRejectsInvalid() {
         #expect(ProductPage.fromNavigationDestination("invalid", tld: "dot") == nil)
     }
+
+    @Test func fromNavigationDestinationSchemelessHostKeepsFragmentRoute() {
+        let page = ProductPage.fromNavigationDestination("getcash.paseo/#/", tld: "paseo")
+        #expect(page?.host.toDotDomain() == "getcash.paseo")
+        #expect(page?.page == "/#/")
+    }
+
+    @Test func fromNavigationDestinationSchemelessHostKeepsPath() {
+        let page = ProductPage.fromNavigationDestination("browse.dot/onboarding?ref=abc", tld: "dot")
+        #expect(page?.host.toDotDomain() == "browse.dot")
+        #expect(page?.page == "/onboarding?ref=abc")
+    }
+
+    @Test func fromNavigationDestinationSchemelessRootPathHasNoPage() {
+        let page = ProductPage.fromNavigationDestination("browse.dot/", tld: "dot")
+        #expect(page?.host.toDotDomain() == "browse.dot")
+        #expect(page?.page == nil)
+    }
+
+    @Test func fromNavigationDestinationSchemelessExternalHostWithPath() {
+        #expect(ProductPage.fromNavigationDestination("stg.revx.dev/editor", tld: "dot") == nil)
+    }
 }

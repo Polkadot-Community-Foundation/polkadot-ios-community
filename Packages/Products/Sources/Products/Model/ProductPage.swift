@@ -20,7 +20,7 @@ extension ProductPage {
     }
 
     static func fromNavigationDestination(_ dest: String, tld: String) -> ProductPage? {
-        guard let url = URL(string: dest), url.host() != nil else {
+        guard let url = NavigationDestinationURL.make(dest), url.host() != nil else {
             return ProductHost.parse(dest, tld: tld).map { ProductPage(host: $0) }
         }
 

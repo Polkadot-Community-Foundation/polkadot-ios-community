@@ -41,10 +41,7 @@ private extension FundingDomainProvider {
             throw FundingDomainError.unavailable
         }
 
-        let host = URL(string: destination)?.host() ?? destination
-        guard try await hostProvider.resolveHost(rawString: host) != nil,
-              let page = hostProvider.page(navigationDestination: destination)
-        else {
+        guard let page = hostProvider.page(navigationDestination: destination) else {
             throw FundingDomainError.unavailable
         }
 
