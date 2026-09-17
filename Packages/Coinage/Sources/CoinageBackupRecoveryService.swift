@@ -1,6 +1,7 @@
 import AsyncExtensions
 import Foundation
 import SDKLogger
+import StructuredConcurrency
 import SubstrateSdk
 
 // MARK: - Protocol
@@ -31,6 +32,8 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         static let batchSize: DerivationIndex = 500
         static let emptyBatchCount = 4
         static let deepSearchBatchCount = 10
+        static let discoveryAttempts = 3
+        static let discoveryRetryDelay: Duration = .seconds(1)
     }
 
     private let currentInstallationStore: any CoinageCurrentInstallationStoring
@@ -40,6 +43,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     private let scanner: any InstallationAssetScanning
     private let assetStore: any RecoveredAssetStoring
     private let completedStore: any DeepRecoveryCompletedStoring
+    private let discoveryRetryDelay: Duration
     private let logger: (any SDKLoggerProtocol)?
 
     private nonisolated let progress = AsyncCurrentValueSubject<BackupProgress>(.unknown)
@@ -53,6 +57,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         scanner: any InstallationAssetScanning,
         assetStore: any RecoveredAssetStoring,
         completedStore: any DeepRecoveryCompletedStoring,
+        discoveryRetryDelay: Duration = Config.discoveryRetryDelay,
         logger: (any SDKLoggerProtocol)?
     ) {
         self.currentInstallationStore = currentInstallationStore
@@ -62,6 +67,7 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         self.scanner = scanner
         self.assetStore = assetStore
         self.completedStore = completedStore
+        self.discoveryRetryDelay = discoveryRetryDelay
         self.logger = logger
     }
 
@@ -125,10 +131,17 @@ private extension CoinageBackupRecoveryService {
 
 private extension CoinageBackupRecoveryService {
     func recoverNewInstallations() async {
-        await discoverRegisteredInstallations()
+        let discovery = await discoverRegisteredInstallations()
 
         let previous = await previousInstallations()
         let pending = previous.filter { !$0.initialScanCompleted }
+
+        // With nothing known, an unread contract is the whole answer: reporting completion would read
+        // as "nothing to recover", so the launch reports the failure and the next one lists again.
+        guard discovery != .failed || !previous.isEmpty else {
+            progress.send(.initial(.failed))
+            return
+        }
 
         if pending.isEmpty {
             logger?.info("Recovery: nothing new to scan, \(previous.count) previous installation(s) already scanned")
@@ -161,23 +174,37 @@ private extension CoinageBackupRecoveryService {
         }
     }
 
+    enum Discovery: Equatable {
+        case listed
+        /// No contract address yet: the config is still on its way, which is not a read failure.
+        case unavailable
+        case failed
+    }
+
     /// A failed read only delays discovery: installations found on an earlier launch are still scanned.
-    func discoverRegisteredInstallations() async {
+    func discoverRegisteredInstallations() async -> Discovery {
         guard let contract = await configProvider.contractAddress() else {
             logger?
                 .warning(
                     "Recovery: data store contract address is not available, scanning the installations already known"
                 )
-            return
+            return .unavailable
         }
         do {
-            let registered = try await dataStoreRepository.fetchRegisteredInstallations(contract: contract, at: nil)
+            let registered = try await withRetry(
+                maxAttempts: Config.discoveryAttempts,
+                initialDelay: discoveryRetryDelay
+            ) { [dataStoreRepository] in
+                try await dataStoreRepository.fetchRegisteredInstallations(contract: contract, at: nil)
+            }
             logger?.info("Recovery: contract lists \(registered.count) installation(s) for this seed")
             let current = try currentInstallationStore.getOrCreateCurrent()
             try await installationRepository.addPrevious(registered.filter { $0 != current })
+            return .listed
         } catch {
             logger?
                 .warning("Recovery: could not read registered installations, scanning the ones already known: \(error)")
+            return .failed
         }
     }
 

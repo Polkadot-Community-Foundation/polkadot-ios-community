@@ -57,7 +57,9 @@ deterministic nonce). Contract reads and the `Revive.call` extrinsic go through 
 `AccountDataStoreAbi` over `EvmAbi`, and the address is an `EvmAddress`. Registration is a durable-transaction domain (`coinage-installation`, see
 architecture/durable-transactions.md); `CoinageInstallationRegistrar` runs it once per process and
 reports `CoinageAccountBackupStatus` (`registering / delayed / completed`) — Asset Details shows a warning
-row while `delayed`. Recovery (`CoinageBackupRecoveryService`) lists the contract on every launch, records
+row while `delayed`. Recovery (`CoinageBackupRecoveryService`) lists the contract on every launch (three attempts through
+`withRetry`; a listing that still fails with no previous installation known ends the launch pass as `.failed`
+rather than "nothing to recover", while a missing contract address only skips discovery), records
 the other installations as previous ones (`CDCoinageInstallation`) and gap-scans them (batches of 500,
 stop after 4 empty in a row, cursors persisted); "Update" deep-searches 10 more batches, "Close" persists
 the acknowledgement. A scan that could not read the chain ends the phase as `.failed`: no balance is

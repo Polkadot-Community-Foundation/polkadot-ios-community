@@ -4,9 +4,7 @@
 
 `Packages/Revive/` owns everything the app knows about pallet-revive: the chain-bound contract API and
 its one implementation, the runtime-API caller and result decoding, the `Revive.call` extrinsic, the EVM
-address type with the H160 derivation, the ENS namehash, and the shared Solidity ABI encoder. It mirrors
-Android's `feature/revive` (`api` + `impl`). Coinage (the `AccountDataStore` contract) and Products (the
-DotNs resolver and name registry) consume it; the app supplies only remote-config values and chain ids.
+address type with the H160 derivation, the ENS namehash, and the shared Solidity ABI encoder.
 
 ## Public surface
 

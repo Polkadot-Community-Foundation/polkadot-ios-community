@@ -26,6 +26,7 @@ struct CoinageBackupRecoveryServiceTests {
             scanner: scanner,
             assetStore: assetStore,
             completedStore: completed,
+            discoveryRetryDelay: .milliseconds(1),
             logger: nil
         )
     }
@@ -122,6 +123,54 @@ struct CoinageBackupRecoveryServiceTests {
         await service.runLaunchPass()
 
         #expect(scanner.scannedInstallations == [Self.previous])
+        #expect(dataStore.reads == CoinageBackupRecoveryService.Config.discoveryAttempts)
+    }
+
+    @Test("a contract that could not be read, with nothing known, reports failure rather than completion")
+    func failedContractReadWithNothingKnown() async throws {
+        dataStore.failing()
+
+        await service.runLaunchPass()
+
+        let reported = try #require(await progress())
+        #expect(reported == .initial(.failed))
+        #expect(!reported.awaitsAcknowledgement)
+        #expect(dataStore.reads == CoinageBackupRecoveryService.Config.discoveryAttempts)
+    }
+
+    @Test("a listing that fails once is read again before the launch gives up on it")
+    func transientContractReadFailure() async throws {
+        dataStore.listed([Self.previous])
+        dataStore.failingTransiently(times: 1)
+
+        await service.runLaunchPass()
+
+        #expect(dataStore.reads == 2)
+        #expect(scanner.scannedInstallations == [Self.previous])
+        #expect(try await progress() == .initial(.completed))
+    }
+
+    @Test("a contract address still on its way is not a failed read")
+    func contractAddressUnavailable() async throws {
+        let service = CoinageBackupRecoveryService(
+            currentInstallationStore: StubCurrentInstallationStore(current: .test),
+            installationRepository: installations,
+            configProvider: StubDataStoreConfig(contract: nil),
+            dataStoreRepository: dataStore,
+            scanner: scanner,
+            assetStore: assetStore,
+            completedStore: completed,
+            discoveryRetryDelay: .milliseconds(1),
+            logger: nil
+        )
+
+        await service.runLaunchPass()
+
+        #expect(dataStore.reads == 0)
+        for try await progress in service.subscribeProgress() {
+            #expect(progress == .completed)
+            break
+        }
     }
 
     @Test("an installation whose scan failed is retried on the next launch")
