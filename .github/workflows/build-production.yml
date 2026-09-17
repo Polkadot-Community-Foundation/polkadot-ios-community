@@ -244,9 +244,9 @@ jobs:
 
           # --- identity must at least be COMPLETE ---------------------------------------
           # An empty expansion is the failure mode that builds green and breaks at launch:
-          # PRODUCT_BUNDLE_IDENTIFIER, APP_GROUP and DEEPLINK all flow from brand.xcconfig
+          # PRODUCT_BUNDLE_IDENTIFIER, APP_MAIN_BUNDLE and DEEPLINK all flow from brand.xcconfig
           # through Info.plist and AppConfig.Brand, which traps at startup on an empty key.
-          for key in PRODUCT_BUNDLE_IDENTIFIER APP_GROUP DEEPLINK APP_NAME; do
+          for key in PRODUCT_BUNDLE_IDENTIFIER APP_MAIN_BUNDLE DEEPLINK APP_NAME; do
             if grep -qE "^${key} = .+" build-settings.txt; then
               echo "ok: $(grep -m1 -E "^${key} = .+" build-settings.txt)"
             else
@@ -254,6 +254,9 @@ jobs:
               fail=1
             fi
           done
+          # The app group has no build setting of its own: Info.plist (BrandAppGroup) and the
+          # entitlements use group.$(APP_MAIN_BUNDLE) directly.
+          echo "app group: group.$(grep -m1 -E '^APP_MAIN_BUNDLE = ' build-settings.txt | sed 's/^APP_MAIN_BUNDLE = //')"
 
           # --- identity OWNERSHIP -------------------------------------------------------
           # Today Release resolves to Parity's identity, by design of the inherited
@@ -282,7 +285,7 @@ jobs:
             echo "### Release configuration — resolved identity"
             echo ''
             echo '```'
-            grep -E '^(PRODUCT_BUNDLE_IDENTIFIER|APP_MAIN_BUNDLE|APP_GROUP|APP_NAME|DEEPLINK|MARKETING_VERSION|DEVELOPMENT_TEAM|ASSETCATALOG_COMPILER_APPICON_NAME|OTHER_SWIFT_FLAGS) = ' build-settings.txt | sort -u
+            grep -E '^(PRODUCT_BUNDLE_IDENTIFIER|APP_MAIN_BUNDLE|APP_NAME|DEEPLINK|MARKETING_VERSION|DEVELOPMENT_TEAM|ASSETCATALOG_COMPILER_APPICON_NAME|OTHER_SWIFT_FLAGS) = ' build-settings.txt | sort -u
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
