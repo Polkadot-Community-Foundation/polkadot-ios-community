@@ -1,5 +1,6 @@
 import Foundation
 import SubstrateSdk
+import FoundationExt
 
 struct ChainLiveness {
     private let windowSeconds: Double
@@ -9,7 +10,7 @@ struct ChainLiveness {
     private var samples: [(height: BlockNumber, date: Date)] = []
 
     init(blockPeriod: Duration) {
-        let blockSeconds = Self.durationToSeconds(blockPeriod)
+        let blockSeconds = blockPeriod.timeInterval
         let calculatedWindow = max(30.0, blockSeconds * 10)
 
         windowSeconds = calculatedWindow
@@ -93,10 +94,5 @@ struct ChainLiveness {
         }
 
         samples.removeFirst(anchorIndex)
-    }
-
-    private static func durationToSeconds(_ duration: Duration) -> Double {
-        let components = duration.components
-        return Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 }

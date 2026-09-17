@@ -105,11 +105,6 @@ extension ChainStatusProvider: ChainStatusProviding {
 }
 
 extension ChainStatusProvider {
-    private static func durationToSeconds(_ duration: Duration) -> Double {
-        let components = duration.components
-        return Double(components.seconds) + Double(components.attoseconds) / 1e18
-    }
-
     func handleStatusUpdate(
         _ status: NetworkStatus,
         for target: ChainConnectionTarget,
@@ -258,7 +253,7 @@ extension ChainStatusProvider {
                 icon: target.statusIcon,
                 indication: ChainStatusIndication.resolve(state: state, liveness: nil),
                 liveness: nil,
-                expectedBlockSeconds: Self.durationToSeconds(target.expectedBlockTime)
+                expectedBlockSeconds: target.expectedBlockTime.timeInterval
             )
         }
 
