@@ -32,7 +32,7 @@ ICON_SUFFIX     = Dev
 // PCF identity. APP_GROUP is deliberately NOT group.$(APP_MAIN_BUNDLE): the registered PCF
 // App Group predates the bundle id and must not change, or every installed tester loses the
 // shared container — keychain ids, UserDefaults suite and the Core Data store all live in it.
-APP_NAME        = Polkadot Dev
+APP_NAME        = $(BRAND_DISPLAY_NAME)
 APP_MAIN_BUNDLE = io.pcf.polkadotapp
 APP_GROUP       = group.pcf.polkadotapp
 BUNDLE          = $(APP_MAIN_BUNDLE)
