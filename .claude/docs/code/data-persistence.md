@@ -76,7 +76,7 @@ attributes need a `defaultValueString`. If lightweight isn't possible, add an
 - Located in `Common/UserDefaults/`
 - For session data and user preferences
 - The **App Group suite** (`SharedContainerGroup.userDefaults`) holds the ids that index the Keychain:
-  `SettingsKey.installationKeyId` (raw key `io.polkadot.app.entropy.id.v2`, kept from before the rename;
+  `SettingsKey.installationKeyId` (raw key `io.polkadot.app.entropy.id.v3`;
   `InstallationKeyIdStore`), `deviceEncryptId`, and the product resource store id. A missing App Group
   entitlement must trap, never onboard into an empty suite.
 
