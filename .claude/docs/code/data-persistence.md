@@ -98,12 +98,14 @@ What an iOS device backup carries, and what the app does about it:
   synchronizable item and is the recovery path.
 - `RestoredBackupGuard` runs first in the serial launch chain built by `RootPresenterFactory`: when the
   installation key id is present but `hasRootEntropy()` is false — a backup restored onto another
-  device — it calls `LocalStateEraser` (both UserDefaults suites, the DotNs cache suite
-  `ContentHashCache.suiteName`, and the CoreData directory removed from disk — a no-op after a real
-  restore) before any store is opened or the wallet gate runs. The eraser never touches the storage facades: constructing them before the migrators run is
-  not allowed, and removing the directory is exactly what `CoreDataService.drop()` does. A Keychain read
-  error propagates and erases nothing. The TESTNET factory reset shares the defaults step and drops its
-  (open) stores through the services.
+  device — it calls `LocalStateEraser.eraseUserState()`, which removes only the previous wallet's identity
+  (`username`, `usernameClaimed`, `isPerson`) and progress (`backendSessionId`, `nextSyncUpdateId`, the two
+  coinage recovery flags, the fiat onramp ids, `voucherInUseDismissed`) from the standard suite. Nothing
+  else is touched: the wallet gate already routes such a launch to onboarding or iCloud recovery, wallet
+  creation writes a new key id, the CoreData directory was never in the backup, `deviceEncryptId` and the
+  product resource store id index Keychain items that self-heal, and preferences belong to the device. A
+  Keychain read error propagates and erases nothing. The TESTNET factory reset wipes every suite, the
+  Keychain and both (open) stores on its own.
 
 ## iCloud
 
