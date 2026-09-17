@@ -33,6 +33,7 @@ enum SettingsKey: String {
     case showTransferStrategyDebug
     case truApiRuntimeEnabled
     case coinageRecyclingStrategy
+    case tabBarLabelsEnabled
     #if TESTNET_FEATURE
         case tipsResetPending
     #endif
