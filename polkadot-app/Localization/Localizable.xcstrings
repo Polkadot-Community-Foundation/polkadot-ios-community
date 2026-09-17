@@ -2663,6 +2663,17 @@
         }
       }
     },
+    "settings.cell.tab.bar.labels": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab bar labels"
+          }
+        }
+      }
+    },
     "settings.cell.terms": {
       "extractionState": "manual",
       "localizations": {
