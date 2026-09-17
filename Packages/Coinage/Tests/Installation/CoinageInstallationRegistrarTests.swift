@@ -15,6 +15,7 @@ struct CoinageInstallationRegistrarTests {
     private let engine = FakeRegistrationEngine()
     private let submitter: FakeRegistrationSubmitter
     private let config = StubDataStoreConfig()
+    private let backgroundExecutor = CountingBackgroundExecutor()
     private let registrar: CoinageInstallationRegistrar
 
     init() {
@@ -24,7 +25,7 @@ struct CoinageInstallationRegistrarTests {
             configProvider: config,
             engine: engine,
             submitter: submitter,
-            backgroundExecutor: StubBackgroundExecutor(),
+            backgroundExecutor: backgroundExecutor,
             timing: CoinageInstallationRegistrar.Timing(
                 expectedRegistrationTime: Self.expectedRegistrationTime,
                 initialBackoff: Self.initialBackoff,
@@ -146,6 +147,40 @@ struct CoinageInstallationRegistrarTests {
 
         await clock.advance(by: Self.initialBackoff)
         try await settle(until: { submitter.attempts.count == 3 })
+    }
+
+    @Test("each attempt runs under its own background assertion, not the whole run")
+    func assertionPerAttempt() async throws {
+        registrar.start()
+        try await settle(until: { submitter.attempts.count == 1 })
+        #expect(backgroundExecutor.executions == 1)
+
+        failCurrentAttempts()
+        await clock.advance(by: Self.initialBackoff + .milliseconds(1))
+        try await settle(until: { submitter.attempts.count == 2 })
+
+        #expect(backgroundExecutor.executions == 2)
+    }
+
+    @Test("an expired background window costs one attempt and the backoff keeps growing")
+    func expiredWindowKeepsBackoff() async throws {
+        backgroundExecutor.expireNextExecutions(1)
+
+        registrar.start()
+        try await settle(until: { backgroundExecutor.executions == 1 })
+        #expect(submitter.attempts.isEmpty)
+
+        await clock.advance(by: Self.initialBackoff + .milliseconds(1))
+        try await settle(until: { submitter.attempts.count == 1 })
+
+        // Two attempts have been made, so the next wait is the doubled backoff, not the initial one.
+        failCurrentAttempts()
+        await clock.advance(by: Self.initialBackoff + .milliseconds(1))
+        await settle()
+        #expect(submitter.attempts.count == 1)
+
+        await clock.advance(by: Self.initialBackoff)
+        try await settle(until: { submitter.attempts.count == 2 })
     }
 
     @Test("an attempt that could not be submitted is retried")

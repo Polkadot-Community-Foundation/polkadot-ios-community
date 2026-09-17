@@ -151,7 +151,7 @@ private extension CoinageInstallationRegistrar {
 
         while !Task.isCancelled {
             do {
-                try await backgroundExecutor.execute { [self] in try await attemptUntilFinalized(target) }
+                try await attemptUntilFinalized(target)
                 return
             } catch {
                 logger?.error("Installation registration run interrupted: \(error)")
@@ -181,7 +181,12 @@ private extension CoinageInstallationRegistrar {
             attempts += 1
             logger?.info("Installation registration attempt \(attempts)")
             do {
-                _ = try await submitter.submitAttempt(target: target)
+                // One background assertion per attempt. This loop can run for the whole process, and an
+                // assertion around it would retain every connection that long; when iOS expired it the
+                // loop would end and the backoff start over.
+                _ = try await backgroundExecutor.execute { [submitter] in
+                    try await submitter.submitAttempt(target: target)
+                }
             } catch {
                 logger?.error("Installation registration attempt \(attempts) could not be submitted: \(error)")
             }
