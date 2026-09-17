@@ -45,13 +45,18 @@ extension SPABrowserCoordinator: SPABrowserCoordinating {
             return tab
         }
 
-        guard page.page != existing.page else {
-            return existing
+        // A request without a page means the product root; the tab may have wandered off it since
+        // the last request, so it is always navigated even when the recorded page is already nil.
+        let pageChanged = page.page != existing.page
+
+        if pageChanged {
+            existing.page = page.page
+            tabManager.updateTab(existing)
         }
 
-        existing.page = page.page
-        tabManager.updateTab(existing)
-        pool.controller(for: existing.id)?.navigate(to: page)
+        if pageChanged || page.page == nil {
+            pool.controller(for: existing.id)?.navigate(to: page)
+        }
 
         return existing
     }
