@@ -2883,6 +2883,17 @@
         }
       }
     },
+    "tab.apps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps"
+          }
+        }
+      }
+    },
     "tab.browse": {
       "extractionState": "manual",
       "localizations": {
@@ -2912,6 +2923,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "More"
+          }
+        }
+      }
+    },
+    "tab.network": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network"
           }
         }
       }

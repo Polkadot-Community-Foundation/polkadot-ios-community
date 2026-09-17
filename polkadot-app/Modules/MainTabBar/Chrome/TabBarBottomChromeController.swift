@@ -21,6 +21,7 @@ final class TabBarBottomChromeController: UIViewController {
     private var spaTabCount = 0
     private var badges: [Int: DSTabBarItem.Badge] = [:]
     private var selectedTabIndex = 0
+    private var showsLabels = false
     private weak var hostedPanelController: UIViewController?
 
     private lazy var foldController = TabBarFoldController(
@@ -154,6 +155,14 @@ final class TabBarBottomChromeController: UIViewController {
         barView.setBadge(badge, at: itemIndex)
     }
 
+    func setLabels(visible: Bool) {
+        guard visible != showsLabels else {
+            return
+        }
+        showsLabels = visible
+        rebuildItems()
+    }
+
     func setSPATabs(_ chips: [DSTabBarChip], selected: UUID?) {
         if spaTabCount != chips.count {
             spaTabCount = chips.count
@@ -280,7 +289,7 @@ private extension TabBarBottomChromeController {
 
         barView.items = effectiveSlots.enumerated().map { itemIndex, slot in
             let badge = slotMap.tabIndex(forItemIndex: itemIndex).flatMap { badges[$0] }
-            return slot.makeBarItem(badge: badge, spaTabCount: spaTabCount)
+            return slot.makeBarItem(badge: badge, spaTabCount: spaTabCount, showsLabel: showsLabels)
         }
 
         setSelectedIndex(selectedTabIndex)
