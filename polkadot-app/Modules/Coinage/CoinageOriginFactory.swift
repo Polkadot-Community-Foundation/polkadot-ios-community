@@ -64,10 +64,8 @@ final class CoinageOriginFactory: ExtrinsicOriginFactory, OriginCreating {
             liteCollectionId: PeopleLitePallet.membersIdentifier,
             fullVrfManager: fullPersonKeyManager,
             fullCollectionId: PeoplePallet.membersIdentifier,
-            memberStatusChecker: MembershipStatusChecker(
-                connection: connection,
-                runtimeCodingService: runtimeCodingService
-            )
+            connection: connection,
+            runtimeCodingService: runtimeCodingService
         )
 
         super.init(
