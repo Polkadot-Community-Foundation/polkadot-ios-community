@@ -7,7 +7,16 @@ import DesignSystem
 public final class PolkadotLogoLoadingView: UIView, LoadIndicatorRepresentable {
     public private(set) var isAnimating = false
 
-    private let size: CGFloat
+    /// Edge of the square the mark is fitted into. Drives the intrinsic size; when constraints
+    /// impose different bounds the mark scales to fit them instead.
+    public var size: CGFloat {
+        didSet {
+            guard size != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            setNeedsLayout()
+        }
+    }
+
     private let markLayer = CALayer()
     private var petalLayers: [CALayer] = []
     private var foregroundObserver: NSObjectProtocol?
@@ -53,7 +62,7 @@ public final class PolkadotLogoLoadingView: UIView, LoadIndicatorRepresentable {
 
 public extension PolkadotLogoLoadingView {
     enum Constants {
-        public static let defaultSize: CGFloat = 52
+        public static let defaultSize: CGFloat = 96
     }
 
     func startAnimating() {
@@ -112,6 +121,7 @@ private extension PolkadotLogoLoadingView {
 
     func layoutMark() {
         let box = PolkadotLogoMark.viewBox
+        guard bounds.width > 0, bounds.height > 0 else { return }
         let scale = min(bounds.width / box.width, bounds.height / box.height)
 
         CATransaction.begin()

@@ -45,11 +45,11 @@ extension SPABrowserCoordinator: SPABrowserCoordinating {
             return tab
         }
 
-        guard let requestedPage = page.page, requestedPage != existing.page else {
+        guard page.page != existing.page else {
             return existing
         }
 
-        existing.page = requestedPage
+        existing.page = page.page
         tabManager.updateTab(existing)
         pool.controller(for: existing.id)?.navigate(to: page)
 
