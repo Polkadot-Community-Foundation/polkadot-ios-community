@@ -52,7 +52,7 @@ This is documented in CLAUDE.md and enforced in reviews.
 ### Migration
 
 - `Common/Storage/Migration/` — migration strategies
-- UserDataModel has 31 versions — always add a new version for schema changes
+- UserDataModel is versioned — always add a new version for schema changes
 - Test migrations thoroughly
 
 #### Adding a UserDataModel version (all four steps, same PR)
