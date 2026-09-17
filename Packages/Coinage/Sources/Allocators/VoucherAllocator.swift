@@ -31,7 +31,7 @@ actor VoucherAllocator: VoucherAllocating {
     /// Allocates a new voucher index and persists the voucher — with its on-chain public key cached
     /// so the durability layer never re-derives it — from the moment it is minted.
     func allocate(exponent: Int16) async throws -> Voucher {
-        let index = try nextIndex()
+        let index = try await nextIndex()
         let delay = delayProvider.timeInterval()
         let allocatedAt = Date.now
 
@@ -48,9 +48,9 @@ actor VoucherAllocator: VoucherAllocating {
 }
 
 private extension VoucherAllocator {
-    func nextIndex() throws -> CoinageKeyIndex {
-        let installation = try installationStore.getOrCreateCurrent()
-        return try CoinageKeyIndex(installation: installation, item: installationStore.nextVoucherItem())
+    func nextIndex() async throws -> CoinageKeyIndex {
+        let installation = try await installationStore.getOrCreateCurrent()
+        return try await CoinageKeyIndex(installation: installation, item: installationStore.nextVoucherItem())
     }
 }
 

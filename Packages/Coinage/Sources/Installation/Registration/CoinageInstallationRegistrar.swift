@@ -132,7 +132,7 @@ private extension CoinageInstallationRegistrar {
     func awaitTarget() async -> InstallationRegistrationTarget? {
         while !Task.isCancelled {
             do {
-                let installation = try currentInstallationStore.getOrCreateCurrent()
+                let installation = try await currentInstallationStore.getOrCreateCurrent()
                 if let contract = await configProvider.contractAddress() {
                     return InstallationRegistrationTarget(contract: contract, installation: installation)
                 }

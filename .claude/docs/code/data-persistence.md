@@ -89,6 +89,10 @@ What an iOS device backup carries, and what the app does about it:
 - **Not backed up**: the CoreData directory. Operation-iOS `CoreDataService` creates it with
   `isExcludedFromBackup` (`CoreDataPersistentSettings.excludeFromiCloudBackup` defaults to `true`; both
   facades keep the default). Nothing else may create that directory first, or the flag is never set.
+- **Relied upon by coinage**: the current installation is a row in that directory (`CDCurrentInstallation`),
+  so a same-device restore — Keychain back, database gone — starts a new installation and recovers the old
+  one through the contract, instead of keeping Keychain counters for a subtree whose coins were lost
+  (see architecture/coinage.md, Installations).
 - **Not restored onto another device**: every app-side Keychain item (`Keychain()` is
   `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`). The iCloud mnemonic backup is a separate,
   synchronizable item and is the recovery path.

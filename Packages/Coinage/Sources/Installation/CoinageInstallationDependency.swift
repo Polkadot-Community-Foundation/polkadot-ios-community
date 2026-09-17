@@ -4,8 +4,8 @@ import Individuality
 import Revive
 import SubstrateSdk
 
-/// The app-side pieces installation allocation, registration and recovery run on: the Keychain store
-/// of the current installation, pallet-revive and fee estimation on the chain the `AccountDataStore`
+/// The app-side pieces installation allocation, registration and recovery run on: the store of the
+/// current installation and its counters, pallet-revive and fee estimation on the chain the `AccountDataStore`
 /// contract lives on, PGAS for the data store account, and the persisted acknowledgement flag.
 public struct CoinageInstallationDependency {
     public let currentInstallationStore: any CoinageCurrentInstallationStoring

@@ -21,9 +21,9 @@ public struct PreviousInstallation: Hashable, Sendable {
     }
 }
 
-/// The previous installations the data store lists for this account. The current one lives in the
-/// Keychain (``CoinageCurrentInstallationStoring``) and is never recorded here. Implemented in the app
-/// over CoreData.
+/// The previous installations the data store lists for this account. The current one has a row of its
+/// own (``CoinageCurrentInstallationRepositoryProtocol``) and is never recorded here. Implemented in the
+/// app over CoreData.
 public protocol CoinageInstallationRepositoryProtocol: Sendable {
     /// Records installations as previous ones, skipping any already known. Callers exclude the current
     /// installation themselves.

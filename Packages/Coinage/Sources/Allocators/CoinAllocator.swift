@@ -29,7 +29,7 @@ actor CoinAllocator: CoinAllocating {
     /// Allocates a new coin index and persists the coin — with its on-chain public key cached so the
     /// durability layer never re-derives it — from the moment it is minted.
     func allocate(exponent: Int16, provenance: CoinProvenance) async throws -> Coin {
-        let index = try nextIndex()
+        let index = try await nextIndex()
         let coin = try Coin(
             exponent: exponent,
             derivationIndex: index,
@@ -44,8 +44,8 @@ actor CoinAllocator: CoinAllocating {
 }
 
 private extension CoinAllocator {
-    func nextIndex() throws -> CoinageKeyIndex {
-        let installation = try installationStore.getOrCreateCurrent()
-        return try CoinageKeyIndex(installation: installation, item: installationStore.nextCoinItem())
+    func nextIndex() async throws -> CoinageKeyIndex {
+        let installation = try await installationStore.getOrCreateCurrent()
+        return try await CoinageKeyIndex(installation: installation, item: installationStore.nextCoinItem())
     }
 }

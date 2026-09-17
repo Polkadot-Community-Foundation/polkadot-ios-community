@@ -231,9 +231,10 @@ private extension ServiceCoordinator {
             chainRegistry: chainRegistry
         )
 
-        let currentInstallationStore = CoinageKeychainInstallationStore(
+        let currentInstallationStore = CoinageCurrentInstallationStore(
+            repository: CoinageCurrentInstallationCoreDataRepository(storageFacade: UserDataStorageFacade.shared),
             keystore: Keychain(),
-            tags: CoinageInstallationKeychainTags(keyIdStore: InstallationKeyIdStore())
+            tags: CoinageInstallationKeychainTags()
         )
 
         return CoinageInstallationDependency(

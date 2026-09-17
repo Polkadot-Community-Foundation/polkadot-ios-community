@@ -341,6 +341,14 @@
             </uniquenessConstraint>
         </uniquenessConstraints>
     </entity>
+    <entity name="CDCurrentInstallation" representedClassName="CDCurrentInstallation" syncable="YES" codeGenerationType="class">
+        <attribute name="identifier" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="identifier"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
     <entity name="CDCoinageTxInput" representedClassName="CDCoinageTxInput" syncable="YES" codeGenerationType="class">
         <attribute name="receivedPubKey" optional="YES" attributeType="String"/>
         <relationship name="coin" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCoin" inverseName="coinageTxInputs" inverseEntity="CDCoin"/>

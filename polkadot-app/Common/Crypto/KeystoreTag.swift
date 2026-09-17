@@ -52,26 +52,18 @@ extension KeystoreTag {
         ].joined(with: .colon)
     }
 
-    static func coinageInstallationTag(for installationKeyId: String) -> String {
+    static func coinageCoinIndexTag(forInstallation installationId: String) -> String {
         [
             domain,
-            installationKeyId,
-            "coinage.installation"
-        ].joined(with: .colon)
-    }
-
-    static func coinageCoinIndexTag(for installationKeyId: String) -> String {
-        [
-            domain,
-            installationKeyId,
+            installationId,
             "coinage.coin.index"
         ].joined(with: .colon)
     }
 
-    static func coinageVoucherIndexTag(for installationKeyId: String) -> String {
+    static func coinageVoucherIndexTag(forInstallation installationId: String) -> String {
         [
             domain,
-            installationKeyId,
+            installationId,
             "coinage.voucher.index"
         ].joined(with: .colon)
     }

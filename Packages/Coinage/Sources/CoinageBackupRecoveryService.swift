@@ -198,7 +198,7 @@ private extension CoinageBackupRecoveryService {
                 try await dataStoreRepository.fetchRegisteredInstallations(contract: contract, at: nil)
             }
             logger?.info("Recovery: contract lists \(registered.count) installation(s) for this seed")
-            let current = try currentInstallationStore.getOrCreateCurrent()
+            let current = try await currentInstallationStore.getOrCreateCurrent()
             try await installationRepository.addPrevious(registered.filter { $0 != current })
             return .listed
         } catch {

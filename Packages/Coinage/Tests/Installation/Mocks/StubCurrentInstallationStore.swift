@@ -46,14 +46,14 @@ final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @un
     var coinRequests: Int { state.withLock { $0.coinRequests } }
     var voucherRequests: Int { state.withLock { $0.voucherRequests } }
 
-    func getOrCreateCurrent() throws -> CoinageInstallationId {
+    func getOrCreateCurrent() async throws -> CoinageInstallationId {
         try state.withLock { state in
             if let error = state.error { throw error }
             return state.current
         }
     }
 
-    func nextCoinItem() throws -> DerivationIndex {
+    func nextCoinItem() async throws -> DerivationIndex {
         try state.withLock { state in
             if let error = state.error { throw error }
             state.coinRequests += 1
@@ -62,7 +62,7 @@ final class StubCurrentInstallationStore: CoinageCurrentInstallationStoring, @un
         }
     }
 
-    func nextVoucherItem() throws -> DerivationIndex {
+    func nextVoucherItem() async throws -> DerivationIndex {
         try state.withLock { state in
             if let error = state.error { throw error }
             state.voucherRequests += 1

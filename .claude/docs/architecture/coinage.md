@@ -35,17 +35,22 @@ addresses one key; its string form `"{idHex}/{item}"` is the CoreData `identifie
 `DerivationIndex` (`UInt64`); CoreData holds it as `Int64(bitPattern:)` and reads it back with
 `UInt64(bitPattern:)`, the same for the scan cursors.
 
-The *current* installation and its two allocation counters live in the Keychain
-(`CoinageKeychainInstallationStore`, behind `CoinageCurrentInstallationStoring`), under tags scoped by the
-app's installation key id — the same UUID that scopes the root entropy:
-`io.polkadotapp:<installationKeyId>:coinage.installation` (32 raw bytes), `…:coinage.coin.index` and
-`…:coinage.voucher.index` (SCALE `UInt64`, the next unissued item). The app supplies the tags
-(`CoinageInstallationKeychainTags` over `InstallationKeyIdStore`), so the package never sees the id, and a
-new wallet (new id) starts a fresh page with zeroed counters. Each `next…Item` call reserves an item for
-good, so a crash before the coin is saved costs one unused key, never a reused one; previous
-installations' rows never move the counters. The database (`CDCoinageInstallation`) holds *previous*
-installations only, with their scan cursors. The `coinageSyncNeeded` / scan-horizon settings are gone.
-This is a deliberate divergence from Android, which keeps the current installation in Room.
+The *current* installation is one database row (`CDCurrentInstallation`, behind
+`CoinageCurrentInstallationRepositoryProtocol`) in the same store as the coins and vouchers allocated in it,
+read once per process by `CoinageCurrentInstallationStore` (`CoinageCurrentInstallationStoring`) since it
+never changes once created; the read and the insert share one context block so concurrent first callers
+get one id. Its two allocation counters live in the Keychain, scoped by the installation itself:
+`io.polkadotapp:<installationIdHex>:coinage.coin.index` and `…:coinage.voucher.index` (SCALE `UInt64`, the
+next unissued item; `CoinageInstallationKeychainTags` supplies the layout). Each `next…Item` call reserves
+an item for good, so a crash before the coin is saved costs one unused key, never a reused one; previous
+installations' rows never move the counters. Putting the identity in the database is what makes a
+same-device restore safe: the Keychain (`ThisDeviceOnly`) comes back but the backup-excluded store does
+not, so a new installation starts, its counters begin at zero under its own tags, and the old one is
+recovered through the contract like any previous installation instead of keeping its counters while its
+items are never scanned. The database (`CDCoinageInstallation`) holds *previous* installations only, with
+their scan cursors. The `coinageSyncNeeded` / scan-horizon settings are gone. Android keeps the current
+installation in the same Room table under an `isCurrent` flag; iOS keeps a separate entity and the
+counters in the Keychain.
 
 Backup: the seed's `//datastore` sr25519 account (public key, 64-byte secret and encryption key pinned
 against polkadot-js and Android in `DataStoreKeyParityTests`; the encryption key is keyed by the secret in
@@ -136,8 +141,8 @@ Transfer plans determine how coins are spent:
 | External payments       | `Packages/Coinage/Sources/ExternalPayment/` | Offramp identity, retry, status, planner scope |
 | Coinage UI              | `Modules/Coinage/`            | Coinage screen changes           |
 | Backup sync             | ServiceCoordinator             | Backup/restore flow changes      |
-| Installation identity   | `Packages/Coinage/Sources/Installation/`, `CoinageKeychainInstallationStore` (current + counters), `CoinageInstallationCoreDataRepository` (previous) | Key index / page format, allocator counters |
-| Installation Keychain tags | `Common/Crypto/KeystoreTag.swift`, `Modules/Coinage/Model/Keychain/CoinageInstallationKeychainTags.swift` | Tag layout, key-id scoping |
+| Installation identity   | `Packages/Coinage/Sources/Installation/`, `CoinageCurrentInstallationStore` (current row + Keychain counters), `CoinageCurrentInstallationCoreDataRepository`, `CoinageInstallationCoreDataRepository` (previous) | Key index / page format, allocator counters |
+| Installation Keychain tags | `Common/Crypto/KeystoreTag.swift`, `Modules/Coinage/Model/Keychain/CoinageInstallationKeychainTags.swift` | Tag layout, installation scoping |
 | Installation registration | `.../Installation/Registration/`, `ServiceCoordinator.createInstallationDependency` | Contract ABI, PGAS provisioning, registrar timing |
 | Contract calls          | `Packages/Revive/` (see architecture/revive.md) | Runtime API encoding, revert handling, `EvmAddress` |
 | Backup recovery         | `Packages/Coinage/Sources/Backup/`, `CoinageBackupSyncService` | Scan rules, progress model, restored-balance card |

@@ -1,12 +1,21 @@
 import Foundation
 
-/// The Keychain tags the current installation and its allocation counters are stored under. The app
-/// derives them from its installation key id, so the package never handles that id; a missing id
-/// throws and no page is created for it.
+/// The one row naming the current installation, kept in the same database as the coins and vouchers
+/// allocated in it. Implemented in the app over CoreData.
+public protocol CoinageCurrentInstallationRepositoryProtocol: Sendable {
+    /// The current installation, created with `newInstallation()` when the row does not exist. The
+    /// read and the insert must share one transaction: two concurrent first callers get the same id,
+    /// or one device's keys would be split across two subtrees.
+    func getOrCreateCurrent(
+        newInstallation: @escaping @Sendable () throws -> CoinageInstallationId
+    ) async throws -> CoinageInstallationId
+}
+
+/// The Keychain tags an installation's allocation counters are stored under. The app supplies the
+/// layout; the tags are scoped by the installation itself, so a counter can never serve another one.
 public protocol CoinageInstallationKeychainTagProviding: Sendable {
-    func installationTag() throws -> String
-    func coinIndexTag() throws -> String
-    func voucherIndexTag() throws -> String
+    func coinIndexTag(for installation: CoinageInstallationId) -> String
+    func voucherIndexTag(for installation: CoinageInstallationId) -> String
 }
 
 /// The one installation new keys are allocated in, and the counters that hand out its items.
@@ -15,9 +24,9 @@ public protocol CoinageInstallationKeychainTagProviding: Sendable {
 /// coin or voucher built for it is ever saved, so a crash between the two costs one unused key.
 public protocol CoinageCurrentInstallationStoring: Sendable {
     /// The current installation, created on first call.
-    func getOrCreateCurrent() throws -> CoinageInstallationId
+    func getOrCreateCurrent() async throws -> CoinageInstallationId
 
-    func nextCoinItem() throws -> DerivationIndex
+    func nextCoinItem() async throws -> DerivationIndex
 
-    func nextVoucherItem() throws -> DerivationIndex
+    func nextVoucherItem() async throws -> DerivationIndex
 }
