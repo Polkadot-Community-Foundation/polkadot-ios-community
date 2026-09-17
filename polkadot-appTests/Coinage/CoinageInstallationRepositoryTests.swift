@@ -45,6 +45,21 @@ struct CoinageInstallationRepositoryTests {
         #expect(!untouched.initialScanCompleted)
     }
 
+    @Test("confirming covers every installation known then; one recorded later starts unconfirmed")
+    func markAllUserConfirmed() async throws {
+        try await repository.addPrevious([.other, .fixed(0x22)])
+        try await repository.markInitialScanCompleted(.other)
+
+        try await repository.markAllUserConfirmed()
+        try await repository.addPrevious([.fixed(0x33)])
+
+        let previous = try await repository.getPrevious()
+        let confirmed = previous.filter(\.isUserConfirmedCompletion).map(\.id)
+        #expect(Set(confirmed) == [.other, .fixed(0x22)])
+        #expect(previous.first { $0.id == .fixed(0x33) }?.isUserConfirmedCompletion == false)
+        #expect(previous.allSatisfy { !$0.awaitsUserConfirmation })
+    }
+
     @Test("an update for an unknown installation fails")
     func unknownInstallation() async throws {
         await #expect(throws: CoinageInstallationRepositoryError.self) {

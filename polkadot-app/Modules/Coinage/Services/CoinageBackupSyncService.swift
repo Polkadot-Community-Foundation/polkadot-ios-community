@@ -1,75 +1,59 @@
 import AsyncExtensions
 import Coinage
-import CommonService
+import CoreData
 import Foundation
-import Keystore_iOS
-
-// MARK: - State
-
-enum CoinageRecoveryState: Equatable {
-    case idle
-    case inProgress
-    case completed
-    /// The last scan could not read the chain; nothing is offered until a later scan succeeds.
-    case failed
-}
+import Operation_iOS
 
 // MARK: - Protocol
 
-protocol CoinageBackupSyncServicing: AsyncApplicationServicing {
-    /// The recovery state derived from Coinage's ``BackupProgress``. Replays the last state.
-    var stateStream: AnyAsyncSequence<CoinageRecoveryState> { get }
+protocol CoinageBackupSyncServicing {
+    /// Whether the restored-balance card is shown: a previous installation whose first scan completed
+    /// and whose balance the user has not confirmed yet. Emits the current value first.
+    var showsRecoveredBalanceStream: AnyAsyncSequence<Bool> { get }
+
+    /// Whether a scan is running; the card's "Update" shows progress while it is. Emits the current
+    /// value first.
+    var isRecoveryInProgressStream: AnyAsyncSequence<Bool> { get }
 
     /// Another look for balance under previous installations.
     func triggerRecovery()
 
-    /// The user accepted the recovered balance: the card closes and stays closed until a later scan
-    /// finds a new installation.
+    /// The user accepted the recovered balance: every installation known now is confirmed and the card
+    /// closes until a later scan records a new one.
     func acknowledgeRecovery()
 }
 
 // MARK: - Implementation
 
-/// Bridges Coinage's backup progress to the wallet: mirrors it into the persisted "restore pending"
-/// flag the Asset Details card reads, and forwards the card's actions.
+/// Bridges Coinage's backup recovery to the wallet card. Visibility comes from the installation rows
+/// themselves, so a running or failed deep search cannot hide a balance already offered; progress only
+/// drives the button.
 final class CoinageBackupSyncService: CoinageBackupSyncServicing, @unchecked Sendable {
     private let coinageService: any CoinageServicing
-    private let balanceSyncStateStorage: BalanceSyncStateStoring
-    private let logger: LoggerProtocol
+    private let storageFacade: StorageFacadeProtocol
 
-    private let stateSubject = AsyncCurrentValueSubject<CoinageRecoveryState>(.idle)
-    private var progressTask: Task<Void, Never>?
-
-    var stateStream: AnyAsyncSequence<CoinageRecoveryState> {
-        stateSubject.eraseToAnyAsyncSequence()
-    }
-
-    init(
-        coinageService: any CoinageServicing,
-        balanceSyncStateStorage: BalanceSyncStateStoring = BalanceSyncStateStorage(),
-        logger: LoggerProtocol = Logger.shared
-    ) {
+    init(coinageService: any CoinageServicing, storageFacade: StorageFacadeProtocol) {
         self.coinageService = coinageService
-        self.balanceSyncStateStorage = balanceSyncStateStorage
-        self.logger = logger
+        self.storageFacade = storageFacade
     }
 
-    func setup() async {
-        progressTask?.cancel()
-        progressTask = Task { [weak self, coinageService, logger] in
-            do {
-                for try await progress in coinageService.subscribeBackupProgress() {
-                    self?.apply(progress)
-                }
-            } catch {
-                logger.error("Coinage backup progress stream failed: \(error)")
-            }
-        }
+    var showsRecoveredBalanceStream: AnyAsyncSequence<Bool> {
+        storageFacade
+            .subscribeSnapshot(
+                mapper: AnyCoreDataMapper(RecoveredInstallationMapper()),
+                filter: Self.awaitingConfirmation
+            )
+            .map { !$0.isEmpty }
+            .removeDuplicates()
+            .eraseToAnyAsyncSequence()
     }
 
-    func throttle() async {
-        progressTask?.cancel()
-        progressTask = nil
+    var isRecoveryInProgressStream: AnyAsyncSequence<Bool> {
+        coinageService
+            .subscribeBackupProgress()
+            .map(\.isInProgress)
+            .removeDuplicates()
+            .eraseToAnyAsyncSequence()
     }
 
     func triggerRecovery() {
@@ -86,47 +70,40 @@ final class CoinageBackupSyncService: CoinageBackupSyncServicing, @unchecked Sen
 }
 
 private extension CoinageBackupSyncService {
-    func apply(_ progress: BackupProgress) {
-        logger.debug("Coinage backup progress: \(progress)")
-
-        // `.unknown` is replayed on every setup before the launch pass reports; it must not hide a card
-        // the user has not acknowledged yet.
-        let restorePending = progress == .unknown
-            ? balanceSyncStateStorage.isRestorePending
-            : progress.awaitsAcknowledgement
-        if balanceSyncStateStorage.isRestorePending != restorePending {
-            balanceSyncStateStorage.isRestorePending = restorePending
-        }
-
-        let state: CoinageRecoveryState =
-            if progress.isInProgress {
-                .inProgress
-            } else if restorePending {
-                .completed
-            } else if progress.isFailed {
-                .failed
-            } else {
-                .idle
-            }
-        stateSubject.send(state)
+    static var awaitingConfirmation: NSPredicate {
+        NSPredicate(
+            format: "%K == YES AND %K == NO",
+            #keyPath(CDCoinageInstallation.initialScanCompleted),
+            #keyPath(CDCoinageInstallation.isUserConfirmedCompletion)
+        )
     }
 }
 
-// MARK: - Acknowledgement flag
+// MARK: - Row observation
 
-/// The persisted "user accepted the recovered balance" flag Coinage resets when a scan finds more.
-final class CoinageDeepRecoveryCompletedStore: DeepRecoveryCompletedStoring, @unchecked Sendable {
-    private let settingsManager: SettingsManagerProtocol
+/// A previous installation the card is shown for; only its identity is needed.
+struct RecoveredInstallation: Operation_iOS.Identifiable, Equatable {
+    let identifier: String
+}
 
-    init(settingsManager: SettingsManagerProtocol = SettingsManager.shared) {
-        self.settingsManager = settingsManager
+final class RecoveredInstallationMapper: CoreDataMapperProtocol {
+    typealias DataProviderModel = RecoveredInstallation
+    typealias CoreDataEntity = CDCoinageInstallation
+
+    var entityIdentifierFieldName: String { #keyPath(CDCoinageInstallation.identifier) }
+
+    func transform(entity: CDCoinageInstallation) throws -> RecoveredInstallation {
+        guard let identifier = entity.identifier else {
+            throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDCoinageInstallation.identifier))
+        }
+        return RecoveredInstallation(identifier: identifier)
     }
 
-    func isDeepRecoveryCompleted() async -> Bool {
-        settingsManager.value(for: .coinageDeepRecoveryCompleted)
-    }
-
-    func setDeepRecoveryCompleted(_ completed: Bool) async {
-        settingsManager.set(value: completed, for: .coinageDeepRecoveryCompleted)
+    func populate(
+        entity: CDCoinageInstallation,
+        from model: RecoveredInstallation,
+        using _: NSManagedObjectContext
+    ) throws {
+        entity.identifier = model.identifier
     }
 }

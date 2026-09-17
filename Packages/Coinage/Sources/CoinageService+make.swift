@@ -239,7 +239,6 @@ public extension CoinageService {
                 logger: logger
             ),
             assetStore: RecoveredAssetStore(databaseFactory: databaseFactory),
-            completedStore: installation.deepRecoveryCompletedStore,
             logger: logger
         )
 

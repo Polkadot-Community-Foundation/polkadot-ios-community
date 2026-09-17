@@ -56,10 +56,3 @@ public enum BackupProgress: Hashable, Sendable {
         }
     }
 }
-
-/// Whether the user has accepted the recovered balance. Persisted by the app; reset by the recovery
-/// service whenever a scan finds a new installation, since new balance is worth another look.
-public protocol DeepRecoveryCompletedStoring: Sendable {
-    func isDeepRecoveryCompleted() async -> Bool
-    func setDeepRecoveryCompleted(_ completed: Bool) async
-}

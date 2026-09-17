@@ -10,7 +10,6 @@ import KeyDerivation
 import AsyncExtensions
 import AsyncAlgorithms
 import ChainRegistry
-import EventCenter
 import BackgroundExecution
 import Products
 import UIKitExt
@@ -29,10 +28,9 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
     private var priceSubscriptionTask: Task<Void, Never>?
     private let coinageService: CoinageServicing
     private let coinageBackupSyncService: any CoinageBackupSyncServicing
-    private let balanceSyncStateStorage: BalanceSyncStateStoring
-    private let eventCenter: EventCenterProtocol
 
     private var recoveryStateTask: Task<Void, Error>?
+    private var recoveredBalanceTask: Task<Void, Error>?
     private var accountBackupStatusTask: Task<Void, Error>?
 
     private let fundingDomainProvider: FundingDomainProviding
@@ -50,17 +48,13 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         chainAsset: ChainAsset,
         coinageService: CoinageServicing,
         coinageBackupSyncService: any CoinageBackupSyncServicing,
-        balanceSyncStateStorage: BalanceSyncStateStoring,
-        fundingDomainProvider: FundingDomainProviding,
-        eventCenter: EventCenterProtocol = EventCenter.shared
+        fundingDomainProvider: FundingDomainProviding
     ) {
         self.priceLocalSubscriptionFactory = priceLocalSubscriptionFactory
         self.fiatOnrampTrackingService = fiatOnrampTrackingService
         self.chainAsset = chainAsset
         self.coinageService = coinageService
         self.coinageBackupSyncService = coinageBackupSyncService
-        self.balanceSyncStateStorage = balanceSyncStateStorage
-        self.eventCenter = eventCenter
         self.fundingDomainProvider = fundingDomainProvider
     }
 
@@ -68,6 +62,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         fiatOnrampTrackingTask?.cancel()
         balanceSubscriptionTask?.cancel()
         recoveryStateTask?.cancel()
+        recoveredBalanceTask?.cancel()
         accountBackupStatusTask?.cancel()
         priceSubscriptionTask?.cancel()
         rampProductTasks.values.forEach { $0.cancel() }
@@ -76,17 +71,11 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
 
 extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
     func setup() {
-        if balanceSyncStateStorage.isRestorePending {
-            Task { @MainActor [weak self] in
-                self?.presenter?.didCompleteRecovery()
-            }
-        }
-
-        eventCenter.add(observer: self)
         subscribeToFiatOnrampTracking()
         subscribeToPrice()
         subscribeToBalances()
         subscribeToRecoveryState()
+        subscribeToRecoveredBalance()
         subscribeToAccountBackupStatus()
 
         provideDenominationContext()
@@ -97,7 +86,6 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
     }
 
     func cancelBackupNotification() {
-        balanceSyncStateStorage.isRestorePending = false
         coinageBackupSyncService.acknowledgeRecovery()
     }
 
@@ -209,9 +197,17 @@ private extension AssetDetailsInteractor {
     func subscribeToRecoveryState() {
         recoveryStateTask?.cancel()
         recoveryStateTask = Task { [weak presenter, coinageBackupSyncService] in
-            let stream = coinageBackupSyncService.stateStream
-            for try await state in stream {
-                await presenter?.didReceive(isRecoveryInProgress: state == .inProgress)
+            for try await inProgress in coinageBackupSyncService.isRecoveryInProgressStream {
+                await presenter?.didReceive(isRecoveryInProgress: inProgress)
+            }
+        }
+    }
+
+    func subscribeToRecoveredBalance() {
+        recoveredBalanceTask?.cancel()
+        recoveredBalanceTask = Task { [weak presenter, coinageBackupSyncService] in
+            for try await shows in coinageBackupSyncService.showsRecoveredBalanceStream {
+                await presenter?.didReceive(showsRecoveredBalance: shows)
             }
         }
     }
@@ -265,19 +261,6 @@ private extension AssetDetailsInteractor {
                 }
             } catch {
                 Logger.shared.error("Price subscription failed: \(error)")
-            }
-        }
-    }
-}
-
-extension AssetDetailsInteractor: AppEventVisiting {
-    func processBalanceSyncState(event _: BalanceSyncState) {
-        let pending = balanceSyncStateStorage.isRestorePending
-        Task { @MainActor [weak self] in
-            if pending {
-                self?.presenter?.didCompleteRecovery()
-            } else {
-                self?.presenter?.didClearBackupNotification()
             }
         }
     }

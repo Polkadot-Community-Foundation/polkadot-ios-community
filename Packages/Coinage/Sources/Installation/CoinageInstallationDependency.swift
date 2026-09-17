@@ -6,7 +6,7 @@ import SubstrateSdk
 
 /// The app-side pieces installation allocation, registration and recovery run on: the store of the
 /// current installation and its counters, pallet-revive and fee estimation on the chain the `AccountDataStore`
-/// contract lives on, PGAS for the data store account, and the persisted acknowledgement flag.
+/// contract lives on, and PGAS for the data store account.
 public struct CoinageInstallationDependency {
     public let currentInstallationStore: any CoinageCurrentInstallationStoring
     public let chainId: ChainId
@@ -15,7 +15,6 @@ public struct CoinageInstallationDependency {
     public let configProvider: any AccountDataStoreConfigProviding
     public let pgasProvisioner: any PGASAccountProvisioning
     public let feeEstimator: any RegistrationFeeEstimating
-    public let deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
 
     public init(
         currentInstallationStore: any CoinageCurrentInstallationStoring,
@@ -24,8 +23,7 @@ public struct CoinageInstallationDependency {
         reviveApi: any ReviveContractApiProtocol,
         configProvider: any AccountDataStoreConfigProviding,
         pgasProvisioner: any PGASAccountProvisioning,
-        feeEstimator: any RegistrationFeeEstimating,
-        deepRecoveryCompletedStore: any DeepRecoveryCompletedStoring
+        feeEstimator: any RegistrationFeeEstimating
     ) {
         self.currentInstallationStore = currentInstallationStore
         self.chainId = chainId
@@ -34,6 +32,5 @@ public struct CoinageInstallationDependency {
         self.configProvider = configProvider
         self.pgasProvisioner = pgasProvisioner
         self.feeEstimator = feeEstimator
-        self.deepRecoveryCompletedStore = deepRecoveryCompletedStore
     }
 }

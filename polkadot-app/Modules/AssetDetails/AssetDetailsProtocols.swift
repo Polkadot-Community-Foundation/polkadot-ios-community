@@ -64,8 +64,7 @@ protocol AssetDetailsInteractorOutputProtocol: AnyObject {
     func didReceive(fiatOnrampStatuses: Set<FiatOnrampTransactionStatusPayload>)
     func didReceive(isRecoveryInProgress: Bool)
     func didReceive(isAccountBackupPending: Bool)
-    func didCompleteRecovery()
-    func didClearBackupNotification()
+    func didReceive(showsRecoveredBalance: Bool)
 
     func didResolveRampProduct(_ action: RampAction, result: Result<ProductPage, Error>)
 

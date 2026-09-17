@@ -18,8 +18,6 @@ final class LocalStateEraser: LocalStateErasing {
     static let walletProgressKeys: [SettingsKey] = [
         .backendSessionId,
         .nextSyncUpdateId,
-        .coinageBackupRestorePending,
-        .coinageDeepRecoveryCompleted,
         .fiatOnrampSessionIds,
         .fiatOnrampTrackedTransactionIds,
         .voucherInUseDismissed

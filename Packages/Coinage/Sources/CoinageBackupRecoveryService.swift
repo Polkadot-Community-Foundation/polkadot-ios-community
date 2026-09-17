@@ -42,7 +42,6 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     private let dataStoreRepository: any AccountDataStoreRepositoryProtocol
     private let scanner: any InstallationAssetScanning
     private let assetStore: any RecoveredAssetStoring
-    private let completedStore: any DeepRecoveryCompletedStoring
     private let discoveryRetryDelay: Duration
     private let logger: (any SDKLoggerProtocol)?
 
@@ -56,7 +55,6 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         dataStoreRepository: any AccountDataStoreRepositoryProtocol,
         scanner: any InstallationAssetScanning,
         assetStore: any RecoveredAssetStoring,
-        completedStore: any DeepRecoveryCompletedStoring,
         discoveryRetryDelay: Duration = Config.discoveryRetryDelay,
         logger: (any SDKLoggerProtocol)?
     ) {
@@ -66,7 +64,6 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
         self.dataStoreRepository = dataStoreRepository
         self.scanner = scanner
         self.assetStore = assetStore
-        self.completedStore = completedStore
         self.discoveryRetryDelay = discoveryRetryDelay
         self.logger = logger
     }
@@ -109,7 +106,12 @@ actor CoinageBackupRecoveryService: CoinageBackupRecoveryServicing {
     func markAsCompleted() async {
         await launchPass?.value
         guard !progress.value.isInProgress else { return }
-        await completedStore.setDeepRecoveryCompleted(true)
+        do {
+            try await installationRepository.markAllUserConfirmed()
+        } catch {
+            logger?.error("Recovery: could not record the user's confirmation: \(error)")
+            return
+        }
         progress.send(.completed)
     }
 }
@@ -161,17 +163,12 @@ private extension CoinageBackupRecoveryService {
                 progress.send(.initial(.failed))
                 return
             }
-
-            // An installation scanned for the first time is worth another look, even if the last one
-            // was acknowledged.
-            await completedStore.setDeepRecoveryCompleted(false)
         }
 
-        if await completedStore.isDeepRecoveryCompleted() || previous.isEmpty {
-            progress.send(.completed)
-        } else {
-            progress.send(.initial(.completed))
-        }
+        // An installation recorded since the last confirmation is unconfirmed, so a new one is shown
+        // even after an earlier balance was accepted.
+        let awaitsConfirmation = await previousInstallations().contains(where: \.awaitsUserConfirmation)
+        progress.send(awaitsConfirmation ? .initial(.completed) : .completed)
     }
 
     enum Discovery: Equatable {

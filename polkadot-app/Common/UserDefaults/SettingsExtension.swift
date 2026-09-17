@@ -20,8 +20,6 @@ enum SettingsKey: String {
     case gameAlarmFireDate
     case gameAlarmTimingSeconds
     // Balance restored notification
-    case coinageBackupRestorePending = "coinageBackupRestorePending.v3"
-    case coinageDeepRecoveryCompleted = "coinageDeepRecoveryCompleted.v3"
     case deviceEncryptId = "deviceEncryptId.v3"
     // App Group suite. The raw key predates the rename from "entropy id" and is kept so existing
     // installs keep resolving their Keychain items.

@@ -14,7 +14,6 @@ struct CoinageBackupRecoveryServiceTests {
     private let dataStore = StubDataStoreRepository()
     private let scanner = StubScanner()
     private let assetStore = RecordingAssetStore()
-    private let completed = InMemoryFlag()
     private let service: CoinageBackupRecoveryService
 
     init() {
@@ -25,7 +24,6 @@ struct CoinageBackupRecoveryServiceTests {
             dataStoreRepository: dataStore,
             scanner: scanner,
             assetStore: assetStore,
-            completedStore: completed,
             discoveryRetryDelay: .milliseconds(1),
             logger: nil
         )
@@ -159,7 +157,6 @@ struct CoinageBackupRecoveryServiceTests {
             dataStoreRepository: dataStore,
             scanner: scanner,
             assetStore: assetStore,
-            completedStore: completed,
             discoveryRetryDelay: .milliseconds(1),
             logger: nil
         )
@@ -233,17 +230,49 @@ struct CoinageBackupRecoveryServiceTests {
         #expect(try await progress() == .deep(.completed))
     }
 
-    @Test("accepting the balance completes recovery until a new installation is found")
+    @Test("accepting the balance confirms every known installation and completes recovery")
     func markAsCompleted() async throws {
         dataStore.listed([Self.previous])
         await service.runLaunchPass()
 
         await service.markAsCompleted()
+
         #expect(try await progress() == .completed)
+        #expect(installations.previous(Self.previous)?.isUserConfirmedCompletion == true)
+    }
+
+    @Test("an installation found after the confirmation is shown again, the confirmed one is not")
+    func newInstallationAfterConfirmation() async throws {
+        dataStore.listed([Self.previous])
+        await service.runLaunchPass()
+        await service.markAsCompleted()
 
         dataStore.listed([Self.previous, Self.anotherPrevious])
         await service.runLaunchPass()
+
         #expect(try await progress() == .initial(.completed))
+        #expect(installations.previous(Self.previous)?.awaitsUserConfirmation == false)
+        #expect(installations.previous(Self.anotherPrevious)?.awaitsUserConfirmation == true)
+    }
+
+    @Test("a deep search never changes what the user has to confirm")
+    func deepSearchKeepsConfirmationState() async throws {
+        dataStore.listed([Self.previous])
+        await service.runLaunchPass()
+
+        await service.deepSearch()
+
+        #expect(installations.previous(Self.previous)?.awaitsUserConfirmation == true)
+    }
+
+    @Test("an installation whose first scan failed is not offered for confirmation")
+    func failedScanNotOffered() async throws {
+        dataStore.listed([Self.previous])
+        scanner.failing = true
+
+        await service.runLaunchPass()
+
+        #expect(installations.previous(Self.previous)?.awaitsUserConfirmation == false)
     }
 }
 
@@ -360,15 +389,5 @@ private final class RecordingAssetStore: RecoveredAssetStoring, @unchecked Senda
 
     func saveNew(vouchers: [Voucher]) async throws {
         self.vouchers.withLock { $0.append(contentsOf: vouchers) }
-    }
-}
-
-private final class InMemoryFlag: DeepRecoveryCompletedStoring, @unchecked Sendable {
-    private let value = OSAllocatedUnfairLock(initialState: false)
-
-    func isDeepRecoveryCompleted() async -> Bool { value.withLock { $0 } }
-
-    func setDeepRecoveryCompleted(_ completed: Bool) async {
-        value.withLock { $0 = completed }
     }
 }

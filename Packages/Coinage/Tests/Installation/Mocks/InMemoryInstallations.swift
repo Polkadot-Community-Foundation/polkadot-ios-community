@@ -23,7 +23,11 @@ final class InMemoryInstallations: CoinageInstallationRepositoryProtocol, @unche
             let added = state.withLock { previous -> Bool in
                 guard previous[installation] == nil else { return false }
                 previous[installation] = PreviousInstallation(
-                    id: installation, coinScanNextIndex: 0, voucherScanNextIndex: 0, initialScanCompleted: false
+                    id: installation,
+                    coinScanNextIndex: 0,
+                    voucherScanNextIndex: 0,
+                    initialScanCompleted: false,
+                    isUserConfirmedCompletion: false
                 )
                 return true
             }
@@ -49,6 +53,14 @@ final class InMemoryInstallations: CoinageInstallationRepositoryProtocol, @unche
 
     func markInitialScanCompleted(_ installation: CoinageInstallationId) async throws {
         update(installation) { $0.changing(initialScanCompleted: true) }
+    }
+
+    func markAllUserConfirmed() async throws {
+        state.withLock { previous in
+            for (id, installation) in previous {
+                previous[id] = installation.changing(isUserConfirmedCompletion: true)
+            }
+        }
     }
 
     private func update(

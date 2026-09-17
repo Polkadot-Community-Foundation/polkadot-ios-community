@@ -14,7 +14,7 @@ Coinage is the payment primitive for the Polkadot app — managing digital coins
 
 ### Services (in ServiceCoordinator)
 - `coinageService` — coinage state management
-- `coinageBackupSyncService` — bridges Coinage's `BackupProgress` to the wallet's "balance restored" card
+- `coinageBackupSyncService` — the wallet's "balance restored" card: visibility from the installation rows, spinner from `BackupProgress`
 
 ## Coin Model
 
@@ -68,8 +68,12 @@ row while `delayed`. Recovery (`CoinageBackupRecoveryService`) lists the contrac
 `withRetry`; a listing that still fails with no previous installation known ends the launch pass as `.failed`
 rather than "nothing to recover", while a missing contract address only skips discovery), records
 the other installations as previous ones (`CDCoinageInstallation`) and gap-scans them (batches of 500,
-stop after 4 empty in a row, cursors persisted); "Update" deep-searches 10 more batches, "Close" persists
-the acknowledgement. A scan that could not read the chain ends the phase as `.failed`: no balance is
+stop after 4 empty in a row, cursors persisted); "Update" deep-searches 10 more batches, "Close" confirms
+every installation known (`CDCoinageInstallation.isUserConfirmedCompletion`, `markAllUserConfirmed()`). The
+wallet card is shown while any previous installation has `initialScanCompleted && !isUserConfirmedCompletion`
+(`CoinageBackupSyncService` watches the rows through `subscribeSnapshot`), so a running or failed deep search
+never hides an offered balance; progress only drives the card's "Update" spinner. An installation recorded
+after a confirmation is unconfirmed by default, so it is shown again. A scan that could not read the chain ends the phase as `.failed`: no balance is
 offered for acceptance, the app's recovery state is `failed`, and the next launch scans again. Recovered
 coins keep their absolute index; rows the store already holds are never overwritten. The contract address comes from remote config `account_data_store_config`.
 

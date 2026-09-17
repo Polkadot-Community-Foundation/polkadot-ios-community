@@ -205,7 +205,6 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
             // After coinage setup, which releases uncommitted handoffs the first pass must not see.
             durableTransactionEngine.start()
             // Recovering backup 1st
-            await coinageBackupSyncService.setup()
             await coinageTransferMonitor.setup()
             await w3sPaymentTracking.setup()
             await depositService.setup()
@@ -231,7 +230,6 @@ extension ServiceCoordinator: ServiceCoordinatorProtocol {
 
         Task {
             await deviceSyncService.throttle()
-            await coinageBackupSyncService.throttle()
             await coinageTransferMonitor.throttle()
             await w3sPaymentTracking.throttle()
             await signInHostCoordinator.throttle()

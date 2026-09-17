@@ -27,6 +27,7 @@ final class CoinageInstallationCoreDataRepository: CoinageInstallationRepository
                 row.coinScanNextIndex = 0
                 row.voucherScanNextIndex = 0
                 row.initialScanCompleted = false
+                row.isUserConfirmedCompletion = false
             }
             try context.save()
         }
@@ -43,7 +44,8 @@ final class CoinageInstallationCoreDataRepository: CoinageInstallationRepository
                     id: CoinageInstallationId(hex: Self.identifier(of: row)),
                     coinScanNextIndex: UInt64(bitPattern: row.coinScanNextIndex),
                     voucherScanNextIndex: UInt64(bitPattern: row.voucherScanNextIndex),
-                    initialScanCompleted: row.initialScanCompleted
+                    initialScanCompleted: row.initialScanCompleted,
+                    isUserConfirmedCompletion: row.isUserConfirmedCompletion
                 )
             }
         }
@@ -62,6 +64,16 @@ final class CoinageInstallationCoreDataRepository: CoinageInstallationRepository
 
     func markInitialScanCompleted(_ installation: CoinageInstallationId) async throws {
         try await update(installation) { $0.initialScanCompleted = true }
+    }
+
+    func markAllUserConfirmed() async throws {
+        try await databaseService.perform { context in
+            let request = NSFetchRequest<CDCoinageInstallation>(entityName: Self.entityName)
+            for row in try context.fetch(request) {
+                row.isUserConfirmedCompletion = true
+            }
+            try context.save()
+        }
     }
 }
 

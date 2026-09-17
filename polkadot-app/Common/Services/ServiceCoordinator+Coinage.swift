@@ -61,7 +61,10 @@ extension ServiceCoordinator {
             claimStatusStore: claimStatusStore
         )
 
-        let backupSyncService = CoinageBackupSyncService(coinageService: coinageService)
+        let backupSyncService = CoinageBackupSyncService(
+            coinageService: coinageService,
+            storageFacade: UserDataStorageFacade.shared
+        )
 
         return CoinageServices(
             coinageService: coinageService,
@@ -252,8 +255,7 @@ private extension ServiceCoordinator {
                 chain: assetHub,
                 extrinsicFacade: extrinsicMonitorFacade,
                 versionProvider: ExtrinsicVersionProvider()
-            ),
-            deepRecoveryCompletedStore: CoinageDeepRecoveryCompletedStore()
+            )
         )
     }
 }
