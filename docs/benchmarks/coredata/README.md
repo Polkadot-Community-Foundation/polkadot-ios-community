@@ -40,7 +40,7 @@ value (B4 registration and wall are single measurements).
 - Command:
 
 ```bash
-set -o pipefail && TEST_RUNNER_COREDATA_BENCH_OUT="$PWD/polkadot-appIntegrationTests/CoreData/Baselines/2026-09-18-operation-ios-2.7.0" \
+set -o pipefail && TEST_RUNNER_COREDATA_BENCH_OUT="$PWD/docs/benchmarks/coredata/2026-09-18-operation-ios-2.7.0" \
   xcodebuild test -project polkadot-app.xcodeproj -scheme polkadot-appIntegrationTests \
   -destination 'platform=iOS Simulator,id=F6327B69-0673-48AE-9515-C22A4B8CE8CE' \
   -parallel-testing-enabled NO \
@@ -145,3 +145,48 @@ pinned to commit `653010d` (the 3.0.0 change set); every scenario ran in `serial
 - No pooled readers, no second coordinator.
 - Phase 4 (snapshot subscriber diffing) is justified by B3 delivery lag and B4 transform counts, but it is a
   latency-of-delivery improvement, not a throughput one; the throughput goal of issue #156 is met here.
+
+## 2026-09-18-operation-ios-3.0.0-653010d-diff
+
+Same library commit, same machine, scale and command; the only change is phase 4 of the app:
+`CoreDataSnapshotSubscriber` invalidates the cached model of each row the fetched results controller
+reports and maps rows on demand at delivery, keyed by permanent object ID. Cells are p50 / p95 ms.
+
+| Measure | 3.0.0 concurrent2 | 3.0.0-diff serial | 3.0.0-diff concurrent2 | 3.0.0-diff concurrent4 |
+|---|---|---|---|---|
+| B3 save (1 row, 20 subscriptions) | 1.7 / 2.6 | 3.1 / 4.3 | 1.3 / 2.8 | 1.3 / 2.6 |
+| B3 save → delivery | 65.1 / 69.6 | 3.1 / 4.3 | 2.5 / 4.0 | 2.4 / 3.7 |
+| B3 chatMapperCalls (total) | 225,432 | 3,163 | 3,062 | 3,062 |
+| B4 voucher save | 1.0 / 1.3 | 1.6 / 3.4 | 1.1 / 1.3 | 1.1 / 1.5 |
+| B4 concurrent chat read | 2.3 / 2.7 | 2.5 / 5.1 | 2.2 / 2.4 | 2.2 / 2.5 |
+| B4 wall (ms) | 2,369 | 2,750 | 2,336 | 2,375 |
+| B4 assetMapperCalls (total) | 100,894 | 4,007 | 2,510 | 2,510 |
+| B4 voucher deliveries | 248 | 500 | 489 | 490 |
+| B1 read | 7.9 / 8.4 | | 8.3 / 10.0 | |
+| B2 read (writer active) | 8.5 / 9.9 | | 8.9 / 10.4 | |
+
+### Reading
+
+- **Delivery latency is now the save latency.** B3 save → delivery drops from 65 ms to 2.5 ms; the
+  subscriber's cost per change is one map per changed row plus dictionary lookups. B1 and B2 are unchanged
+  within noise, as expected: they have no subscriptions.
+- **Mapper calls are two orders of magnitude lower.** B3: 3,062 for 100 saves. That is the initial map of
+  2,300 rows, then per save: the new row in the unfiltered and in the chat-filtered message subscription,
+  the updated chat row in the three chat subscriptions, and the new row mapped once more when its object ID
+  turns permanent (see below). B4: 2,510 for 500 voucher saves against 100,894 before.
+- **Deliveries went back up** (B4 vouchers 248 → 489). With mapping this cheap the observer no longer falls
+  behind the writer, so consecutive saves are no longer coalesced by accident; every save is delivered.
+  B4 wall time did not move (2.34 s vs 2.37 s), so per-delivery work is not a cost worth debouncing: D2 stands.
+- **Temporary object IDs.** With the controller on the writer (`.serial`), an inserted row is reported during
+  the save under a temporary ID and becomes permanent afterwards. The first phase 4 build cached rows by
+  that ID and every later snapshot missed them (B3 serial hung waiting for n+2 rows). The shipped subscriber
+  never caches a temporary ID and maps such rows again at the next delivery: one extra transform per insert,
+  visible as B4 serial's 4,007 against concurrent's 2,510. In concurrent mode the observer only sees
+  permanent IDs.
+- **Serial is still slower per save** (B3 3.1 ms vs 1.3 ms) because mapping runs inside the writer's save
+  there; it is the extension's mode and has no subscriptions in production.
+
+### Decisions (phase 4)
+
+- No delivery coalescing (D2 confirmed by numbers).
+- Related-object changes are not tracked (D1); derived-state subscriptions rely on parent-row touches.

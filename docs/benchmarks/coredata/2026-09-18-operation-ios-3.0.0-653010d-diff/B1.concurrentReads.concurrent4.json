@@ -1,0 +1,38 @@
+{
+  "counters" : {
+
+  },
+  "date" : "2026-09-18T13:19:31Z",
+  "operationIOSVersion" : "3.0.0-653010d",
+  "scale" : {
+    "chats" : 200,
+    "fetchesPerReader" : 200,
+    "messagesPerChat" : 50,
+    "readYourWritesIterations" : 1000,
+    "readerTasks" : 8,
+    "recyclingChats" : 100,
+    "recyclingCoins" : 500,
+    "rowsPerBatch" : 100,
+    "spikeReaderFetches" : 200,
+    "spikeSeedRows" : 5000,
+    "spikeWriteRows" : 20000,
+    "subscriptionRows" : 2000,
+    "subscriptionSaves" : 100,
+    "writerBatches" : 50
+  },
+  "scenario" : "B1.concurrentReads",
+  "summaries" : [
+    {
+      "count" : 1600,
+      "maxMs" : 8.699292,
+      "opsPerSecond" : 1213.163813373997,
+      "p50Ms" : 6.58375,
+      "p95Ms" : 7.8165,
+      "p99Ms" : 8.213458,
+      "scenario" : "B1.read",
+      "variant" : "concurrent4",
+      "wallMs" : 1318.865583
+    }
+  ],
+  "variant" : "concurrent4"
+}
