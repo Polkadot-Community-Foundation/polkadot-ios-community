@@ -74,21 +74,8 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
 
         let chainRegistryClosure = { ChainRegistryFacade.sharedRegistry }
 
-        #if FEATURE_PRODUCTS
-            let products = [
-                AppConfig.DotNs.dotNsBrowse,
-                AppConfig.DotNs.dotNsGetSome,
-                AppConfig.DotNs.dotNsOfframp
-            ]
-        #else
-            let products = [
-                AppConfig.DotNs.dotNsGetSome,
-                AppConfig.DotNs.dotNsOfframp
-            ]
-        #endif
-
         let productPrewarmer = ProductContentPrewarmer(
-            makeLabels: { products },
+            makeLabels: { await createProductLabels(flowStateProvider: flowStateProvider) },
             chainRegistryClosure: chainRegistryClosure,
             flowStateProvider: flowStateProvider
         )
@@ -122,6 +109,26 @@ enum RootPresenterFactory: RootPresenterFactoryProtocol {
         window.rootViewController = initViewController
 
         return presenter
+    }
+
+    @MainActor
+    private static func createProductLabels(flowStateProvider: SPAFlowStateProviding) async -> [String] {
+        #if FEATURE_PRODUCTS
+            let staticProducts = [AppConfig.DotNs.dotNsBrowse]
+        #else
+            let staticProducts: [String] = []
+        #endif
+
+        let fundingProvider = FundingDomainProvider(
+            hostProvider: flowStateProvider.flowState().hostProvider
+        )
+
+        let fundingPages = await [
+            try? fundingProvider.fundingPage(),
+            try? fundingProvider.offrampPage()
+        ]
+
+        return staticProducts + fundingPages.compactMap { $0?.host.name }
     }
 
     /// Local launch steps in order: erase a cross-device backup restore before any store is opened, then

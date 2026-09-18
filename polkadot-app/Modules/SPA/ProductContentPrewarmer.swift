@@ -10,7 +10,7 @@ protocol ProductContentPrewarming {
 
 @MainActor
 final class ProductContentPrewarmer {
-    private let makeLabels: () -> [String]
+    private let makeLabels: () async -> [String]
     private let chainRegistryClosure: ChainRegistryLazyClosure
     private let flowStateProvider: any SPAFlowStateProviding
     private let logger: LoggerProtocol
@@ -18,7 +18,7 @@ final class ProductContentPrewarmer {
     private var prewarmTask: Task<Void, Never>?
 
     init(
-        makeLabels: @escaping () -> [String],
+        makeLabels: @escaping () async -> [String],
         chainRegistryClosure: @escaping ChainRegistryLazyClosure,
         flowStateProvider: any SPAFlowStateProviding,
         logger: LoggerProtocol = Logger.shared
@@ -28,36 +28,33 @@ final class ProductContentPrewarmer {
         self.flowStateProvider = flowStateProvider
         self.logger = logger
     }
-
-    deinit {
-        prewarmTask?.cancel()
-    }
 }
 
 extension ProductContentPrewarmer: ProductContentPrewarming {
     func prewarm() {
         guard prewarmTask == nil else { return }
 
-        prewarmTask = Task { [weak self] in
-            await self?.warmContent()
-            self?.prewarmTask = nil
+        // Captured strongly: the root module is released as soon as the launch decision lands, and
+        // the warm has to outlive it.
+        prewarmTask = Task {
+            await warmContent()
+            prewarmTask = nil
         }
     }
 }
 
 private extension ProductContentPrewarmer {
     func warmContent() async {
-        // Resolved lazily: the labels may depend on remote config that isn't available yet at
-        // prewarmer construction. By warm time the prewarm trigger has run past remote config.
+        await chainRegistryClosure().asyncWaitChainsSetup(for: [AppConfig.Chains.assethubChain])
+
+        // Labels are resolved after the chain wait because they need the chain TLD and remote config.
         var seen = Set<String>()
-        let labels = makeLabels().filter { !$0.isEmpty && seen.insert($0).inserted }
+        let labels = await makeLabels().filter { !$0.isEmpty && seen.insert($0).inserted }
 
         guard !labels.isEmpty else {
             logger.error("Product prewarm skipped: no labels")
             return
         }
-
-        await chainRegistryClosure().asyncWaitChainsSetup(for: [AppConfig.Chains.assethubChain])
 
         let flowState = flowStateProvider.flowState()
 
