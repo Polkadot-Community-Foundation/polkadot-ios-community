@@ -93,7 +93,11 @@ struct AssetDetailsView: View {
 
     private func actions() -> some View {
         HStack(spacing: 12) {
-            DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
+            DSButton(
+                .actionSendCash(PaymentAssetBranding.shared.current.symbol),
+                leadingIcon: .iconArrowUp16,
+                expands: true
+            ) {
                 viewModel.onSendMoney?()
             }
             .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)

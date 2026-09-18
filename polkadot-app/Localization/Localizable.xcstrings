@@ -18,7 +18,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Send CASH"
+            "value": "Send %@"
           }
         }
       }
@@ -3055,17 +3055,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claim your interface"
-          }
-        }
-      }
-    },
-    "token.name": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CASH"
           }
         }
       }

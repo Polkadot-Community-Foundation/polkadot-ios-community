@@ -54,11 +54,21 @@ class AmountInputView: UIControl {
     /// Currency mark drawn in front of the amount, in addition to `symbolLabel`.
     var symbolImage: UIImage? {
         didSet {
-            symbolImageView.image = symbolImage?.withRenderingMode(.alwaysTemplate)
-            symbolImageView.isHidden = symbolImage == nil
-
-            setNeedsLayout()
+            updateSymbolImage()
         }
+    }
+
+    var symbolImageRenderingMode: UIImage.RenderingMode = .alwaysTemplate {
+        didSet {
+            updateSymbolImage()
+        }
+    }
+
+    private func updateSymbolImage() {
+        symbolImageView.image = symbolImage?.withRenderingMode(symbolImageRenderingMode)
+        symbolImageView.isHidden = symbolImage == nil
+
+        setNeedsLayout()
     }
 
     var hasSymbolImage: Bool {

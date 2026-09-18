@@ -7,6 +7,7 @@ public struct ChatTransferMessageConfiguration: HashableContentConfiguration {
     let title: String
     let amountText: String
     let tokenSymbol: String
+    let assetIcon: UIImage?
     let originalAmountText: String?
     let state: ChatTransferMessageConfiguration.DirectionalState
     let statusConfiguration: ChatMessageStatusViewConfiguration
@@ -51,13 +52,25 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
         $0.textAlignment = .left
     }
 
-    private let amountContainerView: GenericBackgroundView<GenericPairValueView<TopBottomLabelView, Label>> =
+    private let amountContainerView: GenericBackgroundView<
+        GenericPairValueView<TopBottomLabelView, GenericPairValueView<UIImageView, Label>>
+    > =
         create { container in
             container.insets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
 
             let pair = container.wrappedView
             pair.setVerticalAndSpacing(0)
             pair.stackView.alignment = .center
+
+            let symbolRow = pair.sView
+            symbolRow.makeHorizontal()
+            symbolRow.spacing = 4
+            symbolRow.stackView.alignment = .center
+
+            let icon = symbolRow.fView
+            icon.contentMode = .scaleAspectFit
+            icon.isHidden = true
+            icon.snp.makeConstraints { $0.size.equalTo(16) }
 
             let amounts = pair.fView
             amounts.stackView.spacing = 0
@@ -71,7 +84,7 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
             amounts.bottomLabel.numberOfLines = 1
             amounts.bottomLabel.textAlignment = .center
 
-            let symbol = pair.sView
+            let symbol = symbolRow.sView
             symbol.typography = .bodyMedium
             symbol.textColor = .fgSecondary
             symbol.numberOfLines = 1
@@ -87,7 +100,11 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
     }
 
     private var tokenSymbolLabel: Label {
-        amountContainerView.wrappedView.sView
+        amountContainerView.wrappedView.sView.sView
+    }
+
+    private var assetIconView: UIImageView {
+        amountContainerView.wrappedView.sView.fView
     }
 
     private let subtitleIconView: UIImageView = create {
@@ -192,6 +209,8 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
         titleLabel.text = configuration.title
         receivedAmountLabel.text = configuration.amountText
         tokenSymbolLabel.text = configuration.tokenSymbol
+        assetIconView.image = configuration.assetIcon
+        assetIconView.isHidden = configuration.assetIcon == nil
 
         originalAmountLabel.textColor = configuration.originalAmountTextColor
         if let originalAmount = configuration.originalAmountText {

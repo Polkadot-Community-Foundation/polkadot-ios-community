@@ -8,12 +8,14 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
     typealias RootViewType = TransferAmountViewLayout
 
     let presenter: TransferAmountPresenterProtocol
+    private let assetBrand: PaymentAssetBrand
 
     var keyboardHandler: KeyboardHandler?
     private var isAmountInputEnabled = true
 
-    init(presenter: TransferAmountPresenterProtocol) {
+    init(presenter: TransferAmountPresenterProtocol, assetBrand: PaymentAssetBrand) {
         self.presenter = presenter
+        self.assetBrand = assetBrand
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -31,6 +33,7 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
 
         setupLocalization()
         setupHandlers()
+        rootView.apply(assetBrand: assetBrand)
 
         // Fee view is hidden
         rootView.feeView.isHidden = true

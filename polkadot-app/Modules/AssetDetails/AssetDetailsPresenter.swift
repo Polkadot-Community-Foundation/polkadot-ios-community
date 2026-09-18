@@ -198,6 +198,10 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
         provideAssetBalance()
     }
 
+    func didReceive(assetBrand: PaymentAssetBrand) {
+        view?.didReceive(assetLogo: assetBrand.wideIcon)
+    }
+
     func didReceive(isRecoveryInProgress: Bool) {
         view?.didReceive(isRecoveryInProgress: isRecoveryInProgress)
     }

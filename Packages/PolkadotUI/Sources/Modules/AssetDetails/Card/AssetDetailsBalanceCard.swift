@@ -41,9 +41,16 @@ public struct AssetDetailsBalanceCard: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
-                    Image(.iconCashLogo)
-                    Text(.walletCardTitle)
-                        .textStyle(.title18SemiBold())
+                    if let logo = viewModel.logo {
+                        Image(uiImage: logo)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: Constants.logoHeight)
+                    } else {
+                        Image(.iconCashLogo)
+                        Text(.walletCardTitle)
+                            .textStyle(.title18SemiBold())
+                    }
 
                     Spacer()
 
@@ -96,11 +103,19 @@ public extension AssetDetailsBalanceCard {
     struct ViewModel {
         let balance: String?
         let lockedAmount: String?
+        let logo: UIImage?
 
-        public init(balance: String?, lockedAmount: String?) {
+        public init(balance: String?, lockedAmount: String?, logo: UIImage? = nil) {
             self.balance = balance
             self.lockedAmount = lockedAmount
+            self.logo = logo
         }
+    }
+}
+
+private extension AssetDetailsBalanceCard {
+    enum Constants {
+        static let logoHeight: CGFloat = 24
     }
 }
 

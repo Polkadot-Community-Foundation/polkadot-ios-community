@@ -50,9 +50,14 @@ final class TransferAmountViewLayout: UIView, AdaptiveDesignable {
     }
 
     let cashLabel: PolkadotUI.Label = .create {
-        $0.text = String(localized: .tokenName)
         $0.typography = .titleExtraLarge
         $0.textColor = .fgSecondary
+    }
+
+    func apply(assetBrand: PaymentAssetBrand) {
+        cashLabel.text = assetBrand.symbol
+        amountInputView.symbolImageRenderingMode = assetBrand.squareIcon == nil ? .alwaysTemplate : .alwaysOriginal
+        amountInputView.symbolImage = assetBrand.squareIcon ?? .cashLogo
     }
 
     var heightScaleMultiplier: CGFloat {
