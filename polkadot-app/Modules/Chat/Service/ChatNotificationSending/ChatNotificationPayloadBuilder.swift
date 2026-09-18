@@ -28,7 +28,7 @@ extension ChatNotificationPayloadBuilder: ChatNotificationPayloadBuilding {
             logger.debug("Prepared full payload for notification")
             return full
         }
-        
+
         logger.debug("Payload is to big \(fullSize). Stripping...")
 
         guard let stripped = Chat.NotificationPayload(stripped: message) else {
@@ -41,7 +41,7 @@ extension ChatNotificationPayloadBuilder: ChatNotificationPayloadBuilding {
         let strippedSize = try stripped.scaleEncoded().count
 
         logger.debug("Payload is stripped to \(strippedSize) B")
-        
+
         if strippedSize > Constants.maxPlainSize {
             logger.warning(
                 "Stripped push payload of \(strippedSize) B still exceeds \(Constants.maxPlainSize) B: \(message.messageId)"
