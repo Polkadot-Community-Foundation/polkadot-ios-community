@@ -18,7 +18,7 @@ enum LegalSupportViewModel {
             )
         }
     }
-    
+
     enum CellType: Hashable {
         case privacy
         case termsOfUse
