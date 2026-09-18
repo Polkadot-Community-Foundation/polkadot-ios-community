@@ -158,18 +158,11 @@ private extension DurableTxCoreDataRepository {
     /// back on error, so a rejected registration leaves nothing behind — in either store.
     ///
     /// WARNING: Do not call `withTransaction` from within another `withTransaction` body — that would
-    /// deadlock on the shared serial dispatch queue. A domain store handed the registration scope writes
+    /// deadlock on the writer's serial dispatch queue. A domain store handed the registration scope writes
     /// through the scope's context and never opens a transaction of its own.
     func withTransaction<T>(_ body: @escaping (NSManagedObjectContext) throws -> T) async throws -> T {
-        try await databaseService.perform { context in
-            do {
-                let result = try body(context)
-                try context.save()
-                return result
-            } catch {
-                context.rollback()
-                throw error
-            }
+        try await databaseService.performWrite { context in
+            try body(context)
         }
     }
 }

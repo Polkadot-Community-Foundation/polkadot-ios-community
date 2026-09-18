@@ -34,7 +34,7 @@ enum UserStorageParams {
 
         return [
             bundleRoot,
-            bundleRoot + ".NotificationServiceExtension"
+            bundleRoot + CoreDataConcurrencyPolicy.notificationServiceExtensionSuffix
         ]
     }
 }
@@ -77,7 +77,8 @@ class UserDataStorageFacade: StorageFacadeProtocol {
 
         let configuration = CoreDataServiceConfiguration(
             modelURL: modelURL!,
-            storageType: .persistent(settings: persistentSettings)
+            storageType: .persistent(settings: persistentSettings),
+            concurrencyMode: CoreDataConcurrencyPolicy.forCurrentProcess
         )
 
         databaseService = CoreDataService(configuration: configuration)

@@ -1,5 +1,5 @@
 {
-  "originHash" : "6218bec7db7600c6de7e5c30ef96a5e3d73f43efe89244f995573ee1cb3a5044",
+  "originHash" : "629e5821d99d3f1226ccd133040416203735cc47dbf72c0739377735ce17ccb6",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -267,8 +267,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/novasamatech/Operation-iOS",
       "state" : {
-        "revision" : "6870932682cbb3a8c833f61bc0cee16f884ab5c6",
-        "version" : "2.7.0"
+        "revision" : "653010d8968c3bd07084a0429fa1efdbe471ac9e"
       }
     },
     {

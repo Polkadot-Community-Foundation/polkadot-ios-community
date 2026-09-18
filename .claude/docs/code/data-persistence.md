@@ -49,6 +49,24 @@ try save(entity)
 
 This is documented in CLAUDE.md and enforced in reviews.
 
+### Concurrency modes
+
+`CoreDataService` (Operation-iOS 3.0.0) takes a `concurrencyMode`. `CoreDataConcurrencyPolicy.forCurrentProcess`
+picks it once per process: `.serial` in the NotificationServiceExtension (one context, 2.x behaviour) and
+`.concurrent(readerConcurrency: 2)` in the app (writer + observer + short-lived readers). Rollback is that one
+line.
+
+| Entry point | Use for | Contract |
+|---|---|---|
+| `performWrite` | any mutation | one transaction: the service saves when the block leaves changes and rolls back on throw. **Never call `save()` / `rollback()` inside.** |
+| `performRead` | one-shot fetches | runs on a reader context that may overlap the writer; never mutate |
+| `performObserve` | fetched results controllers, long-lived observers | the observer context; merges every writer save automatically, never reset |
+| `perform` (StructuredConcurrency) | legacy | writer context, caller saves; no call sites should remain |
+
+Repositories already route fetches to readers and saves to the writer; `subscribeSnapshot` attaches to the
+observer. Raw-context code goes through the async `performWrite` / `performRead` bridges in
+`StructuredConcurrency`. See the library README section "Core Data concurrency modes".
+
 ### Migration
 
 - `Common/Storage/Migration/` — migration strategies

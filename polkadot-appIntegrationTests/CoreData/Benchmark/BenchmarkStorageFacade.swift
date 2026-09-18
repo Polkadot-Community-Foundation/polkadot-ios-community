@@ -6,7 +6,6 @@ import Operation_iOS
 
 enum BenchmarkError: Error {
     case modelNotFound
-    case unsupportedVariant(StackVariant)
     case entityInsertFailed(String)
 }
 
@@ -31,10 +30,6 @@ final class BenchmarkStorageFacade: StorageFacadeProtocol {
         author: String = BenchmarkStorageFacade.appAuthor,
         sharing: BenchmarkStorageFacade? = nil
     ) throws {
-        guard StackVariant.supported.contains(variant) else {
-            throw BenchmarkError.unsupportedVariant(variant)
-        }
-
         self.variant = variant
 
         if let sharing {
@@ -64,7 +59,8 @@ final class BenchmarkStorageFacade: StorageFacadeProtocol {
 
         let configuration = try CoreDataServiceConfiguration(
             modelURL: Self.modelURL(),
-            storageType: .persistent(settings: settings)
+            storageType: .persistent(settings: settings),
+            concurrencyMode: variant.concurrencyMode
         )
 
         databaseService = CoreDataService(configuration: configuration)

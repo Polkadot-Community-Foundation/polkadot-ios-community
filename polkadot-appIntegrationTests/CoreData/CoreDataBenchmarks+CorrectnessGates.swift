@@ -21,7 +21,7 @@ extension CoreDataBenchmarks {
             for index in 0 ..< scale.readYourWritesIterations {
                 let identifier = "ryw-\(index)"
 
-                try await facade.databaseService.perform { context in
+                try await facade.databaseService.performWrite { context in
                     let entityName = String(describing: CDChatContact.self)
                     let inserted = NSEntityDescription.insertNewObject(forEntityName: entityName, into: context)
 
@@ -32,10 +32,9 @@ extension CoreDataBenchmarks {
                     contact.identifier = identifier
                     contact.username = identifier
                     contact.publicKey = BenchmarkFixtures.key(index)
-                    try context.save()
                 }
 
-                let visible = try await facade.databaseService.perform { context -> Int in
+                let visible = try await facade.databaseService.performRead { context -> Int in
                     let request = NSFetchRequest<CDChatContact>(entityName: String(describing: CDChatContact.self))
                     request.predicate = NSPredicate(format: "%K == %@", #keyPath(CDChatContact.identifier), identifier)
                     return try context.count(for: request)

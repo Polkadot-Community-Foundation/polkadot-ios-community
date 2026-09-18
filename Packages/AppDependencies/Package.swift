@@ -24,6 +24,12 @@ let dependencyConfigs: [DependencyConfig] = [
         ]
     ),
     .init(
+        name: "Operation-iOS",
+        url: "https://github.com/novasamatech/Operation-iOS",
+        version: .commit("653010d8968c3bd07084a0429fa1efdbe471ac9e"),
+        products: ["Operation-iOS"]
+    ),
+    .init(
         name: "Foundation-iOS",
         url: "https://github.com/novasamatech/Foundation-iOS",
         version: .upToNextMajor("1.5.0"),

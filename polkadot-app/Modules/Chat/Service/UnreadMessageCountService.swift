@@ -27,7 +27,7 @@ final class UnreadMessageCountService {
     }
 
     func totalUnreadBadgeMessageCount() async throws -> Int {
-        try await databaseService.perform { context in
+        try await databaseService.performRead { context in
             let request = NSFetchRequest<NSDictionary>()
             request.entity = CDChatMessage.entity()
             request.predicate = Self.badgeCountPredicate()

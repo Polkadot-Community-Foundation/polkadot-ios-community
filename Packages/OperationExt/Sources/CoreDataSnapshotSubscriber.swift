@@ -45,7 +45,7 @@ public final class CoreDataSnapshotSubscriber<Model: Identifiable, Entity: NSMan
     }
 
     public func start() {
-        service.performAsync { [weak self] context, error in
+        service.performObserve { [weak self] context, error in
             guard let self else {
                 return
             }
