@@ -53,7 +53,7 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
     }
 
     private let amountContainerView: GenericBackgroundView<
-        GenericPairValueView<TopBottomLabelView, GenericPairValueView<UIImageView, Label>>
+        GenericPairValueView<GenericPairValueView<UIImageView, TopBottomLabelView>, Label>
     > =
         create { container in
             container.insets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
@@ -62,17 +62,17 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
             pair.setVerticalAndSpacing(0)
             pair.stackView.alignment = .center
 
-            let symbolRow = pair.sView
-            symbolRow.makeHorizontal()
-            symbolRow.spacing = 4
-            symbolRow.stackView.alignment = .center
+            let amountRow = pair.fView
+            amountRow.makeHorizontal()
+            amountRow.spacing = Constants.assetIconSpacing
+            amountRow.stackView.alignment = .center
 
-            let icon = symbolRow.fView
+            let icon = amountRow.fView
             icon.contentMode = .scaleAspectFit
             icon.isHidden = true
-            icon.snp.makeConstraints { $0.size.equalTo(16) }
+            icon.snp.makeConstraints { $0.size.equalTo(Constants.assetIconSize) }
 
-            let amounts = pair.fView
+            let amounts = amountRow.sView
             amounts.stackView.spacing = 0
 
             amounts.topLabel.typography = .bodyMedium
@@ -84,7 +84,7 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
             amounts.bottomLabel.numberOfLines = 1
             amounts.bottomLabel.textAlignment = .center
 
-            let symbol = symbolRow.sView
+            let symbol = pair.sView
             symbol.typography = .bodyMedium
             symbol.textColor = .fgSecondary
             symbol.numberOfLines = 1
@@ -92,19 +92,19 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
         }
 
     private var receivedAmountLabel: Label {
-        amountContainerView.wrappedView.fView.bottomLabel
+        amountContainerView.wrappedView.fView.sView.bottomLabel
     }
 
     private var originalAmountLabel: Label {
-        amountContainerView.wrappedView.fView.topLabel
+        amountContainerView.wrappedView.fView.sView.topLabel
     }
 
     private var tokenSymbolLabel: Label {
-        amountContainerView.wrappedView.sView.sView
+        amountContainerView.wrappedView.sView
     }
 
     private var assetIconView: UIImageView {
-        amountContainerView.wrappedView.sView.fView
+        amountContainerView.wrappedView.fView.fView
     }
 
     private let subtitleIconView: UIImageView = create {
@@ -349,6 +349,13 @@ extension ChatTransferMessageView: AccessibilityBound {
             .init(bubbleView, AccessibilityID.Chat.transferMessageBubble),
             .init(subtitleLabel, AccessibilityID.Chat.transferStatusLabel)
         ]
+    }
+}
+
+private extension ChatTransferMessageView {
+    enum Constants {
+        static let assetIconSize = CGSize(width: 20, height: 22)
+        static let assetIconSpacing: CGFloat = 8
     }
 }
 

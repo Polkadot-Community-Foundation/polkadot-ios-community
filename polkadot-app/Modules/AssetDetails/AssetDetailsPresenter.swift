@@ -199,7 +199,7 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
     }
 
     func didReceive(assetBrand: PaymentAssetBrand) {
-        view?.didReceive(assetLogo: assetBrand.wideIcon)
+        view?.didReceive(assetLogo: assetBrand.wideIcon, symbol: assetBrand.symbol)
     }
 
     func didReceive(isRecoveryInProgress: Bool) {

@@ -10,7 +10,7 @@ protocol AssetDetailsViewProtocol: ControllerBackedProtocol {
     func didSetCards(viewModels: [WalletCardCreateViewModel])
     func didReceiveData(viewModel: WalletCardDataViewModel, index: Int)
     func didReceive(lockedAmount: BalanceViewModelProtocol?)
-    func didReceive(assetLogo: UIImage?)
+    func didReceive(assetLogo: UIImage?, symbol: String)
     func didReceive(fundingStates: [AssetFundingStatusView.FundingState])
     func didReceive(isRecoveryInProgress: Bool)
     func didReceive(isAccountBackupPending: Bool)

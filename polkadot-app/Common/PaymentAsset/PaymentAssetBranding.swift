@@ -104,8 +104,16 @@ private extension PaymentAssetBranding {
 
 final class KingfisherRemoteImageLoader: RemoteImageLoading {
     func loadImage(from url: URL) async throws -> UIImage {
+        do {
+            return try await retrieve(url, options: Self.options)
+        } catch RemoteImageError.emptyImage {
+            return try await retrieve(url, options: Self.options + [.forceRefresh])
+        }
+    }
+
+    private func retrieve(_ url: URL, options: KingfisherOptionsInfo) async throws -> UIImage {
         try await withCheckedThrowingContinuation { continuation in
-            KingfisherManager.shared.retrieveImage(with: url, options: Self.options) { result in
+            KingfisherManager.shared.retrieveImage(with: url, options: options) { result in
                 switch result {
                 case let .success(retrieved) where retrieved.image.hasPixels:
                     continuation.resume(returning: retrieved.image)

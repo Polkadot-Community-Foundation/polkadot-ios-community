@@ -48,7 +48,7 @@ public struct AssetDetailsBalanceCard: View {
                             .frame(height: Constants.logoHeight)
                     } else {
                         Image(.iconCashLogo)
-                        Text(.walletCardTitle)
+                        Text(viewModel.symbol ?? String(localized: .walletCardTitle))
                             .textStyle(.title18SemiBold())
                     }
 
@@ -104,18 +104,20 @@ public extension AssetDetailsBalanceCard {
         let balance: String?
         let lockedAmount: String?
         let logo: UIImage?
+        let symbol: String?
 
-        public init(balance: String?, lockedAmount: String?, logo: UIImage? = nil) {
+        public init(balance: String?, lockedAmount: String?, logo: UIImage? = nil, symbol: String? = nil) {
             self.balance = balance
             self.lockedAmount = lockedAmount
             self.logo = logo
+            self.symbol = symbol
         }
     }
 }
 
 private extension AssetDetailsBalanceCard {
     enum Constants {
-        static let logoHeight: CGFloat = 24
+        static let logoHeight: CGFloat = 35
     }
 }
 

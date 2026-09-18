@@ -13,6 +13,7 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
     private var amount: String?
     private var lockedAmountString: String?
     private var assetLogo: UIImage?
+    private var assetSymbol: String?
 
     init(viewModel: AssetDetailsViewModel) {
         self.viewModel = viewModel
@@ -102,8 +103,9 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
         lockedAmountString = String(localized: .balanceOnhold(amount: lockedAmount.amount))
     }
 
-    func didReceive(assetLogo: UIImage?) {
+    func didReceive(assetLogo: UIImage?, symbol: String) {
         self.assetLogo = assetLogo
+        assetSymbol = symbol
 
         guard viewModel.balanceCardModel != nil else { return }
         emitCardUpdate()
@@ -161,7 +163,8 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
         viewModel.balanceCardModel = .init(
             balance: amount,
             lockedAmount: lockedAmountString,
-            logo: assetLogo
+            logo: assetLogo,
+            symbol: assetSymbol
         )
     }
 }
