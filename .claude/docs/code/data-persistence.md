@@ -67,6 +67,12 @@ Repositories already route fetches to readers and saves to the writer; `subscrib
 observer. Raw-context code goes through the async `performWrite` / `performRead` bridges in
 `StructuredConcurrency`. See the library README section "Core Data concurrency modes".
 
+`subscribeSnapshot` re-maps only the rows its fetched results controller reports as inserted, updated, moved
+or deleted (mapped models are cached by object ID), so mapper cost is per change, not per subscriber × rows.
+A row whose *related* objects change without the row itself changing is not re-mapped; derived-state
+subscribers (coin and voucher state from `CDDurableTx`) get their refresh because the durable-tx repository
+touches the parent rows (`CoinageTxRowObserver`). Do the same for any new relationship-derived mapper.
+
 ### Migration
 
 - `Common/Storage/Migration/` — migration strategies
