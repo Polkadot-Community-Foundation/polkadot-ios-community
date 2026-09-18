@@ -18,7 +18,6 @@ struct JWTTokenManagerTests {
                 dotNsResolver: nil,
                 dotNsNameRegistry: nil,
                 coinageInstanceId: nil,
-                fundingDomain: nil,
                 fundingUrl: nil,
                 offrampUrl: nil,
                 accountDataStoreContract: nil
