@@ -52,7 +52,7 @@ so hex doubles the size and an APNs alert (4 KB total) leaves under 2 KB of plai
 
 The payload is the push-only `Chat.NotificationPayload`: `messageId ‖ timestamp ‖ version u8 = 0 ‖ kind u8 ‖ content`, where
 kind `0` is Stripped and `1` is Full. Full carries `RemoteMessageContentV1` unchanged. Stripped
-(`Chat.StrippedContentV1`) is used when original content greater the 1800 bytes to survive backend limits.
+(`Chat.StrippedContentV1`) is used when the full content exceeds 1800 bytes.
 
 ### Media attachment thumbnails
 
