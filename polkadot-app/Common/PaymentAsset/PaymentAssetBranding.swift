@@ -107,8 +107,10 @@ final class KingfisherRemoteImageLoader: RemoteImageLoading {
         try await withCheckedThrowingContinuation { continuation in
             KingfisherManager.shared.retrieveImage(with: url, options: Self.options) { result in
                 switch result {
-                case let .success(retrieved):
+                case let .success(retrieved) where retrieved.image.hasPixels:
                     continuation.resume(returning: retrieved.image)
+                case .success:
+                    continuation.resume(throwing: RemoteImageError.emptyImage)
                 case let .failure(error):
                     continuation.resume(throwing: error)
                 }
@@ -120,7 +122,16 @@ final class KingfisherRemoteImageLoader: RemoteImageLoading {
         .processor(SVGImageProcessor()),
         .cacheSerializer(RemoteImageSerializer.shared),
         .scaleFactor(UIScreen.main.scale),
-        .cacheOriginalImage,
         .diskCacheExpiration(.never)
     ]
+}
+
+enum RemoteImageError: Error {
+    case emptyImage
+}
+
+private extension UIImage {
+    var hasPixels: Bool {
+        size.width > 0 && size.height > 0
+    }
 }
