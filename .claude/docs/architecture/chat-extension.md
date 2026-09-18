@@ -50,22 +50,9 @@ After a message is posted to the statement store, the sender also pushes it thro
 opening a statement-store connection. The `message` field is `hex(ChaCha20-Poly1305(SCALE(payload)))`,
 so hex doubles the size and an APNs alert (4 KB total) leaves under 2 KB of plaintext.
 
-The payload is the push-only `Chat.NotificationPayload`, shared byte for byte with Android
-(`NotificationMessagePayload`): `messageId ‖ timestamp ‖ version u8 = 0 ‖ kind u8 ‖ content`, where
+The payload is the push-only `Chat.NotificationPayload`: `messageId ‖ timestamp ‖ version u8 = 0 ‖ kind u8 ‖ content`, where
 kind `0` is Stripped and `1` is Full. Full carries `RemoteMessageContentV1` unchanged. Stripped
-(`Chat.StrippedContentV1`) mirrors the nine variants Android can push at their `MessageContent`
-indices; only coinage loses data (`coinKeys` dropped, `totalValue` kept).
-
-- **Sender** (`ChatNotificationPayloadBuilder`): Full if the SCALE plaintext is ≤ 1800 bytes (the
-  same constant as Android), else Stripped, else log and send anyway. Variants Android never pushes
-  (`.send`, `.leftChat`, `.edited`) are only ever sent Full.
-- **Receiver** (`ChatPushMessageCoder.decodeMessage`): the envelope only. The pre-envelope
-  `Chat.RemoteMessage` layout is deliberately not decoded; every client (Android, Desktop) adopts
-  the envelope, and a push in the old layout renders as the generic "unsupported" notification.
-  The NSE inserts only Full payloads into Core Data; Stripped ones are display only and add one to
-  the badge unless a row with that id already exists. A call offer rings whether Full or Stripped.
-- Frozen cross-platform vectors live in `polkadot-appTests/Chat/Notifications/` and in Android's
-  `NotificationPayloadScaleConformanceTest`; change either side only together.
+(`Chat.StrippedContentV1`) is used when original content greater the 1800 bytes to survive backend limits.
 
 ### Media attachment thumbnails
 

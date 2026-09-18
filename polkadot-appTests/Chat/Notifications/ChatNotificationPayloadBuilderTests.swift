@@ -4,7 +4,7 @@ import SubstrateSdk
 
 @testable import polkadot_app
 
-/// Mirrors Android's `ChatNotificationPayloadEncoderTest` (polkadot-android-community #159) so both
+/// Mirrors Android's `ChatNotificationPayloadEncoderTest` so both
 /// senders strip under the same conditions.
 struct ChatNotificationPayloadBuilderTests {
     fileprivate typealias Content = Chat.RemoteMessageContentV1.MessageContent

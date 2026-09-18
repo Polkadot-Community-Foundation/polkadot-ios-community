@@ -2,8 +2,7 @@ import Foundation
 import SubstrateSdk
 
 extension Chat {
-    /// Push-only wire type carried in the relay's `message` field. Shared with Android
-    /// (`NotificationMessagePayload`): `messageId ‖ timestamp ‖ version ‖ kind ‖ content`.
+    /// Push-only wire type carried in the relay's `message` field: `messageId ‖ timestamp ‖ version ‖ kind ‖ content`.
     /// Full payloads are persisted by the notification extension; stripped payloads exist
     /// only to render the notification and must never be saved.
     struct NotificationPayload: Equatable {
@@ -25,7 +24,7 @@ extension Chat {
             self.init(messageId: message.messageId, timestamp: message.timestamp, versioned: .v1(.full(content)))
         }
 
-        /// Nil when the message has no stripped form (the variants Android never pushes).
+        /// Nil when the message has no stripped form.
         init?(stripped message: RemoteMessage) {
             guard
                 let content = message.versioned.ensureV1(),
@@ -71,9 +70,7 @@ extension Chat {
         case full(RemoteMessageContentV1)
     }
 
-    /// Mirrors the variants Android can push, at the same SCALE indices as
-    /// `RemoteMessageContentV1.MessageContent`. Only coinage loses data (`coinKeys`);
-    /// the others carry the same bytes as their full form.
+    /// Only coinage loses data (`coinKeys`); the others carry the same bytes as their full form.
     enum StrippedContentV1: Equatable {
         typealias Content = RemoteMessageContentV1.MessageContent
 

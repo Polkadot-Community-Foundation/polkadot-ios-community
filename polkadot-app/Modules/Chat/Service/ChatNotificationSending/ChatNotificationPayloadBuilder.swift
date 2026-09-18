@@ -5,8 +5,7 @@ protocol ChatNotificationPayloadBuilding {
     func makePayload(for message: Chat.RemoteMessage) throws -> Chat.NotificationPayload
 }
 
-/// Chooses between the full and the stripped push payload by SCALE size, with the same rule and
-/// budget as Android's `ChatNotificationPayloadEncoder`. Hex encoding doubles the ciphertext, so
+/// Chooses between the full and the stripped push payload by SCALE size. Hex encoding doubles the ciphertext, so
 /// the plaintext budget is what keeps the relay's APNs JSON under 4 KB.
 final class ChatNotificationPayloadBuilder {
     enum Constants {

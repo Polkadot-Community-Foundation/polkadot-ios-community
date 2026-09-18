@@ -6,7 +6,7 @@ import SubstrateSdkExt
 @testable import polkadot_app
 
 /// Cross-platform vectors for the push notification payload. The hex values are frozen and shared
-/// with Android (`NotificationPayloadScaleConformanceTest`, polkadot-android-community #159), so any
+/// with Android (`NotificationPayloadScaleConformanceTest`), so any
 /// codec drift fails here instead of as a lost push.
 struct NotificationPayloadScaleConformanceTests {
     private typealias Content = Chat.RemoteMessageContentV1.MessageContent
