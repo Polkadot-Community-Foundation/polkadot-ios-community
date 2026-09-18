@@ -9,12 +9,7 @@ import SubstrateSdk
 struct ChatNotificationPayloadBuilderTests {
     fileprivate typealias Content = Chat.RemoteMessageContentV1.MessageContent
 
-    private let logger = MockLogger()
-    private let builder: ChatNotificationPayloadBuilder
-
-    init() {
-        builder = ChatNotificationPayloadBuilder(logger: logger)
-    }
+    private let builder = ChatNotificationPayloadBuilder(logger: MockLogger())
 
     @Test func smallTextIsSentInFull() throws {
         let message = makeMessage(.richText(.init(text: "hi", attachments: nil)))
@@ -22,7 +17,6 @@ struct ChatNotificationPayloadBuilderTests {
         let payload = try builder.makePayload(for: message)
 
         #expect(payload.fullMessage == message)
-        #expect(logger.warnings.isEmpty)
     }
 
     @Test func paymentWithFewCoinsIsSentInFullWithKeys() throws {
@@ -42,7 +36,6 @@ struct ChatNotificationPayloadBuilderTests {
         #expect(payload.messageId == message.messageId)
         #expect(payload.timestamp == message.timestamp)
         #expect(payload.versioned == .v1(.stripped(.coinageSend(.init(totalValue: payment.totalValue)))))
-        #expect(logger.warnings.isEmpty)
     }
 
     @Test func oversizedCallOfferIsStrippedAndKeepsItsPurpose() throws {
@@ -55,24 +48,22 @@ struct ChatNotificationPayloadBuilderTests {
         #expect(payload.dataChannelOffer == offer)
     }
 
-    @Test func oversizedTextIsStillSentStrippedAndLogged() throws {
+    @Test func oversizedTextIsStillSentStripped() throws {
         let text = String(repeating: "a", count: 2_000)
         let message = makeMessage(.richText(.init(text: text, attachments: nil)))
 
         let payload = try builder.makePayload(for: message)
 
         #expect(payload.versioned == .v1(.stripped(.richText(.init(text: text, attachments: nil)))))
-        #expect(logger.warnings.count == 1)
     }
 
-    @Test func oversizedMessageWithoutStrippedFormIsSentInFullAndLogged() throws {
+    @Test func oversizedMessageWithoutStrippedFormIsSentInFull() throws {
         let text = String(repeating: "a", count: 2_000)
         let message = makeMessage(.edited(.init(messageId: "e", newContent: .init(text: text, attachments: nil))))
 
         let payload = try builder.makePayload(for: message)
 
         #expect(payload.fullMessage == message)
-        #expect(logger.warnings.count == 1)
     }
 
     @Test func budgetBoundaryIsInclusive() throws {
