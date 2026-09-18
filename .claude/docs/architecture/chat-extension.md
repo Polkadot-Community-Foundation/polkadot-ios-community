@@ -43,6 +43,31 @@ Chat is a core feature composed of multiple sub-modules under `Modules/Chat/`. I
 - `callCoordinator` manages call lifecycle
 - See `architecture/data-transport.md` for transport layer details
 
+### Push notification payload
+
+After a message is posted to the statement store, the sender also pushes it through the relay
+(`POST /api/v1/notify`) so the recipient's Notification Service Extension can render it without
+opening a statement-store connection. The `message` field is `hex(ChaCha20-Poly1305(SCALE(payload)))`,
+so hex doubles the size and an APNs alert (4 KB total) leaves under 2 KB of plaintext.
+
+The payload is the push-only `Chat.NotificationPayload`, shared byte for byte with Android
+(`NotificationMessagePayload`): `messageId ‖ timestamp ‖ version u8 = 0 ‖ kind u8 ‖ content`, where
+kind `0` is Stripped and `1` is Full. Full carries `RemoteMessageContentV1` unchanged. Stripped
+(`Chat.StrippedContentV1`) mirrors the nine variants Android can push at their `MessageContent`
+indices; only coinage loses data (`coinKeys` dropped, `totalValue` kept).
+
+- **Sender** (`ChatNotificationPayloadBuilder`): Full if the SCALE plaintext is ≤ 1800 bytes (the
+  same constant as Android), else Stripped, else log and send anyway. Variants Android never pushes
+  (`.send`, `.leftChat`, `.edited`) are only ever sent Full.
+- **Receiver** (`ChatPushMessageCoder.decodeMessage`): envelope first (it must consume every byte),
+  then the legacy `Chat.RemoteMessage` layout still sent by Desktop and by peers that predate the
+  envelope. Known residue shared with Android: a legacy plain `.text` of exactly 4 bytes whose first
+  byte is 2 mod 4 is byte-identical to a stripped coinage payment and decodes as one. The NSE
+  inserts only Full payloads into Core Data; Stripped ones are display only and add one to the
+  badge unless a row with that id already exists. A call offer rings whether Full or Stripped.
+- Frozen cross-platform vectors live in `polkadot-appTests/Chat/Notifications/` and in Android's
+  `NotificationPayloadScaleConformanceTest`; change either side only together.
+
 ### Media attachment thumbnails
 
 The optional `thumbnail: Data` field in image and video metadata contains a BlurHash string encoded as UTF-8. Senders generate the hash with 4×3 components from an image no larger than 128 points on its longest side. Receivers must parse the bytes through the typed `BlurHash` boundary before rendering. Invalid UTF-8, malformed BlurHash values, and legacy binary thumbnail bytes are treated as a missing preview; the full attachment download continues normally.
