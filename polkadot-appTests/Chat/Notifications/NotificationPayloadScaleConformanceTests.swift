@@ -71,58 +71,17 @@ struct NotificationPayloadScaleConformanceTests {
         #expect(payload.versioned == .v1(.stripped(.text("hi"))))
     }
 
-    @Test func legacyMessagesDecodeAsFull() throws {
-        let offer = Content.DataChannelOfferContent(sdp: Data(repeating: 0x5A, count: 64), purpose: .audio)
-        let device = Chat.PeerDevice(
-            statementAccountId: Data(repeating: 0x01, count: 32),
-            encryptionPublicKey: Data(repeating: 0x02, count: 32)
+    /// The pre-envelope `RemoteMessage` layout is not accepted: every client adopts the envelope.
+    @Test func legacyLayoutIsRejected() throws {
+        let legacy = Chat.RemoteMessage(
+            messageId: "m1",
+            timestamp: 1,
+            versioned: .v1(.init(content: .richText(.init(text: "hi", attachments: nil))))
         )
-        let contents: [Content] = [
-            .text("text"),
-            .text("long enough to never look like a stripped variant"),
-            .send(.init(
-                amount: 7,
-                blockHash: Data(repeating: 0x03, count: 32),
-                extrinsicHash: Data(repeating: 0x04, count: 32)
-            )),
-            .contactAdded,
-            .leftChat,
-            .reply(.init(messageId: "r", ownContent: .init(text: "reply", attachments: nil))),
-            .reacted(.init(messageId: "r", emoji: "🔥")),
-            .edited(.init(messageId: "r", newContent: .init(text: "edited", attachments: nil))),
-            .chatAccepted(.init(messageId: "r")),
-            .multiChatAccepted(.init(requestId: "r", device: device)),
-            .richText(.init(text: "rich", attachments: nil)),
-            .dataChannelOffer(offer),
-            .coinageSend(.init(totalValue: totalValue, coinKeys: [coinKey]))
-        ]
 
-        for content in contents {
-            let legacy = Chat.RemoteMessage(messageId: "m1", timestamp: 1, versioned: .v1(.init(content: content)))
-
-            let payload = try Chat.NotificationPayload.fromPushPlaintext(legacy.scaleEncoded())
-
-            #expect(payload.fullMessage == legacy, "\(content)")
+        #expect(throws: (any Error).self) {
+            try Chat.NotificationPayload.fromScaleEncoded(legacy.scaleEncoded())
         }
-    }
-
-    /// A 4-byte legacy text puts its compact length (0x10, the coinage index) on the kind byte's
-    /// neighbour; the envelope reads the text bytes as a compact balance and must not accept the
-    /// result when bytes are left over.
-    @Test func legacyFourByteTextWithLeftoverBytesIsNotMistakenForStrippedPayment() throws {
-        let legacy = Chat.RemoteMessage(messageId: "m1", timestamp: 1, versioned: .v1(.init(content: .text("text"))))
-
-        let payload = try Chat.NotificationPayload.fromPushPlaintext(legacy.scaleEncoded())
-
-        #expect(payload.fullMessage == legacy)
-    }
-
-    @Test func envelopeIsPreferredOverLegacyInterpretation() throws {
-        let plaintext = try Data(hexString: Self.strippedPaymentHex)
-
-        let payload = try Chat.NotificationPayload.fromPushPlaintext(plaintext)
-
-        #expect(payload.versioned == .v1(.stripped(.coinageSend(.init(totalValue: totalValue)))))
     }
 }
 

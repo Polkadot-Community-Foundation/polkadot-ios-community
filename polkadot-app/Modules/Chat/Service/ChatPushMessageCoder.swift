@@ -39,7 +39,7 @@ extension ChatPushMessageCoder: ChatPushMessageCoding {
 
         let decryptedData = try encryptor.decrypt(encryptedData)
 
-        return try Chat.NotificationPayload.fromPushPlaintext(decryptedData)
+        return try Chat.NotificationPayload.fromScaleEncoded(decryptedData)
     }
 
     func encodeMessage(

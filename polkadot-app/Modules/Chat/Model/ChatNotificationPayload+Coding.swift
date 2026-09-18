@@ -1,34 +1,5 @@
 import Foundation
 import SubstrateSdk
-import SubstrateSdkExt
-
-extension Chat.NotificationPayload {
-    /// Decodes a push plaintext: the envelope first (as Android does), then the legacy `RemoteMessage`
-    /// layout still sent by Desktop and by peers that predate the envelope. The envelope must consume
-    /// every byte, which rejects almost every legacy message whose content index lands on the kind byte.
-    /// Known residue: a legacy plain `.text` of exactly 4 bytes whose first byte is 2 mod 4 is
-    /// byte-identical to a stripped coinage payment and decodes as one on both platforms.
-    static func fromPushPlaintext(_ data: Data) throws -> Chat.NotificationPayload {
-        if let payload = try? decodeConsumingAll(data) {
-            return payload
-        }
-
-        return try Chat.NotificationPayload(full: Chat.RemoteMessage.fromScaleEncoded(data))
-    }
-}
-
-private extension Chat.NotificationPayload {
-    static func decodeConsumingAll(_ data: Data) throws -> Chat.NotificationPayload {
-        let decoder = try ScaleDecoder(data: data)
-        let payload = try Chat.NotificationPayload(scaleDecoder: decoder)
-
-        guard decoder.remained == 0 else {
-            throw ScaleCodingError.unexpectedDecodedValue
-        }
-
-        return payload
-    }
-}
 
 extension Chat.NotificationPayload: ScaleCodable {
     init(scaleDecoder: any ScaleDecoding) throws {

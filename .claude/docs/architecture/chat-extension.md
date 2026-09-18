@@ -59,12 +59,11 @@ indices; only coinage loses data (`coinKeys` dropped, `totalValue` kept).
 - **Sender** (`ChatNotificationPayloadBuilder`): Full if the SCALE plaintext is ≤ 1800 bytes (the
   same constant as Android), else Stripped, else log and send anyway. Variants Android never pushes
   (`.send`, `.leftChat`, `.edited`) are only ever sent Full.
-- **Receiver** (`ChatPushMessageCoder.decodeMessage`): envelope first (it must consume every byte),
-  then the legacy `Chat.RemoteMessage` layout still sent by Desktop and by peers that predate the
-  envelope. Known residue shared with Android: a legacy plain `.text` of exactly 4 bytes whose first
-  byte is 2 mod 4 is byte-identical to a stripped coinage payment and decodes as one. The NSE
-  inserts only Full payloads into Core Data; Stripped ones are display only and add one to the
-  badge unless a row with that id already exists. A call offer rings whether Full or Stripped.
+- **Receiver** (`ChatPushMessageCoder.decodeMessage`): the envelope only. The pre-envelope
+  `Chat.RemoteMessage` layout is deliberately not decoded; every client (Android, Desktop) adopts
+  the envelope, and a push in the old layout renders as the generic "unsupported" notification.
+  The NSE inserts only Full payloads into Core Data; Stripped ones are display only and add one to
+  the badge unless a row with that id already exists. A call offer rings whether Full or Stripped.
 - Frozen cross-platform vectors live in `polkadot-appTests/Chat/Notifications/` and in Android's
   `NotificationPayloadScaleConformanceTest`; change either side only together.
 
