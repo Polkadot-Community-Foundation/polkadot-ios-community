@@ -1,0 +1,51 @@
+{
+  "counters" : {
+    "assetMapperCalls" : 260,
+    "chatMapperCalls" : 225432,
+    "deliveries" : 516
+  },
+  "date" : "2026-09-18T11:50:19Z",
+  "operationIOSVersion" : "3.0.0-653010d",
+  "scale" : {
+    "chats" : 200,
+    "fetchesPerReader" : 200,
+    "messagesPerChat" : 50,
+    "readYourWritesIterations" : 1000,
+    "readerTasks" : 8,
+    "recyclingChats" : 100,
+    "recyclingCoins" : 500,
+    "rowsPerBatch" : 100,
+    "spikeReaderFetches" : 200,
+    "spikeSeedRows" : 5000,
+    "spikeWriteRows" : 20000,
+    "subscriptionRows" : 2000,
+    "subscriptionSaves" : 100,
+    "writerBatches" : 50
+  },
+  "scenario" : "B3.subscriptionFanOut",
+  "summaries" : [
+    {
+      "count" : 100,
+      "maxMs" : 13.128542,
+      "opsPerSecond" : 15.420780376686873,
+      "p50Ms" : 1.692,
+      "p95Ms" : 2.639416,
+      "p99Ms" : 13.128542,
+      "scenario" : "B3.save",
+      "variant" : "concurrent2",
+      "wallMs" : 6484.756125
+    },
+    {
+      "count" : 100,
+      "maxMs" : 80.777666,
+      "opsPerSecond" : 15.26243577066229,
+      "p50Ms" : 65.107334,
+      "p95Ms" : 69.568708,
+      "p99Ms" : 80.777666,
+      "scenario" : "B3.deliver",
+      "variant" : "concurrent2",
+      "wallMs" : 6552.034125
+    }
+  ],
+  "variant" : "concurrent2"
+}

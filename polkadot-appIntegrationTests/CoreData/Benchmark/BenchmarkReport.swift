@@ -4,7 +4,7 @@ import Testing
 /// One JSON document per scenario and variant: attached to the test result and, when
 /// `COREDATA_BENCH_OUT` names a directory, written there as `<scenario>.<variant>.json`.
 struct BenchmarkReport: Codable {
-    static let operationIOSVersion = "2.7.0"
+    static let operationIOSVersion = "3.0.0-653010d"
     static let outputDirectoryEnvironmentKey = "COREDATA_BENCH_OUT"
 
     let scenario: String

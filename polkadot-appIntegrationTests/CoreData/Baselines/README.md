@@ -94,3 +94,54 @@ every voucher on every save, so cost grows quadratically with voucher count); `v
   delivery lag until phase 4 replaces re-mapping with diffing.
 - S1: a child context's fetch waits for the parent's write (p95 239 ms against a 338 ms write); a
   sibling on the coordinator does not (p95 0.96 ms). Nested readers would not remove the contention.
+
+## 2026-09-18-operation-ios-3.0.0-653010d
+
+Same machine, simulator, scale and command as the 2.7.0 run (output directory changed accordingly). Library
+pinned to commit `653010d` (the 3.0.0 change set); every scenario ran in `serial`, `concurrent2` and
+`concurrent4`. Cells are p50 / p95 ms unless marked.
+
+| Measure | 2.7.0 serial | 3.0.0 serial | 3.0.0 concurrent2 | 3.0.0 concurrent4 |
+|---|---|---|---|---|
+| B1 read | 11.3 / 11.9 | 11.5 / 12.1 | 7.9 / 8.4 | 6.8 / 9.2 |
+| B2 read (writer active) | 12.4 / 68.6 | 11.8 / 60.9 | 8.5 / 9.9 | 10.1 / 11.0 |
+| B2 write (100-row batch) | 66.0 / 76.6 | 59.6 / 67.8 | 50.2 / 53.9 | 61.5 / 64.4 |
+| B3 save (1 row, 20 subscriptions) | 62.0 / 65.0 | 63.1 / 69.0 | 1.7 / 2.6 | 1.7 / 2.2 |
+| B3 save → delivery | 62.0 / 65.0 | 63.1 / 69.0 | 65.1 / 69.6 | 65.2 / 68.8 |
+| B3 chatMapperCalls (total) | 225,663 | 225,663 | 225,432 | 225,432 |
+| B4 voucher save | 18.0 / 33.2 | 17.0 / 32.5 | 1.0 / 1.3 | 1.0 / 1.2 |
+| B4 registration (500 tx, 1 tx) | 586 | 588 | 623 | 613 |
+| B4 status save | 1.1 / 2.7 | 1.1 / 2.6 | 1.1 / 1.4 | 1.1 / 1.8 |
+| B4 concurrent chat read | 6.7 / 18.4 | 7.3 / 19.7 | 2.3 / 2.7 | 2.3 / 2.5 |
+| B4 wall (ms) | 11,164 | 10,608 | 2,369 | 2,361 |
+| B4 assetMapperCalls (total) | 376,760 | 376,760 | 100,894 | 100,755 |
+| B4 voucher deliveries | 501 | 501 | 248 | 247 |
+| S1 nested-child read (during write) | 0.7 / 238.6 | 0.9 / 235.2 | | |
+| S1 sibling read (during write) | 0.5 / 1.0 | 0.5 / 1.0 | | |
+
+### Reading
+
+- **`.serial` is 2.7.0.** Every 3.0.0-serial number sits within run-to-run noise of the 2.7.0 baseline, so the
+  compatibility mode carries no regression and the extension's behaviour is unchanged.
+- **Reads no longer wait for writes (H2).** B2 reader p95 goes from one write batch (68.6 ms) to 9.9 ms; the
+  B4 chat reader's p95 from 18.4 ms to 2.7 ms. B1 improves less (11.3 → 7.9 ms p50) because uncontended reads
+  are bounded by the shared coordinator and store, not by the queue; that residual is the tier-2 question and
+  is not worth a second coordinator at these numbers.
+- **Saves stop paying for subscribers (H1).** A one-row insert with the 20-subscription floor drops from 62 ms
+  to 1.7 ms; a voucher save from 18 ms to 1.0 ms. The recycling replica finishes in 2.37 s instead of 11.2 s,
+  the 4.7× the phase 0 README predicted.
+- **The mapping cost moved, it did not shrink.** B3 save-to-delivery stays at ~65 ms and total mapper calls
+  are unchanged: the same re-mapping now runs on the observer queue, after the save has returned. In B4 the
+  observer's asynchronous merge coalesced consecutive saves into half as many deliveries (501 → 248) and a
+  quarter of the transforms (377k → 101k), because mapping is slower than the writer. That is a side effect,
+  not a design: delivery lag under sustained writes is what phase 4 (diff instead of re-map) addresses.
+- **2 readers vs 4.** Indistinguishable everywhere except B1 (6.8 vs 7.9 ms p50, with a worse p95). The
+  writer under B2 is slower with 4 readers competing for the coordinator (61.5 vs 50.2 ms). Stay at 2.
+- **No reader pool needed.** Per-read context creation does not show up: B4 reads average 2.3 ms end to end.
+
+### Decisions (phase 3)
+
+- Reader concurrency stays at 2 (`CoreDataConcurrencyPolicy.appReaderConcurrency`).
+- No pooled readers, no second coordinator.
+- Phase 4 (snapshot subscriber diffing) is justified by B3 delivery lag and B4 transform counts, but it is a
+  latency-of-delivery improvement, not a throughput one; the throughput goal of issue #156 is met here.

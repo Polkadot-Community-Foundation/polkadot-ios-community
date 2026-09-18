@@ -1,0 +1,49 @@
+{
+  "counters" : {
+
+  },
+  "date" : "2026-09-18T11:50:30Z",
+  "operationIOSVersion" : "3.0.0-653010d",
+  "scale" : {
+    "chats" : 200,
+    "fetchesPerReader" : 200,
+    "messagesPerChat" : 50,
+    "readYourWritesIterations" : 1000,
+    "readerTasks" : 8,
+    "recyclingChats" : 100,
+    "recyclingCoins" : 500,
+    "rowsPerBatch" : 100,
+    "spikeReaderFetches" : 200,
+    "spikeSeedRows" : 5000,
+    "spikeWriteRows" : 20000,
+    "subscriptionRows" : 2000,
+    "subscriptionSaves" : 100,
+    "writerBatches" : 50
+  },
+  "scenario" : "S1.nestedChild",
+  "summaries" : [
+    {
+      "count" : 200,
+      "maxMs" : 287.531292,
+      "opsPerSecond" : 168.3830394691621,
+      "p50Ms" : 0.884041,
+      "p95Ms" : 235.16075,
+      "p99Ms" : 282.537875,
+      "scenario" : "S1.nestedChild.read",
+      "variant" : "serial",
+      "wallMs" : 1187.768083
+    },
+    {
+      "count" : 1,
+      "maxMs" : 334.45175,
+      "opsPerSecond" : 2.9899679101694043,
+      "p50Ms" : 334.45175,
+      "p95Ms" : 334.45175,
+      "p99Ms" : 334.45175,
+      "scenario" : "S1.nestedChild.write",
+      "variant" : "serial",
+      "wallMs" : 334.45175
+    }
+  ],
+  "variant" : "serial"
+}
