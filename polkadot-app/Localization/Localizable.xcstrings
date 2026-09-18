@@ -18,7 +18,18 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Send CASH"
+            "value": "Send"
+          }
+        }
+      }
+    },
+    "action.withdraw": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Withdraw"
           }
         }
       }
