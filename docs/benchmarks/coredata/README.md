@@ -1,46 +1,43 @@
 # Core Data benchmark baselines
 
-One directory per library version, one JSON per scenario and stack variant. Numbers are comparable
-only across runs on the same machine; run twice and keep the second run.
+Two baselines: Operation-iOS 2.7.0 (one shared context) and 3.0.0 (writer, observer and readers). One
+directory per version, one JSON per scenario and stack variant. Conditions are below; read them before
+quoting any number.
 
-## How to read the columns
+## Conditions
 
-Each measure is a set of `n` individual operation latencies (one fetch, one save, one save-to-delivery
-interval). `LatencyRecorder` sorts them and reports positions in that sorted list rather than the mean,
-because contention shows up as a long tail that a mean hides.
+Every number on this page was taken on one machine, in one configuration. Both baselines were run the same
+way, so the ratios between them are meaningful; the absolute values are not a claim about what a shipping
+app does on a phone.
 
-| Column | Meaning | What it tells you |
-|---|---|---|
-| `n` | number of operations measured | the sample size behind the percentiles |
-| `p50` | median: half of the operations were faster than this | the typical, uncontended cost of one operation |
-| `p95` | 95% of operations were faster than this; 1 in 20 was slower | the cost users hit regularly; where queue waits and blocked reads appear first |
-| `p99` | 99% were faster; 1 in 100 was slower | the tail: an operation that queued behind a long transaction |
-| `max` | the slowest single operation | the worst case; usually one read stuck behind a bulk write |
-| `wall` | time from the first operation's start to the last operation's end | how long the whole scenario phase took; the number a user feels |
-| `ops/s` | `n / wall` | sustained throughput of the queue, all readers or writers combined |
+| | |
+|---|---|
+| Host | Apple M2 Max, 32 GB, macOS 26.2 |
+| Toolchain | Xcode 26.6 (17F113) |
+| Target | iPhone 16 **simulator**, iOS 18.0 runtime (`F6327B69-0673-48AE-9515-C22A4B8CE8CE`) |
+| Build configuration | **Debug** — `SWIFT_OPTIMIZATION_LEVEL = -Onone`, `GCC_OPTIMIZATION_LEVEL = 0` |
+| Store | SQLite on disk in a per-test temp directory, persistent history tracking on, `UserDataModel` v49 |
+| Scale | `BenchmarkScale.default`, embedded in every JSON |
+| Execution | `-parallel-testing-enabled NO`, one simulator, benchmarks excluded from CI and the test plan |
+| Sampling | One recorded run of the full set per baseline, each after a warm build on an otherwise idle machine |
 
-Two patterns to look for:
+Read the numbers with these four caveats:
 
-- **p50 far below p95** (B2 read: 12 ms vs 69 ms) means most operations are cheap and a minority wait
-  behind something; the gap is the queue wait. Compare p95 with the p50 of whatever else was running
-  (B2 write p50 is 66 ms) to see what they waited for.
-- **p50 much larger than `ops/s` implies** (B1: 11 ms latency but 700 ops/s, so a fetch does about
-  1.4 ms of work) means the latency is mostly time spent in line, not time spent working; the operations
-  are serialized on one queue.
-
-Percentile position is `sorted[min(n - 1, floor(n × q))]`, so with `n = 1` every column shows the same
-value (B4 registration and wall are single measurements).
-
-## 2026-09-18-operation-ios-2.7.0
-
-- Machine: Apple M2 Max, 32 GB, macOS 26.2, Xcode 26.6 (17F113)
-- Simulator: iPhone 16 (`F6327B69-0673-48AE-9515-C22A4B8CE8CE`); use the id, the name is ambiguous across runtimes
-- Operation-iOS 2.7.0, `StackVariant.serial` only
-- Scale: `BenchmarkScale.default` (embedded in each JSON)
-- Command:
+1. **Debug, not Release.** Mapping a row is pure Swift and runs unoptimized here, so every per-row mapping
+   cost is inflated relative to a shipping build. Scenarios dominated by mapping (B3, B4) would improve in
+   Release on both sides of the comparison; scenarios dominated by SQLite and the coordinator lock (B1, B2)
+   would move much less.
+2. **Simulator, not a device.** Storage is the host's SSD through the host filesystem, and the CPU is the
+   M2 Max rather than an A-series. Absolute I/O costs and the read/write ratio differ on hardware.
+3. **Same machine, two days apart.** 2.7.0 was recorded on 2026-09-18 and 3.0.0 on 2026-09-20, on the same
+   host, with nothing else running. Thermal state and background load are not otherwise controlled, and each
+   baseline is a single run rather than an average, so treat differences under roughly 10% between columns as
+   noise. The effects reported below are 5× to 150×, well clear of that.
+4. **Comparable only to each other.** Re-running on another machine produces a different absolute scale, so
+   compare a new run against a baseline you took yourself on that machine.
 
 ```bash
-set -o pipefail && TEST_RUNNER_COREDATA_BENCH_OUT="$PWD/docs/benchmarks/coredata/2026-09-18-operation-ios-2.7.0" \
+set -o pipefail && TEST_RUNNER_COREDATA_BENCH_OUT="$PWD/docs/benchmarks/coredata/<date>-operation-ios-<version>" \
   xcodebuild test -project polkadot-app.xcodeproj -scheme polkadot-appIntegrationTests \
   -destination 'platform=iOS Simulator,id=F6327B69-0673-48AE-9515-C22A4B8CE8CE' \
   -parallel-testing-enabled NO \
@@ -48,145 +45,92 @@ set -o pipefail && TEST_RUNNER_COREDATA_BENCH_OUT="$PWD/docs/benchmarks/coredata
   -only-testing:polkadot-appIntegrationTests/CoreDataTopologySpike 2>&1 | xcbeautify --quiet
 ```
 
-`-parallel-testing-enabled NO` matters: the scheme allows parallel testing, and with it on xcodebuild ran
-every scenario on two simulator clones at once and the timings measured the contention between clones.
+`-parallel-testing-enabled NO` matters: the scheme allows parallel testing, and with it on xcodebuild runs
+every scenario on two simulator clones at once and the timings measure the contention between clones.
 
-### Results
+## How to read the columns
 
-| Scenario | Measure | n | p50 ms | p95 ms | p99 ms | max ms | ops/s |
-|---|---|---|---|---|---|---|---|
-| B1 concurrent reads | read | 1600 | 11.34 | 11.91 | 12.41 | 15.88 | 699.5 |
-| B2 reads under write load | read | 1600 | 12.36 | 68.63 | 82.37 | 85.08 | 308.8 |
-| B2 reads under write load | write (100-row batch) | 50 | 65.98 | 76.64 | 84.98 | 84.98 | 15.0 |
-| B3 subscription fan-out | save (1 row) | 100 | 61.97 | 64.96 | 80.72 | 80.72 | 16.1 |
-| B3 subscription fan-out | save → delivery | 100 | 61.98 | 64.97 | 80.73 | 80.73 | 16.1 |
-| B4 recycling replica | voucher save | 500 | 18.04 | 33.19 | 35.73 | 48.87 | 54.0 |
-| B4 recycling replica | registration (500 tx) | 1 | 585.61 | | | | |
-| B4 recycling replica | status save | 1000 | 1.09 | 2.74 | 5.00 | 9.65 | 759.1 |
-| B4 recycling replica | concurrent chat read | 367 | 6.74 | 18.35 | 23.42 | 569.64 | 32.9 |
-| B4 recycling replica | wall | 1 | 11164 | | | | |
-| S1 nested child reader | read during write | 200 | 0.73 | 238.62 | 285.77 | 291.63 | |
-| S1 sibling auto-merge reader | read during write | 200 | 0.52 | 0.96 | 4.71 | 10.58 | |
+Each measure is a set of `n` operation latencies (one fetch, one save, one save-to-delivery interval).
+`LatencyRecorder` sorts them and reports positions in that sorted list rather than the mean, because
+contention shows up as a long tail that a mean hides.
 
-Counters: B3 `chatMapperCalls` 225,663 for 100 single-row saves (about 2,300 transforms per save: the
-unfiltered message subscription re-maps all 2,000 rows plus six per-chat subscriptions re-map 50 each).
-B4 `assetMapperCalls` 376,760 for 500 voucher saves (three unfiltered voucher subscriptions each re-map
-every voucher on every save, so cost grows quadratically with voucher count); `voucherDeliveries` 501.
+| Column | Meaning |
+|---|---|
+| `p50` | median: half the operations were faster. The typical, uncontended cost. |
+| `p95` | 1 in 20 was slower. Where queue waits and blocked reads appear first. |
+| `p99`, `max` | the tail: an operation that queued behind a long transaction. |
+| `wall` | first start to last end. What a user feels for the whole phase. |
+| `ops/s` | `n / wall`: sustained throughput of all readers or writers combined. |
 
-### Reading
+A p50 far below p95 (2.7.0 B2 read: 12 vs 69 ms) means most operations are cheap and a minority wait behind
+something; the gap is the queue wait. Percentile position is `sorted[min(n - 1, floor(n × q))]`, so with
+`n = 1` every column shows the same value (B4 registration and wall are single measurements).
 
-- B1: eight readers see 11 ms each while the whole queue sustains 700 fetches/s, so a fetch costs
-  about 1.4 ms and the other 10 ms is queue wait behind the other seven. Reads are serialized.
-- B2: reader p95 (68.6 ms) equals a single write batch (66 ms). A read waits for whatever write is in
-  front of it. Hypothesis H2 confirmed.
-- B3: a one-row insert takes 62 ms with the production subscription floor live, and the subscriber
-  receives its snapshot at the same instant the save completes, because mapping runs inside the
-  save's critical section. Hypothesis H1 confirmed.
-- B4: 500 coins take 11.2 s end to end, split as voucher saves 9.26 s (83%), registration 0.59 s,
-  status saves 1.32 s. A voucher save and a status save are the same write shape (fetch by id, one row,
-  commit) and the status save shows that shape costs about 1 ms. The other 17 ms of every voucher save
-  is the three unfiltered voucher subscriptions each re-mapping every voucher row, synchronously,
-  inside the save: save number i re-maps 3 × i rows, 375,750 transforms over the run, so the phase is
-  quadratic in voucher count (1,000 coins would take about 37 s here; in production the multiplier is
-  the whole voucher table). The chat reader's worst case (570 ms) is the one fetch that queued behind
-  the 586 ms registration transaction. Expected after the split: the loop no longer waits for the
-  mapping, so wall time drops toward 2.5 s, while the mapping CPU moves to the observer queue as
-  delivery lag until phase 4 replaces re-mapping with diffing.
-- S1: a child context's fetch waits for the parent's write (p95 239 ms against a 338 ms write); a
-  sibling on the coordinator does not (p95 0.96 ms). Nested readers would not remove the contention.
+## 2.7.0 → 3.0.0
 
-## 2026-09-18-operation-ios-3.0.0-653010d
+2.7.0 ran `.serial` only, which is all it had. 3.0.0 ran all three variants; the app uses
+`concurrent(readerConcurrency: 2)` and the NotificationServiceExtension uses `.serial`. Cells are
+p50 / p95 ms unless marked.
 
-Same machine, simulator, scale and command as the 2.7.0 run (output directory changed accordingly). Library
-pinned to commit `653010d` (the 3.0.0 change set); every scenario ran in `serial`, `concurrent2` and
-`concurrent4`. Cells are p50 / p95 ms unless marked.
-
-| Measure | 2.7.0 serial | 3.0.0 serial | 3.0.0 concurrent2 | 3.0.0 concurrent4 |
+| Measure | 2.7.0 serial | 3.0.0 serial | 3.0.0 conc2 | 3.0.0 conc4 |
 |---|---|---|---|---|
-| B1 read | 11.3 / 11.9 | 11.5 / 12.1 | 7.9 / 8.4 | 6.8 / 9.2 |
-| B2 read (writer active) | 12.4 / 68.6 | 11.8 / 60.9 | 8.5 / 9.9 | 10.1 / 11.0 |
-| B2 write (100-row batch) | 66.0 / 76.6 | 59.6 / 67.8 | 50.2 / 53.9 | 61.5 / 64.4 |
-| B3 save (1 row, 20 subscriptions) | 62.0 / 65.0 | 63.1 / 69.0 | 1.7 / 2.6 | 1.7 / 2.2 |
-| B3 save → delivery | 62.0 / 65.0 | 63.1 / 69.0 | 65.1 / 69.6 | 65.2 / 68.8 |
-| B3 chatMapperCalls (total) | 225,663 | 225,663 | 225,432 | 225,432 |
-| B4 voucher save | 18.0 / 33.2 | 17.0 / 32.5 | 1.0 / 1.3 | 1.0 / 1.2 |
-| B4 registration (500 tx, 1 tx) | 586 | 588 | 623 | 613 |
-| B4 status save | 1.1 / 2.7 | 1.1 / 2.6 | 1.1 / 1.4 | 1.1 / 1.8 |
-| B4 concurrent chat read | 6.7 / 18.4 | 7.3 / 19.7 | 2.3 / 2.7 | 2.3 / 2.5 |
-| B4 wall (ms) | 11,164 | 10,608 | 2,369 | 2,361 |
-| B4 assetMapperCalls (total) | 376,760 | 376,760 | 100,894 | 100,755 |
-| B4 voucher deliveries | 501 | 501 | 248 | 247 |
-| S1 nested-child read (during write) | 0.7 / 238.6 | 0.9 / 235.2 | | |
-| S1 sibling read (during write) | 0.5 / 1.0 | 0.5 / 1.0 | | |
+| B1 read | 11.3 / 11.9 | 11.1 / 11.8 | 7.9 / 8.6 | 5.3 / 5.8 |
+| B2 read (writer active) | 12.4 / 68.6 | 11.2 / 57.2 | 8.5 / 9.3 | 7.8 / 8.6 |
+| B2 write (100-row batch) | 66.0 / 76.6 | 56.2 / 61.6 | 50.7 / 54.3 | 58.9 / 62.2 |
+| B3 save (1 row, 20 subscriptions) | 62.0 / 65.0 | 2.8 / 6.2 | 1.3 / 2.3 | 1.3 / 2.2 |
+| B3 save → delivery | 62.0 / 65.0 | 2.8 / 6.2 | 2.3 / 3.7 | 2.4 / 3.5 |
+| B3 chatMapperCalls (total) | 225,663 | 3,163 | 3,062 | 3,062 |
+| B4 voucher save | 18.0 / 33.2 | 1.5 / 3.1 | 1.0 / 1.5 | 1.0 / 1.2 |
+| B4 registration (500 tx, 1 tx) | 586 | 582 | 586 | 585 |
+| B4 status save | 1.1 / 2.7 | 1.1 / 2.6 | 1.0 / 1.5 | 1.0 / 1.3 |
+| B4 concurrent chat read | 6.7 / 18.4 | 2.3 / 3.7 | 2.2 / 2.5 | 2.2 / 2.4 |
+| B4 wall (ms) | 11,164 | 2,678 | 2,306 | 2,283 |
+| B4 assetMapperCalls (total) | 376,760 | 4,007 | 2,510 | 2,510 |
+| B4 voucher deliveries | 501 | 501 | 489 | 489 |
+| S1 nested-child read (during write) | 0.7 / 238.6 | 1.1 / 214.9 | | |
+| S1 sibling read (during write) | 0.5 / 1.0 | 0.2 / 0.8 | | |
+
+### Headline, 2.7.0 serial → 3.0.0 concurrent2
+
+| Measure | 2.7.0 | 3.0.0 | Change |
+|---|---|---|---|
+| B2 read p95, writer active | 68.6 ms | 9.3 ms | 7.4× faster |
+| B3 save with 20 subscriptions | 62.0 ms | 1.3 ms | 48× faster |
+| B3 save → delivery | 65.0 ms | 2.3 ms | 28× faster |
+| B4 voucher save | 18.0 ms | 1.0 ms | 18× faster |
+| B4 wall, 500 coins | 11,164 ms | 2,306 ms | 4.8× faster |
+| B3 mapper calls | 225,663 | 3,062 | 74× fewer |
+| B4 mapper calls | 376,760 | 2,510 | 150× fewer |
 
 ### Reading
 
-- **`.serial` is 2.7.0.** Every 3.0.0-serial number sits within run-to-run noise of the 2.7.0 baseline, so the
-  compatibility mode carries no regression and the extension's behaviour is unchanged.
-- **Reads no longer wait for writes (H2).** B2 reader p95 goes from one write batch (68.6 ms) to 9.9 ms; the
-  B4 chat reader's p95 from 18.4 ms to 2.7 ms. B1 improves less (11.3 → 7.9 ms p50) because uncontended reads
-  are bounded by the shared coordinator and store, not by the queue; that residual is the tier-2 question and
-  is not worth a second coordinator at these numbers.
-- **Saves stop paying for subscribers (H1).** A one-row insert with the 20-subscription floor drops from 62 ms
-  to 1.7 ms; a voucher save from 18 ms to 1.0 ms. The recycling replica finishes in 2.37 s instead of 11.2 s,
-  the 4.7× the phase 0 README predicted.
-- **The mapping cost moved, it did not shrink.** B3 save-to-delivery stays at ~65 ms and total mapper calls
-  are unchanged: the same re-mapping now runs on the observer queue, after the save has returned. In B4 the
-  observer's asynchronous merge coalesced consecutive saves into half as many deliveries (501 → 248) and a
-  quarter of the transforms (377k → 101k), because mapping is slower than the writer. That is a side effect,
-  not a design: delivery lag under sustained writes is what phase 4 (diff instead of re-map) addresses.
-- **2 readers vs 4.** Indistinguishable everywhere except B1 (6.8 vs 7.9 ms p50, with a worse p95). The
-  writer under B2 is slower with 4 readers competing for the coordinator (61.5 vs 50.2 ms). Stay at 2.
-- **No reader pool needed.** Per-read context creation does not show up: B4 reads average 2.3 ms end to end.
+- **Reads no longer wait for writes.** On 2.7.0 the B2 reader tail (68.6 ms) was exactly one write batch
+  (66 ms): a read waited for whatever write was in front of it. On 3.0.0 it is 9.3 ms. B4's chat reader
+  shows the same, 18.4 → 2.5 ms p95.
+- **Saves no longer pay for subscribers.** On 2.7.0 a one-row insert with the production subscription floor
+  cost 62 ms, and the subscriber received its snapshot at the instant the save completed, because every
+  subscriber re-mapped its whole result set inside the save. On 3.0.0 the save is 1.3 ms and delivery 2.3 ms.
+  Two changes compound here: mapping moved to the observer context, and the snapshot subscriber re-maps only
+  the rows the fetched results controller reports as changed.
+- **Mapper calls fell by two orders of magnitude**, which is what makes the recycling replica finish in
+  2.3 s instead of 11.2 s. B4's remaining 2,510 calls are the initial map plus one per changed row.
+- **`.serial` on 3.0.0 is not 2.7.0.** It keeps one context, so reads still queue behind writes (B2 p95
+  57 ms), but it gets the cheaper subscriber: B3 save 62 → 2.8 ms. That is the extension's mode, and the
+  extension has no subscriptions, so it neither gains nor loses much.
+- **Four readers buy little.** B1 improves (7.9 → 5.3 ms p50) because it is nothing but parallel fetches,
+  but the B2 writer slows (50.7 → 58.9 ms) from more readers contending for the one coordinator.
+  `CoreDataConcurrencyPolicy.app` stays at 2.
+- **S1 is why readers are siblings, not children.** A child context's fetch waits for its parent's write
+  (p95 215 ms against a 319 ms write); a sibling on the coordinator does not (p95 0.8 ms).
 
-### Decisions (phase 3)
+### Where the remaining time goes
 
-- Reader concurrency stays at 2 (`CoreDataConcurrencyPolicy.appReaderConcurrency`).
-- No pooled readers, no second coordinator.
-- Phase 4 (snapshot subscriber diffing) is justified by B3 delivery lag and B4 transform counts, but it is a
-  latency-of-delivery improvement, not a throughput one; the throughput goal of issue #156 is met here.
+Measured per row, our costs are still an order of magnitude above what the engine charges (Core Data fetches
+flat rows at roughly 2 µs each), so the remaining headroom is in round trips, not in the store:
 
-## 2026-09-18-operation-ios-3.0.0-653010d-diff
-
-Same library commit, same machine, scale and command; the only change is phase 4 of the app:
-`CoreDataSnapshotSubscriber` invalidates the cached model of each row the fetched results controller
-reports and maps rows on demand at delivery, keyed by permanent object ID. Cells are p50 / p95 ms.
-
-| Measure | 3.0.0 concurrent2 | 3.0.0-diff serial | 3.0.0-diff concurrent2 | 3.0.0-diff concurrent4 |
-|---|---|---|---|---|
-| B3 save (1 row, 20 subscriptions) | 1.7 / 2.6 | 3.1 / 4.3 | 1.3 / 2.8 | 1.3 / 2.6 |
-| B3 save → delivery | 65.1 / 69.6 | 3.1 / 4.3 | 2.5 / 4.0 | 2.4 / 3.7 |
-| B3 chatMapperCalls (total) | 225,432 | 3,163 | 3,062 | 3,062 |
-| B4 voucher save | 1.0 / 1.3 | 1.6 / 3.4 | 1.1 / 1.3 | 1.1 / 1.5 |
-| B4 concurrent chat read | 2.3 / 2.7 | 2.5 / 5.1 | 2.2 / 2.4 | 2.2 / 2.5 |
-| B4 wall (ms) | 2,369 | 2,750 | 2,336 | 2,375 |
-| B4 assetMapperCalls (total) | 100,894 | 4,007 | 2,510 | 2,510 |
-| B4 voucher deliveries | 248 | 500 | 489 | 490 |
-| B1 read | 7.9 / 8.4 | | 8.3 / 10.0 | |
-| B2 read (writer active) | 8.5 / 9.9 | | 8.9 / 10.4 | |
-
-### Reading
-
-- **Delivery latency is now the save latency.** B3 save → delivery drops from 65 ms to 2.5 ms; the
-  subscriber's cost per change is one map per changed row plus dictionary lookups. B1 and B2 are unchanged
-  within noise, as expected: they have no subscriptions.
-- **Mapper calls are two orders of magnitude lower.** B3: 3,062 for 100 saves. That is the initial map of
-  2,300 rows, then per save: the new row in the unfiltered and in the chat-filtered message subscription,
-  the updated chat row in the three chat subscriptions, and the new row mapped once more when its object ID
-  turns permanent (see below). B4: 2,510 for 500 voucher saves against 100,894 before.
-- **Deliveries went back up** (B4 vouchers 248 → 489). With mapping this cheap the observer no longer falls
-  behind the writer, so consecutive saves are no longer coalesced by accident; every save is delivered.
-  B4 wall time did not move (2.34 s vs 2.37 s), so per-delivery work is not a cost worth debouncing: D2 stands.
-- **Temporary object IDs.** With the controller on the writer (`.serial`), an inserted row is reported during
-  the save under a temporary ID and becomes permanent afterwards. The first phase 4 build cached rows by
-  that ID and every later snapshot missed them (B3 serial hung waiting for n+2 rows). The shipped subscriber
-  never caches a temporary ID and maps such rows again at the next delivery: one extra transform per insert,
-  visible as B4 serial's 4,007 against concurrent's 2,510. In concurrent mode the observer only sees
-  permanent IDs.
-- **Serial is still slower per save** (B3 3.1 ms vs 1.3 ms) because mapping runs inside the writer's save
-  there; it is the extension's mode and has no subscriptions in production.
-
-### Decisions (phase 4)
-
-- No delivery coalescing (D2 confirmed by numbers).
-- Related-object changes are not tracked (D1); derived-state subscriptions rely on parent-row touches.
+- `CoreDataRepository.save` issues one fetch per model before inserting or updating, and the message mapper
+  fetches its chat and creates a content row. That is the ~520 µs per row in B2's write.
+- Mappers fault relationships row by row; `relationshipKeyPathsForPrefetching` would turn N faults into one
+  query per relationship.
+- `DurableTxCoreDataRepository.nextSequence` runs a sorted fetch per inserted row, which is most of B4's
+  586 ms registration.

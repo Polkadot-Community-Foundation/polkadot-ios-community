@@ -2,7 +2,7 @@
   "counters" : {
 
   },
-  "date" : "2026-09-18T13:21:05Z",
+  "date" : "2026-09-20T10:26:18Z",
   "operationIOSVersion" : "3.0.0-653010d",
   "scale" : {
     "chats" : 200,
@@ -24,25 +24,25 @@
   "summaries" : [
     {
       "count" : 200,
-      "maxMs" : 306.116209,
-      "opsPerSecond" : 168.3820469835685,
-      "p50Ms" : 0.699417,
-      "p95Ms" : 253.48225,
-      "p99Ms" : 300.221625,
+      "maxMs" : 270.351167,
+      "opsPerSecond" : 160.72505205410295,
+      "p50Ms" : 1.069209,
+      "p95Ms" : 214.939042,
+      "p99Ms" : 264.246958,
       "scenario" : "S1.nestedChild.read",
       "variant" : "serial",
-      "wallMs" : 1187.7750839999999
+      "wallMs" : 1244.3610840000001
     },
     {
       "count" : 1,
-      "maxMs" : 354.919625,
-      "opsPerSecond" : 2.81753932316366,
-      "p50Ms" : 354.919625,
-      "p95Ms" : 354.919625,
-      "p99Ms" : 354.919625,
+      "maxMs" : 318.856458,
+      "opsPerSecond" : 3.1362074529473705,
+      "p50Ms" : 318.856458,
+      "p95Ms" : 318.856458,
+      "p99Ms" : 318.856458,
       "scenario" : "S1.nestedChild.write",
       "variant" : "serial",
-      "wallMs" : 354.919625
+      "wallMs" : 318.856458
     }
   ],
   "variant" : "serial"

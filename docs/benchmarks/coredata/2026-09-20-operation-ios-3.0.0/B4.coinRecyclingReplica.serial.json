@@ -1,12 +1,12 @@
 {
   "counters" : {
-    "assetMapperCalls" : 376760,
+    "assetMapperCalls" : 4007,
     "chatMapperCalls" : 5300,
     "coinDeliveries" : 1,
     "deliveries" : 1513,
     "voucherDeliveries" : 501
   },
-  "date" : "2026-09-18T11:49:42Z",
+  "date" : "2026-09-20T10:25:51Z",
   "operationIOSVersion" : "3.0.0-653010d",
   "scale" : {
     "chats" : 200,
@@ -28,58 +28,58 @@
   "summaries" : [
     {
       "count" : 500,
-      "maxMs" : 36.658292,
-      "opsPerSecond" : 56.98411189153218,
-      "p50Ms" : 17.034667,
-      "p95Ms" : 32.497334,
-      "p99Ms" : 34.072375,
+      "maxMs" : 15.237417,
+      "opsPerSecond" : 579.9070053703379,
+      "p50Ms" : 1.534417,
+      "p95Ms" : 3.143583,
+      "p99Ms" : 4.881542,
       "scenario" : "B4.voucherSave",
       "variant" : "serial",
-      "wallMs" : 8774.375583000001
+      "wallMs" : 862.207208
     },
     {
       "count" : 1,
-      "maxMs" : 587.988875,
-      "opsPerSecond" : 1.7007124497040869,
-      "p50Ms" : 587.988875,
-      "p95Ms" : 587.988875,
-      "p99Ms" : 587.988875,
+      "maxMs" : 582.466333,
+      "opsPerSecond" : 1.7168374262070871,
+      "p50Ms" : 582.466333,
+      "p95Ms" : 582.466333,
+      "p99Ms" : 582.466333,
       "scenario" : "B4.registration",
       "variant" : "serial",
-      "wallMs" : 587.988875
+      "wallMs" : 582.466333
     },
     {
       "count" : 1000,
-      "maxMs" : 5.4615,
-      "opsPerSecond" : 805.3766409781612,
-      "p50Ms" : 1.064292,
-      "p95Ms" : 2.643375,
-      "p99Ms" : 4.478,
+      "maxMs" : 5.448375,
+      "opsPerSecond" : 812.6539979326081,
+      "p50Ms" : 1.066334,
+      "p95Ms" : 2.635625,
+      "p99Ms" : 4.719458,
       "scenario" : "B4.statusSave",
       "variant" : "serial",
-      "wallMs" : 1241.655083
+      "wallMs" : 1230.536
     },
     {
-      "count" : 346,
-      "maxMs" : 572.02575,
-      "opsPerSecond" : 32.65917196091155,
-      "p50Ms" : 7.2525,
-      "p95Ms" : 19.735208,
-      "p99Ms" : 22.506041,
+      "count" : 90,
+      "maxMs" : 571.936833,
+      "opsPerSecond" : 33.71487015888414,
+      "p50Ms" : 2.286916,
+      "p95Ms" : 3.683333,
+      "p99Ms" : 571.936833,
       "scenario" : "B4.read",
       "variant" : "serial",
-      "wallMs" : 10594.267375
+      "wallMs" : 2669.4452499999998
     },
     {
       "count" : 1,
-      "maxMs" : 10608.35975,
-      "opsPerSecond" : 0.09426527979502203,
-      "p50Ms" : 10608.35975,
-      "p95Ms" : 10608.35975,
-      "p99Ms" : 10608.35975,
+      "maxMs" : 2678.185959,
+      "opsPerSecond" : 0.3733870669583329,
+      "p50Ms" : 2678.185959,
+      "p95Ms" : 2678.185959,
+      "p99Ms" : 2678.185959,
       "scenario" : "B4.wall",
       "variant" : "serial",
-      "wallMs" : 10608.35975
+      "wallMs" : 2678.185959
     }
   ],
   "variant" : "serial"

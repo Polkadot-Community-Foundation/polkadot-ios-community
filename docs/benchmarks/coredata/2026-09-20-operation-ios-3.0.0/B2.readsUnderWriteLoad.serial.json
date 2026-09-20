@@ -2,7 +2,7 @@
   "counters" : {
 
   },
-  "date" : "2026-09-18T13:19:02Z",
+  "date" : "2026-09-20T10:25:08Z",
   "operationIOSVersion" : "3.0.0-653010d",
   "scale" : {
     "chats" : 200,
@@ -20,18 +20,29 @@
     "subscriptionSaves" : 100,
     "writerBatches" : 50
   },
-  "scenario" : "B1.concurrentReads",
+  "scenario" : "B2.readsUnderWriteLoad",
   "summaries" : [
     {
       "count" : 1600,
-      "maxMs" : 38.044791,
-      "opsPerSecond" : 614.0053958456484,
-      "p50Ms" : 12.076166,
-      "p95Ms" : 20.706334,
-      "p99Ms" : 31.341458,
-      "scenario" : "B1.read",
+      "maxMs" : 65.086791,
+      "opsPerSecond" : 353.7738847843049,
+      "p50Ms" : 11.224958,
+      "p95Ms" : 57.1755,
+      "p99Ms" : 62.668416,
+      "scenario" : "B2.read",
       "variant" : "serial",
-      "wallMs" : 2605.840292
+      "wallMs" : 4522.662833
+    },
+    {
+      "count" : 50,
+      "maxMs" : 64.963834,
+      "opsPerSecond" : 17.637439154640195,
+      "p50Ms" : 56.164542,
+      "p95Ms" : 61.574583,
+      "p99Ms" : 64.963834,
+      "scenario" : "B2.write",
+      "variant" : "serial",
+      "wallMs" : 2834.878667
     }
   ],
   "variant" : "serial"
