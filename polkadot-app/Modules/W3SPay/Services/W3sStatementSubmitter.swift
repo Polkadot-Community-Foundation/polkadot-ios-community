@@ -1,10 +1,13 @@
 import BackgroundExecution
 import Foundation
 import Coinage
+import CoreData
 import CryptoKit
+import DurableTransactions
 import KeyDerivation
 import MessageExchangeKit
 import NovaCrypto
+import Operation_iOS
 import SDKLogger
 import StatementStore
 import SubstrateOperation
@@ -28,6 +31,7 @@ final class W3sStatementSubmitter {
     private let blockInfoProvider: BlockInfoProviding
     private let priorityFactory: StatementPriorityMaking
     private let backgroundExecutor: any BackgroundExecuting
+    private let databaseService: CoreDataServiceProtocol
     private let logger: SDKLoggerProtocol?
 
     init(
@@ -38,6 +42,7 @@ final class W3sStatementSubmitter {
         blockInfoProvider: BlockInfoProviding,
         priorityFactory: StatementPriorityMaking = StatementPriorityFactory(),
         backgroundExecutor: any BackgroundExecuting,
+        storageFacade: StorageFacadeProtocol = UserDataStorageFacade.shared,
         logger: SDKLoggerProtocol? = nil
     ) {
         self.details = details
@@ -47,6 +52,7 @@ final class W3sStatementSubmitter {
         self.blockInfoProvider = blockInfoProvider
         self.priorityFactory = priorityFactory
         self.backgroundExecutor = backgroundExecutor
+        databaseService = storageFacade.databaseService
         self.logger = logger
     }
 }
@@ -54,7 +60,12 @@ final class W3sStatementSubmitter {
 extension W3sStatementSubmitter: TransferSubmitting {
     var isFailureFatal: Bool { true }
 
-    func sendTransfer(_ memo: TransferMemo, to _: AccountId, messageId _: Chat.MessageId) async throws {
+    func sendTransfer(
+        _ memo: TransferMemo,
+        to _: AccountId,
+        messageId _: Chat.MessageId,
+        onSaved: @escaping (any DurableTxRegistrationScope) throws -> Void
+    ) async throws {
         // Save pending record immediately for crash-resilience and recovery UX.
         // Memo entries retained so payment can be revoked later. History is
         // auxiliary — a persistence failure must not abort the payment.
@@ -63,6 +74,13 @@ extension W3sStatementSubmitter: TransferSubmitting {
             try await self.historyStore.save(
                 self.makePendingRecord(memo: memo, submittedAtBlock: submittedAtBlock)
             )
+        }
+
+        // The statement is about to go out, so this is the moment the keys are on their way. The
+        // history record is auxiliary and may have failed, so the hook is not tied to it: it runs in
+        // its own transaction, before the statement leaves.
+        try await databaseService.performWrite { context in
+            try onSaved(CoreDataRegistrationScope(context: context))
         }
 
         try await backgroundExecutor.execute {

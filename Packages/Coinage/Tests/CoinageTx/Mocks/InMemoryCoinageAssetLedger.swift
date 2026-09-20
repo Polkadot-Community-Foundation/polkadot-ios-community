@@ -75,6 +75,27 @@ final class InMemoryCoinageAssetLedger: CoinageAssetLedgerProtocol, @unchecked S
         return joined([entry]).first
     }
 
+    func releaseUncommittedHandoffs(_ keys: [PublicKey]) async throws {
+        let dropped = Set(keys)
+
+        state.withLock { current in
+            for asset in current.pendingMarks where dropped.contains(asset.publicKey) {
+                current.pendingMarks.remove(asset)
+            }
+        }
+    }
+
+    func commitHandoffs(_ keys: [PublicKey], in _: any DurableTxRegistrationScope) throws {
+        let keySet = Set(keys)
+
+        state.withLock { current in
+            for asset in current.pendingMarks where keySet.contains(asset.publicKey) {
+                current.pendingMarks.remove(asset)
+                current.committedMarks.insert(asset)
+            }
+        }
+    }
+
     func assets(of ids: [CoinageTxId]) async throws -> [CoinageTxId: CoinageTxEntry] {
         let wanted = Set(ids)
 

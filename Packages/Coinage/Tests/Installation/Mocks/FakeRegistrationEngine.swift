@@ -40,6 +40,15 @@ final class FakeRegistrationEngine: DurableTxServicing, @unchecked Sendable {
         set(current(group), group: group)
     }
 
+    let policies = DurableSubmissionPolicyRegistry()
+
+    func buildExtrinsics(
+        _: [DurableTxRequest],
+        chainId _: ChainId
+    ) async throws -> [ExtrinsicBuiltModel] {
+        []
+    }
+
     func submitTransactions(
         domain _: TxDomainId,
         requests _: [DurableTxRequest],

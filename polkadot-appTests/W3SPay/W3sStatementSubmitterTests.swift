@@ -35,14 +35,15 @@ struct W3sStatementSubmitterTests {
             historyStore: historyStoreSpy,
             blockInfoProvider: BlockInfoProviderStub(),
             priorityFactory: StatementPriorityFactoryStub(),
-            backgroundExecutor: InlineBackgroundExecutor()
+            backgroundExecutor: InlineBackgroundExecutor(),
+            storageFacade: UserDataStorageTestFacade()
         )
 
         let memo = TransferMemo(entries: [], totalValue: 0)
 
         // Submit path throws (buildEnvelope fails on the invalid key).
         await #expect(throws: Error.self) {
-            try await submitter.sendTransfer(memo, to: Data(), messageId: UUID().uuidString)
+            try await submitter.sendTransfer(memo, to: Data(), messageId: UUID().uuidString) { _ in }
         }
 
         // The pending record is saved exactly once before the failure.

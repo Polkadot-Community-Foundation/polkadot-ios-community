@@ -23,15 +23,9 @@ extension CoinageExtrinsicParts {
 /// mortality handling are the ones a first attempt gets rather than a second implementation of them.
 struct CoinageExtrinsicBuilding: Sendable {
     let chainId: ChainId
-    let chainTools: any DurableChainToolsProviding
-    let logger: SDKLoggerProtocol?
+    let engine: any DurableTxServicing
 
     func build(_ parts: [CoinageExtrinsicParts]) async throws -> [ExtrinsicBuiltModel] {
-        guard !parts.isEmpty else { return [] }
-
-        let operationFactory = try await chainTools.extrinsicOperationFactory(for: chainId)
-        let builder = ExtrinsicBatchBuilder(operationFactory: operationFactory, logger: logger)
-
-        return try await builder.build(parts.map(\.durableRequest))
+        try await engine.buildExtrinsics(parts.map(\.durableRequest), chainId: chainId)
     }
 }

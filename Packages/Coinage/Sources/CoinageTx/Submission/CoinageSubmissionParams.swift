@@ -68,6 +68,19 @@ public enum CoinageSubmissionParams {
     }
 }
 
+public extension TransferSubmissionParams {
+    /// A transfer that keeps being rebuilt for as long as the recipient keeps trying to claim.
+    ///
+    /// The same window ``CoinageConstants/claimRetryWindow`` gives the claim, so neither side gives up
+    /// while the other still tries.
+    static func retriedTransfer(from start: Date) -> TransferSubmissionParams {
+        TransferSubmissionParams(
+            buildUntil: start.addingTimeInterval(CoinageConstants.claimRetryWindow),
+            retryFailures: true
+        )
+    }
+}
+
 /// Whether an attempt that failed with `failure` is worth building again while `now` is before
 /// `deadline`.
 ///

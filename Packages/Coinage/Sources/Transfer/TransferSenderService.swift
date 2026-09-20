@@ -62,6 +62,7 @@ actor TransferSenderService {
     private let planFactory: TransferPlanCreating
     private let memoBuilder: MemoBuilding
     private let recyclerLoader: RecyclerReadinessLoading
+    private let txService: any CoinageTxServicing
     private let logger: SDKLoggerProtocol?
 
     private var cachedMaxVouchers: Int?
@@ -71,12 +72,14 @@ actor TransferSenderService {
         planFactory: TransferPlanCreating,
         memoBuilder: MemoBuilding,
         recyclerLoader: RecyclerReadinessLoading,
+        txService: any CoinageTxServicing,
         logger: SDKLoggerProtocol?
     ) {
         self.coinSelector = coinSelector
         self.planFactory = planFactory
         self.memoBuilder = memoBuilder
         self.recyclerLoader = recyclerLoader
+        self.txService = txService
         self.logger = logger
     }
 }
@@ -129,7 +132,13 @@ extension TransferSenderService: TransferSenderServicing {
                 throw TransferSenderServiceError.memoBuildingFailed(error)
             }
 
-            return PreparedTransfer(memo: memo, handoffCommit: prepared.handoffCommit)
+            return PreparedTransfer(
+                memo: memo,
+                handoffCommit: prepared.handoffCommit,
+                transactions: prepared.transactions,
+                groupId: groupId,
+                txService: txService
+            )
         }
     }
 

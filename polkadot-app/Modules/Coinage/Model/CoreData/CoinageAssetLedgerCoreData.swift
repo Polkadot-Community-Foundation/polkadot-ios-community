@@ -166,6 +166,27 @@ extension CoinageAssetLedgerCoreData {
         }
     }
 
+    func releaseUncommittedHandoffs(_ keys: [PublicKey]) async throws {
+        guard !keys.isEmpty else { return }
+
+        try await withTransaction { context in
+            for key in keys {
+                try self.releaseUncommittedMark(key: key, in: context)
+            }
+        }
+    }
+
+    func commitHandoffs(_ keys: [PublicKey], in scope: any DurableTxRegistrationScope) throws {
+        guard let scope = scope as? CoreDataRegistrationScope else {
+            throw DurableTxError.foreignRegistrationScope
+        }
+
+        // No transaction of our own: the caller's is already open on the shared serial writer.
+        for key in keys {
+            try commitHandoff(key: key, in: scope.context)
+        }
+    }
+
     func releaseUncommittedHandoffs() async throws {
         try await withTransaction { try self.releaseUncommittedMarks(in: $0) }
     }
@@ -205,6 +226,15 @@ private extension CoinageAssetLedgerCoreData {
         // Never regress a committed mark back to provisional.
         if coin.handoffMark == CoinHandoffMark.none.rawValue {
             coin.handoffMark = CoinHandoffMark.pending.rawValue
+        }
+    }
+
+    /// Clears a provisional mark; a committed one is left alone — the keys did leave.
+    func releaseUncommittedMark(key: PublicKey, in context: NSManagedObjectContext) throws {
+        let coin: CDCoin? = try context.first(for: NSPredicate(format: "publicKey == %@", key.toHex()))
+
+        if coin?.handoffMark == CoinHandoffMark.pending.rawValue {
+            coin?.handoffMark = CoinHandoffMark.none.rawValue
         }
     }
 

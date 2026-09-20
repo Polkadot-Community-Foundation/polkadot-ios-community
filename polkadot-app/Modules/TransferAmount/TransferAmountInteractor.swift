@@ -164,19 +164,27 @@ private extension TransferAmountInteractor {
         // One id shared by the coinage transactions (their groupId) and the chat message that
         // carries the memo, so the transfer's on-chain work and its message correlate.
         let messageId: Chat.MessageId = UUID().uuidString
+        // Mints and reserves only: nothing is built and nothing is on the wire yet, so the slow part
+        // of a payment no longer stands between the user and the memo leaving.
         let prepared = try await coinageService.executeTransfer(result: result, groupId: messageId)
         do {
-            try await transferSubmitter.sendTransfer(prepared.memo, to: recipient.accountId, messageId: messageId)
+            // The hook runs inside the transaction that persists the memo, so the handoff becomes
+            // final and the payment's transactions are registered exactly when the keys are durable.
+            try await transferSubmitter.sendTransfer(
+                prepared.memo,
+                to: recipient.accountId,
+                messageId: messageId
+            ) { scope in
+                try prepared.commit(in: scope)
+            }
         } catch {
             if transferSubmitter.isFailureFatal {
-                // Fatal send failure: leave the handoff provisional so a relaunch returns the coins.
+                // The keys never left: drop the reservation now rather than waiting for a relaunch.
+                try? await prepared.abandon()
                 throw error
             }
             logger?.error("Non-fatal chat submitter failure: \(error)")
         }
-        // The memo has left toward the recipient — make the handoff final so the coins can't be
-        // reselected on this device.
-        try await prepared.handoffCommit.commit()
         lifecycleReporter.start(with: .coinageMemo(prepared.memo))
     }
 }

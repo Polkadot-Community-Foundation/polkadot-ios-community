@@ -16,6 +16,19 @@ public protocol DurableTxServicing: Sendable {
     /// Where a domain registers its oracle before it submits anything.
     var oracles: TxCompletionOracleRegistry { get }
 
+    /// Where a domain registers its submission policies before it submits anything carrying one.
+    var policies: DurableSubmissionPolicyRegistry { get }
+
+    /// Builds and signs declared extrinsics for one chain, through the same batching, ordering and
+    /// mortality handling registration uses.
+    ///
+    /// A domain's submission policy builds its rebuilt extrinsics with this rather than reaching for
+    /// the chain tools itself, so there is one build path and not two.
+    func buildExtrinsics(
+        _ requests: [DurableTxRequest],
+        chainId: ChainId
+    ) async throws -> [ExtrinsicBuiltModel]
+
     /// Builds, registers and submits several transactions as one operation: either all of them are
     /// recorded or none is. `onRegister` runs inside the registration transaction with the minted ids,
     /// so a domain's own rows commit together with the engine's. Returns once committed, which is before
@@ -320,6 +333,18 @@ public extension DurableTxService {
         startRecoveryPass()
 
         return ids
+    }
+
+    func buildExtrinsics(
+        _ requests: [DurableTxRequest],
+        chainId: ChainId
+    ) async throws -> [ExtrinsicBuiltModel] {
+        guard !requests.isEmpty else { return [] }
+
+        let operationFactory = try await chainTools.extrinsicOperationFactory(for: chainId)
+
+        return try await ExtrinsicBatchBuilder(operationFactory: operationFactory, logger: logger)
+            .build(requests)
     }
 
     func subscribeTransactionStatus(_ id: DurableTxId) -> AnyAsyncSequence<DurableTxStatus> {

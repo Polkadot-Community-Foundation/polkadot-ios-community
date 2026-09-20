@@ -192,6 +192,7 @@ public extension CoinageService {
             planFactory: planFactory,
             memoBuilder: memoBuilder,
             recyclerLoader: readinessLoader,
+            txService: txService,
             logger: logger
         )
 
@@ -261,6 +262,43 @@ public extension CoinageService {
             snKeyFactory: SNKeyFactory(),
             coinService: coinService,
             logger: logger
+        )
+
+        // Coinage's three submission policies, registered before anything carrying one is submitted:
+        // a row naming an unregistered policy is abandoned rather than left waiting for ever.
+        let extrinsicBuilding = CoinageExtrinsicBuilding(chainId: chain.chainId, engine: durableEngine)
+
+        CoinageSubmissionPolicies.register(
+            into: durableEngine.policies,
+            using: CoinageSubmissionPolicies.Dependencies(
+                chainId: chain.chainId,
+                ledger: assetLedger,
+                coinService: coinService,
+                voucherService: voucherService,
+                coinQuery: coinOnChainQuery,
+                voucherQuery: voucherOnChainQuery,
+                splitBuilder: SplitExtrinsicBuilder(
+                    coinKeyFactory: coinKeypairFactory,
+                    originFactory: originFactory,
+                    extrinsics: extrinsicBuilding
+                ),
+                unloadBuilder: UnloadExtrinsicBuilder(
+                    instanceId: instanceId,
+                    voucherKeyFactory: voucherKeypairFactory,
+                    recyclerLoader: readinessLoader,
+                    originFactory: originFactory,
+                    blockInfoProvider: blockNumberProvider,
+                    quotaTracker: quotaTracker,
+                    extrinsics: extrinsicBuilding,
+                    logger: logger
+                ),
+                claimBuilder: ClaimExtrinsicBuilder(
+                    originFactory: originFactory,
+                    extrinsics: extrinsicBuilding
+                ),
+                snKeyFactory: SNKeyFactory(),
+                logger: logger
+            )
         )
 
         let recipientService = TransferRecipientService(

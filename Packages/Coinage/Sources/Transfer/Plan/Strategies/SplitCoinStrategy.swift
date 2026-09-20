@@ -52,7 +52,7 @@ struct SplitCoinStrategy {
 // MARK: - TransferStrategy
 
 extension SplitCoinStrategy: TransferStrategy {
-    func prepare(groupId: CoinageTxGroupId?) async throws -> PreparedStrategy {
+    func prepare(groupId _: CoinageTxGroupId?) async throws -> PreparedStrategy {
         // Every piece of the split shares one provenance: the overflow coin's chain, plus this
         // split. Fanout counts all outputs, the recipient's and ours alike, since that is how many
         // ways the input was divided.
@@ -79,27 +79,12 @@ extension SplitCoinStrategy: TransferStrategy {
         transaction.handOff(coins: wholeCoins + recipientCoins)
         let assets = transaction.build()
 
-        let splitDestinations = try buildSplitDestinations(from: assets.outputCoins)
-
-        let call = CoinagePallet.Calls.Split(
-            splitInto: splitDestinations.sorted { $0.exponent < $1.exponent }
-        )
-        let builder: ExtrinsicBuilderClosure = {
-            try $0.adding(call: call.callAsFunction())
-        }
-        let origin = try makeOrigin()
-
-        // One fire-and-forget submit: registers (claiming the input) and broadcasts, returning once
-        // the entry is committed. The projection writes below follow, explained by that entry.
-        logger?.debug("Submitting split extrinsic for \(assets.outputCoins.count) coins")
-        try await txService.submitTransaction(
-            request: CoinageTxRequest(
-                inputs: assets.inputs,
-                outputs: assets.outputs,
-                builder: builder,
-                origin: origin
-            ),
-            groupId: groupId
+        // Declared, not built: the call and its origin are reconstructed from these same assets by
+        // `SplitRebuild` when the policy builds it, so nothing here needs an unload token or a proof.
+        let scheduled = try CoinageScheduledTxRequest(
+            policy: CoinageSubmissionParams.splitPolicy(.retriedTransfer(from: Date())),
+            inputs: assets.inputs,
+            outputs: assets.outputs
         )
 
         let handoffCommit = try await txService
@@ -115,7 +100,11 @@ extension SplitCoinStrategy: TransferStrategy {
             PlannedMemoEntry(coinDerivationIndex: $0.derivationIndex, valueExponent: $0.exponent)
         }
 
-        return PreparedStrategy(memoEntries: memoEntries, handoffCommit: handoffCommit)
+        return PreparedStrategy(
+            memoEntries: memoEntries,
+            handoffCommit: handoffCommit,
+            transactions: [scheduled]
+        )
     }
 }
 

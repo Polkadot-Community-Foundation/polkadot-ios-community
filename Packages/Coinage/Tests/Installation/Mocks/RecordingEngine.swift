@@ -15,6 +15,15 @@ final class RecordingEngine: DurableTxServicing, @unchecked Sendable {
     private(set) var submissions: [(domain: TxDomainId, requests: Int, groupId: DurableTxGroupId?)] = []
     let submittedId = UUID()
 
+    let policies = DurableSubmissionPolicyRegistry()
+
+    func buildExtrinsics(
+        _: [DurableTxRequest],
+        chainId _: ChainId
+    ) async throws -> [ExtrinsicBuiltModel] {
+        []
+    }
+
     func submitTransactions(
         domain: TxDomainId,
         requests: [DurableTxRequest],

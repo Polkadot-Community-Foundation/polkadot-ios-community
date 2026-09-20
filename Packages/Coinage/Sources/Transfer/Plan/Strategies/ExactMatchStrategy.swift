@@ -30,6 +30,10 @@ struct ExactMatchStrategy: TransferStrategy {
             )
         }
 
-        return PreparedStrategy(memoEntries: memoEntries, handoffCommit: handoffCommit)
+        return PreparedStrategy(
+            memoEntries: memoEntries,
+            handoffCommit: handoffCommit,
+            transactions: []
+        )
     }
 }
