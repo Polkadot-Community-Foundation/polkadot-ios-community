@@ -51,10 +51,13 @@ This is documented in CLAUDE.md and enforced in reviews.
 
 ### Concurrency modes
 
-`CoreDataService` (Operation-iOS 3.0.0) takes a `concurrencyMode`. `CoreDataConcurrencyPolicy.forCurrentProcess`
-picks it once per process: `.serial` in the NotificationServiceExtension (one context, 2.x behaviour) and
-`.concurrent(readerConcurrency: 2)` in the app (writer + observer + short-lived readers). Rollback is that one
-line.
+`CoreDataService` (Operation-iOS 3.0.0) takes a `concurrencyMode`. `CoreDataConcurrencyPolicy` names both
+modes — `.app` is `.concurrent(readerConcurrency: 2)` (writer + observer + short-lived readers), and
+`.notificationServiceExtension` is `.serial` (one context, 2.x behaviour) — and `forCurrentTarget` picks
+between them **at compile time**: the extension declares `NOTIFICATION_SERVICE_EXTENSION` in
+`NotificationServiceExtension/Configs/*.xcconfig`, the app declares nothing. A new target that links these
+files must declare its own mode there; nothing is inferred from the running bundle. Rollback is one line in
+that file.
 
 | Entry point | Use for | Contract |
 |---|---|---|
@@ -62,6 +65,18 @@ line.
 | `performRead` | one-shot fetches | runs on a reader context that may overlap the writer; never mutate |
 | `performObserve` | fetched results controllers, long-lived observers | the observer context; merges every writer save automatically, never reset |
 | `perform` (StructuredConcurrency) | legacy | writer context, caller saves; no call sites should remain |
+
+Contracts worth knowing (Operation-iOS 3.0.0):
+
+- A `performRead` block that mutates fails with `CoreDataServiceError.readLeftChanges`; it is not silently
+  discarded. Return plain values only — in concurrent mode the reader context is gone when the completion runs.
+- `close()` drains in-flight work; anything arriving while it drains is rejected with `closeInProgress`, and
+  a `drop()` during the drain throws the same. A read's completion may close the service, a read's block may not.
+- The configuration takes a `logger` (both facades pass `Logger.shared`). It surfaces diagnostics that cannot
+  be raised as errors, such as a row the mapper could not read or a remote delete with no tombstone.
+- Cross-process deletes reach `CoreDataContextObservable` only if the entity's identifier attribute is marked
+  **Preserve After Deletion** in the model. No entity sets it today; the extension only inserts, so nothing is
+  lost. Mark it in the same version bump if the extension ever starts deleting rows.
 
 Repositories already route fetches to readers and saves to the writer; `subscribeSnapshot` attaches to the
 observer. Raw-context code goes through the async `performWrite` / `performRead` bridges in
