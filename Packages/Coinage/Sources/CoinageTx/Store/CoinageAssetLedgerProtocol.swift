@@ -27,6 +27,12 @@ public protocol CoinageAssetLedgerProtocol: Sendable {
     /// The entry with this id joined to its assets, if any.
     func getEntry(id: CoinageTxId) async throws -> CoinageTxEntry?
 
+    /// The entries of each of `ids`, in one batched read rather than one per transaction.
+    ///
+    /// A submission policy reads every transaction it was handed at once; the ledger is append-only and
+    /// grows for the life of the installation, so this must not be answered by scanning all of it.
+    func assets(of ids: [CoinageTxId]) async throws -> [CoinageTxId: CoinageTxEntry]
+
     /// Every entry registered under `groupId`, ordered by `sequence`.
     func getOperationGroupStatuses(_ groupId: CoinageTxGroupId) async throws -> [CoinageTxEntry]
 

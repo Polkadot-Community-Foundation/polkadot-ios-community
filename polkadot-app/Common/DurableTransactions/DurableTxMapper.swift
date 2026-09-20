@@ -22,12 +22,6 @@ final class DurableTxMapper: CoreDataMapperProtocol {
         guard let domainId = entity.domainId else {
             throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDDurableTx.domainId))
         }
-        guard let checkpointHash = entity.checkpointHash, let checkpointNumber = entity.checkpointNumber else {
-            throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDDurableTx.checkpointHash))
-        }
-        guard let txHashString = entity.txHash else {
-            throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDDurableTx.txHash))
-        }
         guard let createdAt = entity.createdAt else {
             throw CoreDataMapperError.missingRequiredData(keyPath: #keyPath(CDDurableTx.createdAt))
         }
@@ -39,18 +33,65 @@ final class DurableTxMapper: CoreDataMapperProtocol {
                 nil
             }
 
-        return try DurableTxEntry(
+        // A row waiting to be built carries no attempt, so these columns are NULL and the entry gets
+        // the same placeholders ``DurableTxSchedule/makeEntry(id:sequence:)`` mints. Nothing reads them
+        // while the status is `pendingSubmission`.
+        let attempt = try Self.attempt(of: entity)
+
+        return DurableTxEntry(
             id: id,
             domainId: TxDomainId(domainId),
             sequence: entity.sequence,
             groupId: entity.groupId,
-            txHash: Data(hexString: txHashString),
-            checkpoint: BlockRef(number: checkpointNumber.uint32Value, hash: Data(hexString: checkpointHash)),
-            mortality: UInt32(bitPattern: entity.mortality),
+            txHash: attempt.txHash,
+            checkpoint: attempt.checkpoint,
+            mortality: attempt.mortalityBlocks,
             successDetectedAt: successDetectedAt,
             status: status,
             createdAt: createdAt
         )
+    }
+
+    /// The attempt a row carries, or the placeholder triple for one that has none yet.
+    static func attempt(of entity: CDDurableTx) throws -> DurableTxAttempt {
+        guard let txHashString = entity.txHash,
+              let checkpointHash = entity.checkpointHash,
+              let checkpointNumber = entity.checkpointNumber
+        else {
+            return DurableTxAttempt(
+                txHash: Data(),
+                checkpoint: BlockRef(number: 0, hash: Data()),
+                mortalityBlocks: 0
+            )
+        }
+
+        return try DurableTxAttempt(
+            txHash: Data(hexString: txHashString),
+            checkpoint: BlockRef(number: checkpointNumber.uint32Value, hash: Data(hexString: checkpointHash)),
+            mortalityBlocks: UInt32(bitPattern: entity.mortality)
+        )
+    }
+
+    /// The policy that may build this row again, if it has one.
+    static func policy(of entity: CDDurableTx) -> SubmissionPolicy? {
+        guard let id = entity.submissionPolicyId, let params = entity.submissionPolicyParams else {
+            return nil
+        }
+
+        return SubmissionPolicy(id: SubmissionPolicyId(id), params: params)
+    }
+
+    /// Writes the attempt columns, or clears them for a row that has none yet.
+    static func apply(attempt: DurableTxAttempt?, to entity: CDDurableTx) {
+        entity.txHash = attempt?.txHash.toHex()
+        entity.checkpointHash = attempt?.checkpoint.hash.toHex()
+        entity.checkpointNumber = attempt.map { NSNumber(value: $0.checkpoint.number) }
+        entity.mortality = Int32(bitPattern: attempt?.mortalityBlocks ?? 0)
+    }
+
+    static func apply(policy: SubmissionPolicy?, to entity: CDDurableTx) {
+        entity.submissionPolicyId = policy?.id.rawValue
+        entity.submissionPolicyParams = policy?.params
     }
 
     func populate(entity: CDDurableTx, from model: DurableTxEntry, using _: NSManagedObjectContext) throws {
@@ -59,10 +100,16 @@ final class DurableTxMapper: CoreDataMapperProtocol {
         entity.sequence = model.sequence
         entity.groupId = model.groupId
         entity.createdAt = model.createdAt
-        entity.mortality = Int32(bitPattern: model.mortality)
-        entity.checkpointHash = model.checkpoint.hash.toHex()
-        entity.checkpointNumber = NSNumber(value: model.checkpoint.number)
-        entity.txHash = model.txHash.toHex()
+
+        let attempt: DurableTxAttempt? = model.status == .pendingSubmission
+            ? nil
+            : DurableTxAttempt(
+                txHash: model.txHash,
+                checkpoint: model.checkpoint,
+                mortalityBlocks: model.mortality
+            )
+
+        Self.apply(attempt: attempt, to: entity)
         Self.apply(status: model.status, successDetectedAt: model.successDetectedAt, to: entity)
     }
 

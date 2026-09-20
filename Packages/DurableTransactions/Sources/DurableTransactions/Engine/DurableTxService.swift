@@ -20,13 +20,44 @@ public protocol DurableTxServicing: Sendable {
     /// recorded or none is. `onRegister` runs inside the registration transaction with the minted ids,
     /// so a domain's own rows commit together with the engine's. Returns once committed, which is before
     /// the bytes reach the wire: no extrinsic is ever in flight without a record.
+    ///
+    /// `policies` runs parallel to `requests`; a non-`nil` entry is the policy that builds that
+    /// transaction again once an attempt is proven unable to land, instead of failing it.
     @discardableResult
     func submitTransactions(
         domain: TxDomainId,
         requests: [DurableTxRequest],
         groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy?],
         onRegister: @escaping DurableTxRegistrationHook
     ) async throws -> [DurableTxId]
+
+    /// Registers transactions that have not been built yet, one per policy, as one operation. Each is
+    /// built and submitted by its policy afterwards, and built again as `submitTransactions` describes.
+    ///
+    /// What they will consume is locked from the moment this commits. When `scope` is given the rows join
+    /// that open transaction instead of opening one, so a caller already inside a write — the transport
+    /// that persists whatever carries the payment — commits its row and these together.
+    @discardableResult
+    func schedule(
+        domain: TxDomainId,
+        groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy],
+        in scope: (any DurableTxRegistrationScope)?,
+        onRegister: @escaping DurableTxRegistrationHook
+    ) async throws -> [DurableTxId]
+
+    /// The scope-joining half of ``schedule(domain:groupId:policies:in:onRegister:)``, synchronous
+    /// because its caller already is — a transport writing the row that carries a payment runs inside
+    /// its store's write block, which cannot suspend.
+    @discardableResult
+    func schedule(
+        domain: TxDomainId,
+        groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy],
+        joining scope: any DurableTxRegistrationScope,
+        onRegister: DurableTxRegistrationHook
+    ) throws -> [DurableTxId]
 
     /// A stream of a transaction's status: the current value, then every change.
     func subscribeTransactionStatus(_ id: DurableTxId) -> AnyAsyncSequence<DurableTxStatus>
@@ -52,6 +83,43 @@ public protocol DurableTxServicing: Sendable {
     func stop()
 }
 
+public extension DurableTxServicing {
+    /// Submits transactions none of which is ever rebuilt — the shape every caller had before
+    /// submission policies existed.
+    @discardableResult
+    func submitTransactions(
+        domain: TxDomainId,
+        requests: [DurableTxRequest],
+        groupId: DurableTxGroupId?,
+        onRegister: @escaping DurableTxRegistrationHook
+    ) async throws -> [DurableTxId] {
+        try await submitTransactions(
+            domain: domain,
+            requests: requests,
+            groupId: groupId,
+            policies: [],
+            onRegister: onRegister
+        )
+    }
+
+    /// Schedules transactions in a transaction of the engine's own.
+    @discardableResult
+    func schedule(
+        domain: TxDomainId,
+        groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy],
+        onRegister: @escaping DurableTxRegistrationHook
+    ) async throws -> [DurableTxId] {
+        try await schedule(
+            domain: domain,
+            groupId: groupId,
+            policies: policies,
+            in: nil,
+            onRegister: onRegister
+        )
+    }
+}
+
 /// Orchestrates registration, submission tracking and the recovery pass, and exposes the queries.
 ///
 /// Not an actor: most stored properties are `let` and every method suspends on its first statement, so
@@ -64,7 +132,10 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
     private let store: any DurableTxRepositoryProtocol
     private let registrar: DurableTxRegistrar
     private let tracker: DurableTxTracker
+    private let launcher: DurableSubmissionLauncher
+    private let executor: DurableSubmissionExecutor
     private let pass: DurableRecoveryPass
+    public let policies: DurableSubmissionPolicyRegistry
     private let chainFactory: any PinnedChainViewFactoryProtocol
     private let chainTools: any DurableChainToolsProviding
     private let logger: SDKLoggerProtocol?
@@ -75,8 +146,11 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
         store: any DurableTxRepositoryProtocol,
         registrar: DurableTxRegistrar,
         tracker: DurableTxTracker,
+        launcher: DurableSubmissionLauncher,
+        executor: DurableSubmissionExecutor,
         pass: DurableRecoveryPass,
         oracles: TxCompletionOracleRegistry,
+        policies: DurableSubmissionPolicyRegistry,
         chainFactory: any PinnedChainViewFactoryProtocol,
         chainTools: any DurableChainToolsProviding,
         logger: SDKLoggerProtocol?
@@ -84,8 +158,11 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
         self.store = store
         self.registrar = registrar
         self.tracker = tracker
+        self.launcher = launcher
+        self.executor = executor
         self.pass = pass
         self.oracles = oracles
+        self.policies = policies
         self.chainFactory = chainFactory
         self.chainTools = chainTools
         self.logger = logger
@@ -101,25 +178,55 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
     ) -> DurableTxService {
         let owned = DurableTxOwnershipSet()
         let oracles = TxCompletionOracleRegistry()
+        let policies = DurableSubmissionPolicyRegistry()
+        let verdictWriter = DurableVerdictWriter(store: store, policies: policies, logger: logger)
+
+        let pass = DurableRecoveryPass(
+            store: store,
+            chainFactory: chainViewFactory,
+            owned: owned,
+            oracles: oracles,
+            verdictWriter: verdictWriter,
+            logger: logger
+        )
+
+        let tracker = DurableTxTracker(
+            store: store,
+            chainFactory: chainViewFactory,
+            owned: owned,
+            verdictWriter: verdictWriter,
+            backgroundExecutor: backgroundExecutor,
+            logger: logger
+        )
+
+        let launcher = DurableSubmissionLauncher(
+            store: store,
+            tracker: tracker,
+            owned: owned,
+            chainTools: chainTools,
+            onRecovery: { Task { await pass.run() } },
+            logger: logger
+        )
+
+        let executor = DurableSubmissionExecutor(
+            store: store,
+            policies: policies,
+            launcher: launcher,
+            // Anything waiting to be built keeps recovery scheduled: the loop is what holds the
+            // process awake long enough for a policy to finish waiting on the chain.
+            onPendingSubmissions: { Task { await pass.run() } },
+            logger: logger
+        )
 
         return DurableTxService(
             store: store,
             registrar: DurableTxRegistrar(store: store, owned: owned, logger: logger),
-            tracker: DurableTxTracker(
-                store: store,
-                chainFactory: chainViewFactory,
-                owned: owned,
-                backgroundExecutor: backgroundExecutor,
-                logger: logger
-            ),
-            pass: DurableRecoveryPass(
-                store: store,
-                chainFactory: chainViewFactory,
-                owned: owned,
-                oracles: oracles,
-                logger: logger
-            ),
+            tracker: tracker,
+            launcher: launcher,
+            executor: executor,
+            pass: pass,
             oracles: oracles,
+            policies: policies,
             chainFactory: chainViewFactory,
             chainTools: chainTools,
             logger: logger
@@ -135,6 +242,7 @@ public extension DurableTxService {
         domain: TxDomainId,
         requests: [DurableTxRequest],
         groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy?],
         onRegister: @escaping DurableTxRegistrationHook
     ) async throws -> [DurableTxId] {
         guard let chainId = oracles.chainId(for: domain) else {
@@ -151,22 +259,65 @@ public extension DurableTxService {
         let builder = ExtrinsicBatchBuilder(operationFactory: operationFactory, logger: logger)
         let models = try await builder.build(requests)
 
-        let registrations = try Self.registrations(domain: domain, groupId: groupId, models: models)
+        let registrations = try Self.registrations(
+            domain: domain,
+            groupId: groupId,
+            models: models,
+            policies: policies
+        )
         let ids = try await registrar.register(registrations, onRegister: onRegister)
 
         logger?.debug("Registered transactions=\(ids.count) groupId=\(String(describing: groupId))")
 
         for (id, model) in zip(ids, models) {
-            let submission = DurableTxTracker.Submission(
-                model: model,
-                transactionId: id,
-                chainId: chainId,
-                submitter: submitter
-            )
-            tracker.track(submission) { [pass] in
-                Task { await pass.run() }
-            }
+            launcher.watch(id: id, model: model, chainId: chainId, submitter: submitter)
         }
+
+        return ids
+    }
+
+    @discardableResult
+    func schedule(
+        domain: TxDomainId,
+        groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy],
+        in scope: (any DurableTxRegistrationScope)?,
+        onRegister: @escaping DurableTxRegistrationHook
+    ) async throws -> [DurableTxId] {
+        let schedules = policies.map {
+            DurableTxSchedule(domainId: domain, groupId: groupId, policy: $0)
+        }
+
+        let ids = try await registrar.schedule(schedules, in: scope, onRegister: onRegister)
+
+        logger?.debug("Scheduled transactions=\(ids.count) groupId=\(String(describing: groupId))")
+
+        // Nothing is built until the executor reads these rows, so this is safe while an enclosing
+        // transaction has not committed them yet.
+        startRecoveryPass()
+
+        return ids
+    }
+
+    @discardableResult
+    func schedule(
+        domain: TxDomainId,
+        groupId: DurableTxGroupId?,
+        policies: [SubmissionPolicy],
+        joining scope: any DurableTxRegistrationScope,
+        onRegister: DurableTxRegistrationHook
+    ) throws -> [DurableTxId] {
+        let schedules = policies.map {
+            DurableTxSchedule(domainId: domain, groupId: groupId, policy: $0)
+        }
+
+        let ids = try store.schedule(schedules, joining: scope, onRegister: onRegister)
+
+        logger?.debug("Scheduled transactions=\(ids.count) inside a caller's transaction")
+
+        // The executor reads committed rows only, so asking now is safe while the caller's transaction
+        // is still open — it simply sees nothing until the caller commits.
+        startRecoveryPass()
 
         return ids
     }
@@ -187,7 +338,8 @@ public extension DurableTxService {
     }
 
     func startRecoveryPass() {
-        Task { [pass] in
+        Task { [pass, executor] in
+            await executor.ensureStarted()
             await pass.run()
         }
     }
@@ -195,7 +347,11 @@ public extension DurableTxService {
     func start() {
         let chainIds = oracles.chainIds
 
-        let task = Task { [pass, chainFactory] in
+        let task = Task { [pass, chainFactory, executor] in
+            // A relaunch reaches here with nothing having started the executor, and the loop would keep
+            // a transaction waiting to be built alive without anyone building it.
+            await executor.ensureStarted()
+
             await pass.run()
 
             // A pass on every newly finalized head and every new best head of every watched chain.
@@ -224,33 +380,29 @@ public extension DurableTxService {
             return old
         }
         task?.cancel()
+
+        Task { [executor] in await executor.close() }
     }
 }
 
 // MARK: - Registration
 
 private extension DurableTxService {
-    /// Builds one registration per built extrinsic. Both the checkpoint and the mortality window are read
-    /// from the extrinsic's own `CheckMortality` era — the window the runtime will actually enforce, which
-    /// is exactly what the body search must cover — rather than re-derived from the chain. The `txHash`
-    /// is the up-front hash of the built extrinsic, so a transaction is resolvable by the search even
-    /// before tracking records anything.
+    /// Builds one registration per built extrinsic, pairing each with the policy that may build it
+    /// again. The attempt itself — hash, checkpoint and window — is read off the built model by
+    /// ``DurableTxAttempt/init(from:)``, which is the one place that derivation lives.
     static func registrations(
         domain: TxDomainId,
         groupId: DurableTxGroupId?,
-        models: [ExtrinsicBuiltModel]
+        models: [ExtrinsicBuiltModel],
+        policies: [SubmissionPolicy?]
     ) throws -> [DurableTxRegistration] {
-        try models.map { model in
-            guard let anchor = model.mortalityAnchorBlock, let period = model.mortalityPeriod else {
-                throw DurableTxError.notMortal
-            }
-
-            return try DurableTxRegistration(
+        try models.enumerated().map { index, model in
+            try DurableTxRegistration(
                 domainId: domain,
                 groupId: groupId,
-                txHash: Data(hexString: model.extrinsic).blake2b32(),
-                checkpoint: BlockRef(number: anchor.blockNumber, hash: anchor.blockHash),
-                mortalityBlocks: UInt32(period)
+                attempt: DurableTxAttempt(from: model),
+                policy: index < policies.count ? policies[index] : nil
             )
         }
     }

@@ -44,9 +44,15 @@ final class MockCoinageTxRepository: @unchecked Sendable {
     func updateTxStatus(
         for id: CoinageTxId,
         expectedCurrentStatus: CoinageTxStatus,
+        expectedTxHash: Data,
         verdict: Verdict
     ) async throws -> Bool {
-        try await durable.updateTxStatus(for: id, expectedCurrentStatus: expectedCurrentStatus, verdict: verdict)
+        try await durable.updateTxStatus(
+            for: id,
+            expectedCurrentStatus: expectedCurrentStatus,
+            expectedTxHash: expectedTxHash,
+            verdict: verdict
+        )
     }
 
     func getAllEntries() async throws -> [CoinageTxEntry] {

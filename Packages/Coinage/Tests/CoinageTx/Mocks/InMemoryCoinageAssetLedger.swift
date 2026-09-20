@@ -75,6 +75,14 @@ final class InMemoryCoinageAssetLedger: CoinageAssetLedgerProtocol, @unchecked S
         return joined([entry]).first
     }
 
+    func assets(of ids: [CoinageTxId]) async throws -> [CoinageTxId: CoinageTxEntry] {
+        let wanted = Set(ids)
+
+        return try await getAllEntries()
+            .filter { wanted.contains($0.id) }
+            .reduce(into: [:]) { $0[$1.id] = $1 }
+    }
+
     func getOperationGroupStatuses(_ groupId: CoinageTxGroupId) async throws -> [CoinageTxEntry] {
         try await joined(durable.getGroupEntries(domain: .coinage, groupId: groupId))
     }

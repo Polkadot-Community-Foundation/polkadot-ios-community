@@ -53,6 +53,76 @@ extension DurableTxCoreDataRepository {
             return ids
         }
     }
+
+    func schedule(
+        _ schedules: [DurableTxSchedule],
+        in scope: (any DurableTxRegistrationScope)?,
+        onRegister: @escaping DurableTxRegistrationHook
+    ) async throws -> [DurableTxId] {
+        guard !schedules.isEmpty else { return [] }
+
+        if let scope {
+            return try schedule(schedules, joining: scope, onRegister: onRegister)
+        }
+
+        return try await withTransaction { context in
+            try self.insertSchedules(schedules, in: context, onRegister: onRegister)
+        }
+    }
+
+    func schedule(
+        _ schedules: [DurableTxSchedule],
+        joining scope: any DurableTxRegistrationScope,
+        onRegister: DurableTxRegistrationHook
+    ) throws -> [DurableTxId] {
+        guard let scope = scope as? CoreDataRegistrationScope else {
+            throw DurableTxError.foreignRegistrationScope
+        }
+
+        guard !schedules.isEmpty else { return [] }
+
+        // No transaction of our own: the caller's is already open on the shared serial writer, and a
+        // second one would deadlock on it.
+        return try insertSchedules(schedules, in: scope.context, onRegister: onRegister)
+    }
+
+    func startAttempt(id: DurableTxId, attempt: DurableTxAttempt) async throws -> Bool {
+        try await withTransaction { context in
+            guard let entity = try self.entity(id, in: context),
+                  entity.status == Int16(DurableTxStatus.pendingSubmission.rawValue)
+            else {
+                return false
+            }
+
+            DurableTxMapper.apply(attempt: attempt, to: entity)
+            // A new attempt has observed nothing yet, so whatever the last one recorded goes with it.
+            DurableTxMapper.apply(status: .pending, successDetectedAt: nil, to: entity)
+
+            for observer in self.rowObservers {
+                observer.didChangeStatus(of: entity, in: context)
+            }
+
+            return true
+        }
+    }
+
+    func abandonSubmission(id: DurableTxId) async throws -> Bool {
+        try await withTransaction { context in
+            guard let entity = try self.entity(id, in: context),
+                  entity.status == Int16(DurableTxStatus.pendingSubmission.rawValue)
+            else {
+                return false
+            }
+
+            DurableTxMapper.apply(status: .failure, successDetectedAt: nil, to: entity)
+
+            for observer in self.rowObservers {
+                observer.didChangeStatus(of: entity, in: context)
+            }
+
+            return true
+        }
+    }
 }
 
 // MARK: - Status writes
@@ -62,12 +132,18 @@ extension DurableTxCoreDataRepository {
     func updateTxStatus(
         for id: DurableTxId,
         expectedCurrentStatus: DurableTxStatus,
+        expectedTxHash: Data,
         verdict: Verdict
     ) async throws -> Bool {
         try await withTransaction { context in
             guard let entity = try self.entity(id, in: context) else { return false }
             let current = try self.mapper.transform(entity: entity)
-            guard current.status.isLive, current.status == expectedCurrentStatus else { return false }
+            guard current.status.isLive,
+                  current.status == expectedCurrentStatus,
+                  current.txHash == expectedTxHash
+            else {
+                return false
+            }
 
             // Skip a write that changes nothing — a verdict restating the current status and record.
             guard current.status != verdict.status || current.successDetectedAt != verdict.successDetectedAt else {
@@ -95,7 +171,13 @@ extension DurableTxCoreDataRepository {
 
     func getAllEntries(domain: TxDomainId) async throws -> [DurableTxEntry] {
         let domainRepository = storageFacade.createRepository(
-            filter: NSPredicate(format: "%K == %@", #keyPath(CDDurableTx.domainId), domain.rawValue),
+            filter: NSPredicate(
+                format: "%K == %@ AND %K != %d",
+                #keyPath(CDDurableTx.domainId),
+                domain.rawValue,
+                #keyPath(CDDurableTx.status),
+                DurableTxStatus.pendingSubmission.rawValue
+            ),
             sortDescriptors: [NSSortDescriptor(key: #keyPath(CDDurableTx.sequence), ascending: true)],
             mapper: AnyCoreDataMapper(DurableTxMapper())
         )
@@ -138,6 +220,40 @@ extension DurableTxCoreDataRepository {
             filter: Self.groupPredicate(domain: domain, groupId: groupId),
             transform: { $0.sorted { $0.sequence < $1.sequence } }
         )
+    }
+
+    func getSubmissionPolicy(id: DurableTxId) async throws -> SubmissionPolicy? {
+        try await databaseService.performRead { context in
+            try self.entity(id, in: context).flatMap { DurableTxMapper.policy(of: $0) }
+        }
+    }
+
+    func getPendingSubmissions(
+        policyId: SubmissionPolicyId,
+        groupId: DurableTxGroupId?
+    ) async throws -> [ScheduledDurableTx] {
+        try await databaseService.performRead { context in
+            try self.pendingSubmissions(in: context)
+                .filter { $0.policy.id == policyId && $0.groupId == groupId }
+        }
+    }
+
+    func subscribePendingSubmissions() -> AnyAsyncSequence<[ScheduledDurableTx]> {
+        storageFacade.subscribeSnapshot(
+            mapper: AnyCoreDataMapper(DurableTxMapper()),
+            filter: NSPredicate(
+                format: "%K == %d",
+                #keyPath(CDDurableTx.status),
+                DurableTxStatus.pendingSubmission.rawValue
+            ),
+            transform: { $0.sorted { $0.sequence < $1.sequence } }
+        )
+        .map { [weak self] entries in
+            guard let self else { return [] }
+
+            return await (try? scheduled(for: entries)) ?? []
+        }
+        .eraseToAnyAsyncSequence()
     }
 
     private static func groupPredicate(domain: TxDomainId, groupId: DurableTxGroupId) -> NSPredicate {
@@ -183,6 +299,76 @@ private extension DurableTxCoreDataRepository {
     func insert(_ entry: DurableTxEntry, in context: NSManagedObjectContext) throws {
         let entity = try context.insertNew(CDDurableTx.self)
         try mapper.populate(entity: entity, from: entry, using: context)
+    }
+
+    func insertSchedules(
+        _ schedules: [DurableTxSchedule],
+        in context: NSManagedObjectContext,
+        onRegister: DurableTxRegistrationHook
+    ) throws -> [DurableTxId] {
+        var ids: [DurableTxId] = []
+
+        for schedule in schedules {
+            let entry = try schedule.makeEntry(id: DurableTxId(), sequence: nextSequence(in: context))
+            let entity = try context.insertNew(CDDurableTx.self)
+            try mapper.populate(entity: entity, from: entry, using: context)
+            DurableTxMapper.apply(policy: schedule.policy, to: entity)
+            ids.append(entry.id)
+        }
+
+        try onRegister(CoreDataRegistrationScope(context: context), ids)
+
+        return ids
+    }
+
+    /// Reads the policy of each already-fetched waiting row, so the stream does not re-fetch them.
+    func scheduled(for entries: [DurableTxEntry]) async throws -> [ScheduledDurableTx] {
+        guard !entries.isEmpty else { return [] }
+
+        return try await databaseService.performRead { context in
+            try entries.compactMap { entry in
+                guard let entity = try self.entity(entry.id, in: context),
+                      let policy = DurableTxMapper.policy(of: entity)
+                else {
+                    return nil
+                }
+
+                return ScheduledDurableTx(
+                    id: entry.id,
+                    domainId: entry.domainId,
+                    groupId: entry.groupId,
+                    policy: policy
+                )
+            }
+        }
+    }
+
+    func pendingSubmissions(in context: NSManagedObjectContext) throws -> [ScheduledDurableTx] {
+        let request = NSFetchRequest<CDDurableTx>(entityName: "CDDurableTx")
+        request.predicate = NSPredicate(
+            format: "%K == %d",
+            #keyPath(CDDurableTx.status),
+            DurableTxStatus.pendingSubmission.rawValue
+        )
+        request.sortDescriptors = [NSSortDescriptor(key: #keyPath(CDDurableTx.sequence), ascending: true)]
+        request.returnsObjectsAsFaults = false
+
+        return try context.fetch(request).compactMap { entity in
+            guard let identifier = entity.identifier,
+                  let id = UUID(uuidString: identifier),
+                  let domainId = entity.domainId,
+                  let policy = DurableTxMapper.policy(of: entity)
+            else {
+                return nil
+            }
+
+            return ScheduledDurableTx(
+                id: id,
+                domainId: TxDomainId(domainId),
+                groupId: entity.groupId,
+                policy: policy
+            )
+        }
     }
 
     func entity(_ id: DurableTxId, in context: NSManagedObjectContext) throws -> CDDurableTx? {

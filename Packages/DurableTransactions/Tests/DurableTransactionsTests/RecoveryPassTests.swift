@@ -40,7 +40,7 @@ struct RecoveryPassTests {
     func submissionOwnedSkipped() async throws {
         let tx = DurableTxEntry.fixture()
         store.insert(tx)
-        owned.take(tx.id)
+        owned.take(tx.id, txHash: tx.txHash)
         oracles.register(
             StubCompletionOracle { txs, _ in StubPassScope(completedAtFinalized: Set(txs.map(\.id))) },
             for: .test
@@ -158,6 +158,7 @@ struct RecoveryPassTests {
         let wrote = try await store.updateTxStatus(
             for: entry.id,
             expectedCurrentStatus: .pending,
+            expectedTxHash: entry.txHash,
             verdict: Verdict(status: .finalizedSuccess, successDetectedAt: nil)
         )
 
@@ -174,6 +175,7 @@ struct RecoveryPassTests {
         let wrote = try await store.updateTxStatus(
             for: entry.id,
             expectedCurrentStatus: .finalizedSuccess,
+            expectedTxHash: entry.txHash,
             verdict: Verdict(status: .failure, successDetectedAt: nil)
         )
 
@@ -185,6 +187,17 @@ struct RecoveryPassTests {
 
 private extension RecoveryPassTests {
     func pass() -> DurableRecoveryPass {
-        DurableRecoveryPass(store: store, chainFactory: view, owned: owned, oracles: oracles, logger: nil)
+        DurableRecoveryPass(
+            store: store,
+            chainFactory: view,
+            owned: owned,
+            oracles: oracles,
+            verdictWriter: DurableVerdictWriter(
+                store: store,
+                policies: DurableSubmissionPolicyRegistry(),
+                logger: nil
+            ),
+            logger: nil
+        )
     }
 }

@@ -47,7 +47,7 @@ public struct CompletionLadder: Sendable {
 
         // Rule 3 — proven not to have run, and it can no longer run.
         if windowClosed, scope.provenNotCompleted(transaction, at: .finalized) {
-            return decided(transaction, rule: "3 not completed at F", .failure, at: nil)
+            return decided(transaction, rule: "3 not completed at F", .failure, at: nil, failure: .expired)
         }
 
         // Rule 4 — short-circuits, so a transaction with no positive evidence does not run a body search
@@ -131,12 +131,12 @@ private extension CompletionLadder {
             return decided(transaction, rule: "5 found, dispatch succeeded", .finalizedSuccess, at: block)
         case .foundFailed:
             // Inclusion is not success — an extrinsic can be applied and its dispatch still fail.
-            return decided(transaction, rule: "5 found, dispatch failed", .failure, at: nil)
+            return decided(transaction, rule: "5 found, dispatch failed", .failure, at: nil, failure: .dispatchFailed)
         case .foundOutcomeUnreadable:
             return decided(transaction, rule: "5 found, outcome unreadable", .pending, at: nil)
         case .notFoundWindowComplete:
             return windowClosed
-                ? decided(transaction, rule: "5 whole window read, absent", .failure, at: nil)
+                ? decided(transaction, rule: "5 whole window read, absent", .failure, at: nil, failure: .expired)
                 : decided(transaction, rule: "5 absent, window open", .pending, at: nil)
         case .incomplete:
             return decided(transaction, rule: "5 window incomplete", .pending, at: nil)
@@ -159,12 +159,13 @@ private extension CompletionLadder {
         _ transaction: DurableTxEntry,
         rule: String,
         _ status: DurableTxStatus,
-        at successDetectedAt: BlockRef?
+        at successDetectedAt: BlockRef?,
+        failure: DurableFailureKind? = nil
     ) -> RuleOutcome {
         logger?
             .debug(
                 "\(transaction.id) rule=\"\(rule)\" -> \(status) record=\(successDetectedAt?.number.description ?? "none")"
             )
-        return .decided(Verdict(status: status, successDetectedAt: successDetectedAt))
+        return .decided(Verdict(status: status, successDetectedAt: successDetectedAt, failure: failure))
     }
 }

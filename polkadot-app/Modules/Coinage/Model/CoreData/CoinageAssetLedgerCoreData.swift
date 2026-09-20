@@ -93,6 +93,26 @@ extension CoinageAssetLedgerCoreData {
             .asyncExecute()
     }
 
+    func assets(of ids: [CoinageTxId]) async throws -> [CoinageTxId: CoinageTxEntry] {
+        guard !ids.isEmpty else { return [:] }
+
+        let batchRepository = storageFacade.createRepository(
+            filter: NSPredicate(
+                format: "%K IN %@",
+                #keyPath(CDDurableTx.identifier),
+                ids.map(\.uuidString)
+            ),
+            sortDescriptors: [NSSortDescriptor(key: #keyPath(CDDurableTx.sequence), ascending: true)],
+            mapper: AnyCoreDataMapper(CoinageTxEntryMapper())
+        )
+
+        let entries = try await AnyDataProviderRepository(batchRepository)
+            .fetchAllOperation(with: RepositoryFetchOptions())
+            .asyncExecute()
+
+        return entries.reduce(into: [:]) { $0[$1.id] = $1 }
+    }
+
     func getOperationGroupStatuses(_ groupId: CoinageTxGroupId) async throws -> [CoinageTxEntry] {
         let groupRepository = storageFacade.createRepository(
             filter: Self.groupPredicate(groupId),

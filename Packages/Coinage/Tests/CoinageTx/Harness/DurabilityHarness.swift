@@ -321,17 +321,26 @@ private extension DurabilityHarness {
                 for: .coinage
             )
             let registrar = DurableTxRegistrar(store: store.durable, owned: owned, logger: nil)
+            // No policies registered: every harness transaction fails for good, the way one without a
+            // policy always has. Scenarios that exercise rebuilds install their own.
+            let verdictWriter = DurableVerdictWriter(
+                store: store.durable,
+                policies: DurableSubmissionPolicyRegistry(),
+                logger: nil
+            )
             let pass = DurableRecoveryPass(
                 store: store.durable,
                 chainFactory: chainFactory,
                 owned: owned,
                 oracles: oracles,
+                verdictWriter: verdictWriter,
                 logger: nil
             )
             let tracker = DurableTxTracker(
                 store: store.durable,
                 chainFactory: chainFactory,
                 owned: owned,
+                verdictWriter: verdictWriter,
                 backgroundExecutor: backgroundExecutor,
                 logger: nil
             )
