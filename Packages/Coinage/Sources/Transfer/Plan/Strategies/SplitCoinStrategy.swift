@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExt
 import KeyDerivation
 import ExtrinsicService
 import StructuredConcurrency
@@ -24,6 +25,7 @@ struct SplitCoinStrategy {
     private let coinKeyFactory: any CoinKeyDeriving
     private let txService: any CoinageTxServicing
     private let originFactory: OriginCreating
+    private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
     init(
@@ -35,6 +37,7 @@ struct SplitCoinStrategy {
         coinKeyFactory: any CoinKeyDeriving,
         txService: any CoinageTxServicing,
         originFactory: OriginCreating,
+        dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
         self.wholeCoins = wholeCoins
@@ -45,6 +48,7 @@ struct SplitCoinStrategy {
         self.coinKeyFactory = coinKeyFactory
         self.txService = txService
         self.originFactory = originFactory
+        self.dateProvider = dateProvider
         self.logger = logger
     }
 }
@@ -81,8 +85,9 @@ extension SplitCoinStrategy: TransferStrategy {
 
         // Declared, not built: the call and its origin are reconstructed from these same assets by
         // `SplitRebuild` when the policy builds it, so nothing here needs an unload token or a proof.
-        let scheduled = try CoinageScheduledTxRequest(
-            policy: CoinageSubmissionParams.splitPolicy(.retriedTransfer(from: Date())),
+        // The retry window opens now, when the transaction is declared, not when the plan was made.
+        let scheduled = try await CoinageScheduledTxRequest(
+            policy: CoinageSubmissionParams.splitPolicy(.retriedTransfer(from: dateProvider.read())),
             inputs: assets.inputs,
             outputs: assets.outputs
         )

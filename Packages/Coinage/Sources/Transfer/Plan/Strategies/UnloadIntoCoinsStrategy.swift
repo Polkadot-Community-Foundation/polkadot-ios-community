@@ -1,5 +1,6 @@
 import DurableTransactions
 import Foundation
+import FoundationExt
 import ExtrinsicService
 import StructuredConcurrency
 import SubstrateSdk
@@ -27,7 +28,7 @@ struct UnloadIntoCoinsStrategy {
     private let originFactory: OriginCreating
     private let quotaTracker: any UnloadQuotaTracking
     private let blockInfoProvider: any BlockInfoProviding
-    private let currentDate: Date
+    private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
     init(
@@ -41,7 +42,7 @@ struct UnloadIntoCoinsStrategy {
         originFactory: OriginCreating,
         quotaTracker: any UnloadQuotaTracking,
         blockInfoProvider: any BlockInfoProviding,
-        currentDate: Date,
+        dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
         self.instanceId = instanceId
@@ -54,7 +55,7 @@ struct UnloadIntoCoinsStrategy {
         self.originFactory = originFactory
         self.quotaTracker = quotaTracker
         self.blockInfoProvider = blockInfoProvider
-        self.currentDate = currentDate
+        self.dateProvider = dateProvider
         self.logger = logger
     }
 }
@@ -98,9 +99,11 @@ extension UnloadIntoCoinsStrategy: TransferStrategy {
         // The token and the recycler revision are deliberately not resolved here: they would be stale
         // by the time the transaction is built, and a token reserved for a build that never happened
         // is a token spent for nothing.
+        // The retry window opens now, when the transactions are declared, not when the plan was made.
+        let retryFrom = await dateProvider.read()
         let scheduled = try realizedGroups.map { group in
             try CoinageScheduledTxRequest(
-                policy: CoinageSubmissionParams.unloadPolicy(.retriedTransfer(from: currentDate)),
+                policy: CoinageSubmissionParams.unloadPolicy(.retriedTransfer(from: retryFrom)),
                 inputs: group.vouchers.map { .recyclerVoucher($0.derivationIndex, $0.publicKey) },
                 outputs: (group.recipientCoins + group.changeCoins)
                     .map { .coin($0.derivationIndex, $0.publicKey) }

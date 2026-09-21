@@ -180,6 +180,7 @@ public extension CoinageService {
             quotaTracker: quotaTracker,
             recyclerLoader: readinessLoader,
             blockInfoProvider: blockNumberProvider,
+            dateProvider: NowDateProvider(),
             logger: logger
         )
 

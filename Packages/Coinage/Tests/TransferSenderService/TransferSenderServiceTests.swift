@@ -60,7 +60,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -105,7 +104,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -161,7 +159,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -217,7 +214,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -266,7 +262,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -314,7 +309,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -357,7 +351,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -399,7 +392,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -441,7 +433,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -482,7 +473,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -524,7 +514,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -575,7 +564,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -634,7 +622,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -680,7 +667,6 @@ struct TransferSenderServiceTests {
         )
         let prepared = try await service.execute(
             result: result,
-            currentDate: now,
             breakdownContext: testContext,
             groupId: "transfer"
         )
@@ -848,6 +834,7 @@ extension TransferSenderServiceTests {
             quotaTracker: StubUnloadQuotaTracker(),
             recyclerLoader: recyclerLoader,
             blockInfoProvider: blockInfoProvider,
+            dateProvider: StubDateProvider(now),
             logger: nil
         )
 

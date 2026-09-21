@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExt
 import ExtrinsicService
 import KeyDerivation
 import SubstrateSdk
@@ -9,10 +10,7 @@ import SubstrateOperation
 protocol TransferPlanCreating {
     /// Builds the execution strategy for a coin selection result. Allocation, registration, and memo
     /// building all happen later, inside the strategy's `prepare`.
-    func createPlan(
-        for selectionResult: CoinSelectionResult,
-        currentDate: Date
-    ) async throws -> TransferPlan
+    func createPlan(for selectionResult: CoinSelectionResult) async throws -> TransferPlan
 }
 
 final class TransferPlanFactory {
@@ -25,6 +23,7 @@ final class TransferPlanFactory {
     private let quotaTracker: any UnloadQuotaTracking
     private let recyclerLoader: RecyclerReadinessLoading
     private let blockInfoProvider: any BlockInfoProviding
+    private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
     init(
@@ -37,6 +36,7 @@ final class TransferPlanFactory {
         quotaTracker: any UnloadQuotaTracking,
         recyclerLoader: RecyclerReadinessLoading,
         blockInfoProvider: any BlockInfoProviding,
+        dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
         self.instanceId = instanceId
@@ -48,6 +48,7 @@ final class TransferPlanFactory {
         self.quotaTracker = quotaTracker
         self.recyclerLoader = recyclerLoader
         self.blockInfoProvider = blockInfoProvider
+        self.dateProvider = dateProvider
         self.logger = logger
     }
 }
@@ -55,10 +56,7 @@ final class TransferPlanFactory {
 // MARK: - TransferPlanCreating
 
 extension TransferPlanFactory: TransferPlanCreating {
-    func createPlan(
-        for selectionResult: CoinSelectionResult,
-        currentDate: Date
-    ) async throws -> TransferPlan {
+    func createPlan(for selectionResult: CoinSelectionResult) async throws -> TransferPlan {
         switch selectionResult {
         case let .exactMatch(coins):
             TransferPlan(strategy: ExactMatchStrategy(coins: coins, durability: durability))
@@ -73,6 +71,7 @@ extension TransferPlanFactory: TransferPlanCreating {
                 coinKeyFactory: coinKeyFactory,
                 txService: durability,
                 originFactory: originFactory,
+                dateProvider: dateProvider,
                 logger: logger
             ))
 
@@ -88,7 +87,7 @@ extension TransferPlanFactory: TransferPlanCreating {
                 originFactory: originFactory,
                 quotaTracker: quotaTracker,
                 blockInfoProvider: blockInfoProvider,
-                currentDate: currentDate,
+                dateProvider: dateProvider,
                 logger: logger
             ))
         }
