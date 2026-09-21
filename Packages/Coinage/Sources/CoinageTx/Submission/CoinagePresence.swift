@@ -16,49 +16,21 @@ func coinPresence(
         .eraseToAnyAsyncSequence()
 }
 
-/// The vouchers of `indices` the chain currently shows sitting in a recycler, polled on an interval.
+/// The vouchers our own rows currently show sitting in a recycler, on every change to them.
 ///
 /// A voucher counts as present while it sits in a recycler: that is where an unload proves it, and one
-/// that left was redeemed by something else. Unlike coin presence there is no subscription for this, so
-/// it is polled — and a read that fails is simply not emitted, so a failed read never erases what the
-/// chain last showed.
+/// that left was redeemed by something else.
+///
+/// Deliberately the *local* rows rather than a chain read. They are the same rows the rebuild builds
+/// from, so the gate and the build can never disagree — a chain read could say "in a recycler" while
+/// the row the call is built from still has no recycler, and the build would fail on every attempt
+/// until sync caught up. Location sync is what keeps these rows current.
 func voucherRecyclerPresence(
-    of indices: Set<CoinageKeyIndex>,
-    reading query: any VoucherOnChainQuerying,
-    pollInterval: Duration,
-    clock: any Clock<Duration>
+    snapshots: AnyAsyncSequence<[TrackedVoucher]>
 ) -> AnyAsyncSequence<Set<CoinageKeyIndex>> {
-    let ordered = Array(indices)
-
-    return AsyncStream<Set<CoinageKeyIndex>> { continuation in
-        let task = Task {
-            while !Task.isCancelled {
-                if let reads = try? await query.fetchVouchers(for: ordered) {
-                    continuation.yield(inRecycler(reads, of: ordered))
-                }
-
-                do {
-                    try await clock.sleep(for: pollInterval)
-                } catch {
-                    break
-                }
-            }
-
-            continuation.finish()
+    snapshots
+        .map { tracked in
+            Set(tracked.filter { $0.voucher.recycler != nil }.map(\.voucher.derivationIndex))
         }
-
-        continuation.onTermination = { _ in task.cancel() }
-    }
-    .eraseToAnyAsyncSequence()
-}
-
-private func inRecycler(
-    _ reads: [VoucherOnChainInfo?],
-    of indices: [CoinageKeyIndex]
-) -> Set<CoinageKeyIndex> {
-    zip(indices, reads).reduce(into: Set<CoinageKeyIndex>()) { present, pair in
-        guard let read = pair.1, case .inRecycler = read.onChainState else { return }
-
-        present.insert(pair.0)
-    }
+        .eraseToAnyAsyncSequence()
 }

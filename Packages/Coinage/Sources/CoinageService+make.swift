@@ -276,7 +276,7 @@ public extension CoinageService {
                 coinService: coinService,
                 voucherService: voucherService,
                 coinQuery: coinOnChainQuery,
-                voucherQuery: voucherOnChainQuery,
+                voucherSnapshots: { databaseFactory.makeTrackedVoucherSnapshotStream() },
                 splitBuilder: SplitExtrinsicBuilder(
                     coinKeyFactory: coinKeypairFactory,
                     originFactory: originFactory,

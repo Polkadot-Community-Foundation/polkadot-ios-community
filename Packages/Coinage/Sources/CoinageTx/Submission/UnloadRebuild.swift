@@ -18,10 +18,9 @@ struct UnloadRebuild: CoinageRebuild {
 
     let coinService: any CoinServiceProtocol
     let voucherService: any VoucherServiceProtocol
-    let voucherQuery: any VoucherOnChainQuerying
     let builder: UnloadExtrinsicBuilder
-    let pollInterval: Duration
-    let clock: any Clock<Duration>
+    /// The local tracked-voucher snapshots the gate watches — the same rows ``build(_:)`` reads.
+    let voucherSnapshots: @Sendable () -> AnyAsyncSequence<[TrackedVoucher]>
     let now: @Sendable () -> Date
 
     func terms(of params: Data) -> RebuildTerms? {
@@ -65,13 +64,8 @@ struct UnloadRebuild: CoinageRebuild {
         Set(transaction.voucherIndices)
     }
 
-    func presence(of inputs: Set<CoinageKeyIndex>) async throws -> AnyAsyncSequence<Set<CoinageKeyIndex>> {
-        voucherRecyclerPresence(
-            of: inputs,
-            reading: voucherQuery,
-            pollInterval: pollInterval,
-            clock: clock
-        )
+    func presence(of _: Set<CoinageKeyIndex>) async throws -> AnyAsyncSequence<Set<CoinageKeyIndex>> {
+        voucherRecyclerPresence(snapshots: voucherSnapshots())
     }
 
     func build(_ transactions: [Unload]) async throws -> [ExtrinsicBuiltModel] {

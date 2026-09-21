@@ -1,3 +1,4 @@
+import AsyncExtensions
 import DurableTransactions
 import Foundation
 import NovaCrypto
@@ -16,17 +17,13 @@ enum CoinageSubmissionPolicies {
         let coinService: any CoinServiceProtocol
         let voucherService: any VoucherServiceProtocol
         let coinQuery: any CoinOnChainQuerying
-        let voucherQuery: any VoucherOnChainQuerying
+        let voucherSnapshots: @Sendable () -> AnyAsyncSequence<[TrackedVoucher]>
         let splitBuilder: SplitExtrinsicBuilder
         let unloadBuilder: UnloadExtrinsicBuilder
         let claimBuilder: ClaimExtrinsicBuilder
         let snKeyFactory: any SNKeyFactoryProtocol
         let logger: SDKLoggerProtocol?
     }
-
-    /// How often voucher presence is polled while a rebuild waits. Vouchers have no subscription, and
-    /// an unload waits on the order of blocks, not milliseconds.
-    static let voucherPollInterval: Duration = .seconds(6)
 
     static func register(into registry: DurableSubmissionPolicyRegistry, using deps: Dependencies) {
         registry.register(split(deps), for: CoinageSubmissionParams.splitPolicyId)
@@ -57,10 +54,8 @@ private extension CoinageSubmissionPolicies {
             rebuild: UnloadRebuild(
                 coinService: deps.coinService,
                 voucherService: deps.voucherService,
-                voucherQuery: deps.voucherQuery,
                 builder: deps.unloadBuilder,
-                pollInterval: voucherPollInterval,
-                clock: ContinuousClock(),
+                voucherSnapshots: deps.voucherSnapshots,
                 now: { Date() }
             ),
             ledger: deps.ledger,
