@@ -11,9 +11,11 @@ import SubstrateOperation
 
 /// Strategy 3: Unload vouchers directly into required denominations.
 ///
-/// Submits one extrinsic per recycler group. `CoinSelector` guarantees each group
-/// respects the `maxConsolidation` pallet constraint (throws if exceeded). All groups
-/// run concurrently — one task per `RecyclerKey`.
+/// Declares one transaction per planned call. `CoinSelector` sizes the calls so each respects the
+/// `MaxConsolidation` and `MaxSplitOutputs` pallet constraints, which can put several calls on one
+/// recycler. The pallet marks aliases individually and leaves the ring revision untouched, so calls
+/// sharing a recycler do not conflict — they are built and submitted independently by the unload
+/// policy, and each call's vouchers are fixed by the row it was registered as.
 struct UnloadIntoCoinsStrategy {
     private let instanceId: CoinageInstanceId
     private let readyCoins: [Coin]

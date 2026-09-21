@@ -43,7 +43,12 @@ struct UnloadExtrinsicBuilder: Sendable {
         }
 
         let keys = try unloads.map { try Self.recyclerKey(of: $0) }
-        let revisions = try await recyclerLoader.fetchRevisions(for: keys, blockHash: blockHash)
+
+        // Several calls can share a recycler when it holds more vouchers than one call may unload,
+        // so the query is deduplicated and each unload looks its own revision up by key.
+        var seenKeys = Set<RecyclerKey>()
+        let queriedKeys = keys.filter { seenKeys.insert($0).inserted }
+        let revisions = try await recyclerLoader.fetchRevisions(for: queriedKeys, blockHash: blockHash)
 
         let parts = try zip(zip(unloads, origins), keys).map { pair, key in
             guard let revision = revisions[key] else {

@@ -65,7 +65,7 @@ actor TransferSenderService {
     private let txService: any CoinageTxServicing
     private let logger: SDKLoggerProtocol?
 
-    private var cachedMaxVouchers: Int?
+    private var cachedLimits: UnloadCallLimits?
 
     init(
         coinSelector: CoinSelecting,
@@ -85,13 +85,17 @@ actor TransferSenderService {
 }
 
 private extension TransferSenderService {
-    func maxVouchersPerGroup() async throws -> Int {
-        if let cached = cachedMaxVouchers {
+    /// The pallet bounds one unload call must respect, read once per service.
+    func unloadCallLimits() async throws -> UnloadCallLimits {
+        if let cached = cachedLimits {
             return cached
         }
-        let value = try await max(Int(recyclerLoader.maxConsolidation()), 1)
-        cachedMaxVouchers = value
-        return value
+        let limits = try await UnloadCallLimits(
+            maxVouchersPerCall: max(Int(recyclerLoader.maxConsolidation()), 1),
+            maxOutputsPerCall: max(Int(recyclerLoader.maxSplitOutputs()), 1)
+        )
+        cachedLimits = limits
+        return limits
     }
 }
 
@@ -148,13 +152,12 @@ extension TransferSenderService: TransferSenderServicing {
         availableVouchers: [TrackedVoucher],
         breakdownContext: DenominationBreakdownContext
     ) async throws -> CoinSelectionResult {
-        let maxVouchers = try await maxVouchersPerGroup()
-        let input = SelectCoinsInput(
+        let input = try await SelectCoinsInput(
             amount: amount,
             coins: availableCoins,
             vouchers: availableVouchers,
             breakdownContext: breakdownContext,
-            maxVouchersPerGroup: maxVouchers
+            limits: unloadCallLimits()
         )
 
         return try await coinSelector.selectCoins(input)
