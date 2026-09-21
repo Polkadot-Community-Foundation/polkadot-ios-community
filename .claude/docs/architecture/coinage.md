@@ -127,10 +127,16 @@ written and tested once.
   incomplete), gives up a call after 5 minutes of nothing visible, and wakes at the deadline rather
   than waiting on the chain. The newest look wins outright even when narrower — a fork can take an
   input away, and building against the widest view ever seen would spend what is no longer there.
-- **Presence**: coins come from `CoinOnChainQuerying.subscribeCoinInfos`; vouchers have no
-  subscription, so `voucherRecyclerPresence` polls `VoucherOnChainQuerying` every 6s. A read that
-  fails is never emitted — it must not erase what the chain last showed. A voucher counts as present
-  while it sits in a recycler: that is where an unload proves it.
+- **Presence**: coins come from the chain (`CoinOnChainQuerying.subscribeCoinInfos`, a storage
+  subscription whose accumulator drops a key that goes absent). Vouchers come from **our own rows**
+  (`DatabaseDependencyFactoring.makeTrackedVoucherSnapshotStream()`, filtered to `recycler != nil`) —
+  deliberately not a chain read, because those are the same rows the rebuild builds from, so the gate
+  and the build can never disagree. A chain read could say "in a recycler" while the row the call is
+  built from still has none, and the build would then fail on every attempt until location sync caught
+  up. A voucher counts as present while it sits in a recycler: that is where an unload proves it.
+  Either way a read that fails is never emitted as a look — it must not erase what the chain last
+  showed; a coin subscription that drops instead ends the wait, and the executor's backoff opens a
+  fresh one.
 - **Params** (`CoinageSubmissionParams`) are SCALE and persisted with the row, so a shape change needs
   a versioned decoder. A transfer carries `buildUntil` + `retryFailures`; a claim carries `retryUntil`
   and the peer's key, which only the payment message holds. The transfer window is
