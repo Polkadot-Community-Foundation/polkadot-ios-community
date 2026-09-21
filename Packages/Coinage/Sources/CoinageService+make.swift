@@ -163,11 +163,13 @@ public extension CoinageService {
             connection: connection,
             runtimeCodingService: runtimeService
         )
+        let dateProvider = NowDateProvider()
         let quotaTracker = UnloadQuotaTracker(
             runtimeCodingService: runtimeService,
             consumedTokenChecker: consumedTokenChecker,
             personOriginProvider: personOriginProvider,
-            viewFunctionFetcher: viewFunctionFetcher
+            viewFunctionFetcher: viewFunctionFetcher,
+            dateProvider: dateProvider
         )
 
         let planFactory = TransferPlanFactory(
@@ -180,7 +182,7 @@ public extension CoinageService {
             quotaTracker: quotaTracker,
             recyclerLoader: readinessLoader,
             blockInfoProvider: blockNumberProvider,
-            dateProvider: NowDateProvider(),
+            dateProvider: dateProvider,
             logger: logger
         )
 
@@ -373,7 +375,8 @@ public extension CoinageService {
             durability: txService,
             originFactory: originFactory,
             quotaTracker: quotaTracker,
-            blockNumberProvider: blockNumberProvider
+            blockNumberProvider: blockNumberProvider,
+            dateProvider: dateProvider
         )
 
         let externalPaymentService = ExternalPaymentService(
