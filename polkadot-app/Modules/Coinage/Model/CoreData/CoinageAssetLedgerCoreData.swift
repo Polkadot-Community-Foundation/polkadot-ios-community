@@ -169,17 +169,10 @@ extension CoinageAssetLedgerCoreData {
 private extension CoinageAssetLedgerCoreData {
     /// A transaction of coinage's own, for the handoff writes. Never opened while the engine's
     /// registration transaction is running: `registerAssets` writes through the scope it is handed and
-    /// must not call this — nesting would deadlock on the shared serial dispatch queue.
+    /// must not call this — nesting would deadlock on the writer's serial dispatch queue.
     func withTransaction<T>(_ body: @escaping (NSManagedObjectContext) throws -> T) async throws -> T {
-        try await databaseService.perform { context in
-            do {
-                let result = try body(context)
-                try context.save()
-                return result
-            } catch {
-                context.rollback()
-                throw error
-            }
+        try await databaseService.performWrite { context in
+            try body(context)
         }
     }
 }
