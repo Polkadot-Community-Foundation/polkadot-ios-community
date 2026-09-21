@@ -45,7 +45,7 @@ private extension ChatTransferMessageViewTests {
             originalAmountText: nil,
             state: .outgoing(.sent),
             statusConfiguration: .init(
-                dateFormatter: TimestampFormatter(),
+                dateFormatter: FixedTimestampFormatter(),
                 date: .now,
                 textColor: .fgPrimaryInverted,
                 image: nil,
@@ -59,6 +59,10 @@ private extension ChatTransferMessageViewTests {
             side: .trailing
         )
     }
+}
+
+private struct FixedTimestampFormatter: TimestampFormatting {
+    func string(for _: Date, now _: Date) -> String { "2:33" }
 }
 
 private extension UIImage {
