@@ -99,10 +99,6 @@ final class MockCoinageTxRepository: @unchecked Sendable {
         try await ledger.precommitHandOff(assets, validation: validation)
     }
 
-    func commitHandoffs(_ keys: [PublicKey]) async throws {
-        try await ledger.commitHandoffs(keys)
-    }
-
     func releaseUncommittedHandoffs() async throws {
         try await ledger.releaseUncommittedHandoffs()
     }

@@ -11,10 +11,9 @@ import Foundation
 /// Leaving a handle uncommitted is safe: a relaunch releases every provisional mark, returning the
 /// coins. The only way for a mark to outlive the process is for the keys to have actually left.
 public protocol CoinageHandoffCommit: Sendable {
-    func commit() async throws
-
-    /// Commits inside a transaction the transport already opened, so the marks become final in the
-    /// same write that makes the keys durable. Synchronous because that caller is.
+    /// Commits inside the transaction the transport already opened, so the marks become final in the
+    /// same write that makes the keys durable — the only placement where a crash cannot either strand
+    /// the coins or release keys a peer already has. Synchronous because that caller is.
     func commit(in scope: any DurableTxRegistrationScope) throws
 
     /// Drops the reservation now, for a payment whose keys never left. A committed handoff is not
@@ -22,15 +21,11 @@ public protocol CoinageHandoffCommit: Sendable {
     func release() async throws
 }
 
-/// A ``CoinageHandoffCommit`` backed by the asset ledger: `commit()` promotes the provisional marks on
+/// A ``CoinageHandoffCommit`` backed by the asset ledger: committing promotes the provisional marks on
 /// `assets` to final.
 struct StoreHandoffCommit: CoinageHandoffCommit {
     let assets: [OwnAsset]
     let ledger: any CoinageAssetLedgerProtocol
-
-    func commit() async throws {
-        try await ledger.commitHandoffs(assets.map(\.publicKey))
-    }
 
     func commit(in scope: any DurableTxRegistrationScope) throws {
         try ledger.commitHandoffs(assets.map(\.publicKey), in: scope)

@@ -126,16 +126,6 @@ final class InMemoryCoinageAssetLedger: CoinageAssetLedgerProtocol, @unchecked S
         }
     }
 
-    func commitHandoffs(_ keys: [PublicKey]) async throws {
-        let keySet = Set(keys)
-        state.withLock { current in
-            for asset in current.pendingMarks where keySet.contains(asset.publicKey) {
-                current.pendingMarks.remove(asset)
-                current.committedMarks.insert(asset)
-            }
-        }
-    }
-
     func releaseUncommittedHandoffs() async throws {
         state.withLock { $0.pendingMarks.removeAll() }
     }

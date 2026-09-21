@@ -157,15 +157,6 @@ extension CoinageAssetLedgerCoreData {
         }
     }
 
-    func commitHandoffs(_ keys: [PublicKey]) async throws {
-        guard !keys.isEmpty else { return }
-        try await withTransaction { context in
-            for key in keys {
-                try self.commitHandoff(key: key, in: context)
-            }
-        }
-    }
-
     func releaseUncommittedHandoffs(_ keys: [PublicKey]) async throws {
         guard !keys.isEmpty else { return }
 

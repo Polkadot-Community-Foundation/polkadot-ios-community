@@ -49,8 +49,6 @@ public protocol CoinageAssetLedgerProtocol: Sendable {
     ) async throws
 
     /// Promotes provisional marks to final — the keys have durably left. Keyed by ``OwnAsset/publicKey``,
-    /// the form the transport can name without reconstructing the asset.
-    func commitHandoffs(_ keys: [PublicKey]) async throws
 
     /// Clears every uncommitted mark. Runs once, on launch.
     func releaseUncommittedHandoffs() async throws
@@ -58,8 +56,11 @@ public protocol CoinageAssetLedgerProtocol: Sendable {
     /// Drops the marks on `keys` that were never committed — the payment behind them never happened.
     func releaseUncommittedHandoffs(_ keys: [PublicKey]) async throws
 
-    /// The scope-joining half of ``commitHandoffs(_:)``: promotes the marks inside a transaction the
-    /// caller already opened, so they become final exactly when whatever carries the keys does.
+    /// Promotes provisional marks to final — the keys have durably left.
+    ///
+    /// Only ever inside a transaction the caller already opened, so the marks become final exactly
+    /// when whatever carries the keys does. Keyed by ``OwnAsset/publicKey``, the form the transport
+    /// can name without reconstructing the asset.
     func commitHandoffs(_ keys: [PublicKey], in scope: any DurableTxRegistrationScope) throws
 
     func handedOffCoins() async throws -> [OwnAsset]

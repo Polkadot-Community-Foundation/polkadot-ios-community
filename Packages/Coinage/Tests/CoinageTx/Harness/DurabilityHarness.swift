@@ -254,7 +254,7 @@ final class DurabilityHarness: @unchecked Sendable {
     func handOff(_ assets: [OwnAsset]) async -> Bool {
         do {
             let commit = try await preCommitHandoff(assets)
-            try await commit.commit()
+            try commit.commit(in: InMemoryRegistrationScope())
             return true
         } catch {
             return false
