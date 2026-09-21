@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct PaymentAssetConfig: Equatable {
     let symbol: String?
@@ -54,14 +55,13 @@ private extension PaymentAssetConfig {
 }
 
 enum PaymentAssetSymbol {
-    private static let lock = NSLock()
-    private static var value = AppConfig.Brand.cashSymbol
+    private static let value = OSAllocatedUnfairLock(initialState: AppConfig.Brand.cashSymbol)
 
     static var current: String {
-        lock.withLock { value }
+        value.withLock { $0 }
     }
 
     static func update(_ symbol: String) {
-        lock.withLock { value = symbol }
+        value.withLock { $0 = symbol }
     }
 }

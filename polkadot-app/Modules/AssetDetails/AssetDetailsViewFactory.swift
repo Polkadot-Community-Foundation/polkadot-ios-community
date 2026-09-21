@@ -27,8 +27,7 @@ enum AssetDetailsViewFactory {
             chainAsset: chainAsset,
             coinageService: context.coinageService,
             coinageBackupSyncService: context.coinageBackupSyncService,
-            fundingDomainProvider: FundingDomainProvider(hostProvider: context.flowState.hostProvider),
-            paymentAssetBranding: PaymentAssetBranding.shared
+            fundingDomainProvider: FundingDomainProvider(hostProvider: context.flowState.hostProvider)
         )
 
         #if TESTNET_FEATURE

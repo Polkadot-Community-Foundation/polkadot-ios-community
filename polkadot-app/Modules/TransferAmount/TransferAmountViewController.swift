@@ -8,15 +8,18 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
     typealias RootViewType = TransferAmountViewLayout
 
     let presenter: TransferAmountPresenterProtocol
-    private let assetBrand: PaymentAssetBrand
 
     var keyboardHandler: KeyboardHandler?
     private var isAmountInputEnabled = true
+    private var paymentAssetViewModel: PaymentAssetViewModelProtocol?
 
-    init(presenter: TransferAmountPresenterProtocol, assetBrand: PaymentAssetBrand) {
+    init(presenter: TransferAmountPresenterProtocol) {
         self.presenter = presenter
-        self.assetBrand = assetBrand
         super.init(nibName: nil, bundle: nil)
+    }
+
+    deinit {
+        paymentAssetViewModel?.cancel()
     }
 
     @available(*, unavailable)
@@ -33,7 +36,6 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
 
         setupLocalization()
         setupHandlers()
-        rootView.apply(assetBrand: assetBrand)
 
         // Fee view is hidden
         rootView.feeView.isHidden = true
@@ -207,6 +209,15 @@ extension TransferAmountViewController: TransferAmountViewProtocol {
 
     func didReceive(assetViewModel: AssetAmountViewModel) {
         rootView.amountInputView.bind(assetViewModel: assetViewModel)
+    }
+
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol) {
+        paymentAssetViewModel?.cancel()
+        paymentAssetViewModel = paymentAsset
+
+        paymentAsset.bind { [weak self] brand in
+            self?.rootView.apply(assetBrand: brand)
+        }
     }
 
     func didReceive(feeViewModel _: BalanceViewModelProtocol?) {

@@ -36,9 +36,6 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
     private let fundingDomainProvider: FundingDomainProviding
     private var rampProductTasks: [RampAction: Task<Void, Never>] = [:]
 
-    private let paymentAssetBranding: PaymentAssetBrandingProviding
-    private var assetBrandTask: Task<Void, Error>?
-
     #if TESTNET_FEATURE
         var backgroundExecutor: BackgroundExecuting?
         var topupService: TopUpService?
@@ -51,8 +48,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         chainAsset: ChainAsset,
         coinageService: CoinageServicing,
         coinageBackupSyncService: any CoinageBackupSyncServicing,
-        fundingDomainProvider: FundingDomainProviding,
-        paymentAssetBranding: PaymentAssetBrandingProviding = PaymentAssetBranding.shared
+        fundingDomainProvider: FundingDomainProviding
     ) {
         self.priceLocalSubscriptionFactory = priceLocalSubscriptionFactory
         self.fiatOnrampTrackingService = fiatOnrampTrackingService
@@ -60,7 +56,6 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         self.coinageService = coinageService
         self.coinageBackupSyncService = coinageBackupSyncService
         self.fundingDomainProvider = fundingDomainProvider
-        self.paymentAssetBranding = paymentAssetBranding
     }
 
     deinit {
@@ -70,7 +65,6 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
         recoveredBalanceTask?.cancel()
         accountBackupStatusTask?.cancel()
         priceSubscriptionTask?.cancel()
-        assetBrandTask?.cancel()
         rampProductTasks.values.forEach { $0.cancel() }
     }
 }
@@ -83,7 +77,6 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
         subscribeToRecoveryState()
         subscribeToRecoveredBalance()
         subscribeToAccountBackupStatus()
-        subscribeToAssetBrand()
 
         provideDenominationContext()
     }
@@ -279,17 +272,5 @@ extension FundingDomainError: ErrorContentConvertible {
             title: String(localized: .Common.error),
             message: String(localized: .Products.topUpErrorMessage)
         )
-    }
-}
-
-private extension AssetDetailsInteractor {
-    func subscribeToAssetBrand() {
-        assetBrandTask?.cancel()
-        assetBrandTask = Task { [weak presenter, paymentAssetBranding] in
-            for try await brand in paymentAssetBranding.stream() {
-                guard !Task.isCancelled else { return }
-                await presenter?.didReceive(assetBrand: brand)
-            }
-        }
     }
 }

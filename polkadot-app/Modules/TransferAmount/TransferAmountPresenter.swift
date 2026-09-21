@@ -19,6 +19,7 @@ final class TransferAmountPresenter {
     let dataValidationFactory: TransferDataValidatorFactoryProtocol
     let balanceViewModelFactory: BalanceViewModelFactoryProtocol
     let amountInputStrategy: AmountInputStrategyProtocol
+    let paymentAssetViewModelFactory: PaymentAssetViewModelMaking
 
     private var inputAmount: AmountInputResult?
 
@@ -42,7 +43,8 @@ final class TransferAmountPresenter {
         balanceViewModelFactory: BalanceViewModelFactoryProtocol,
         amountInputStrategy: AmountInputStrategyProtocol,
         dataValidationFactory: TransferDataValidatorFactoryProtocol,
-        config: TransferAmountConfig = .default
+        config: TransferAmountConfig = .default,
+        paymentAssetViewModelFactory: PaymentAssetViewModelMaking = PaymentAssetViewModelFactory()
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
@@ -51,6 +53,7 @@ final class TransferAmountPresenter {
         self.amountInputStrategy = amountInputStrategy
         self.dataValidationFactory = dataValidationFactory
         self.config = config
+        self.paymentAssetViewModelFactory = paymentAssetViewModelFactory
     }
 }
 
@@ -62,6 +65,7 @@ extension TransferAmountPresenter: TransferAmountPresenterProtocol {
 
         provideRecipientViewModel()
         provideAssetViewModel()
+        view?.didReceive(paymentAsset: paymentAssetViewModelFactory.makeViewModel())
         provideAmountViewModel()
         provideAvailableBalance()
         provideFeeViewModel()

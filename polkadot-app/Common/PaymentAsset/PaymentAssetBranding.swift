@@ -103,11 +103,21 @@ private extension PaymentAssetBranding {
 }
 
 final class KingfisherRemoteImageLoader: RemoteImageLoading {
+    private let optionsFactory: ImageProcessingOptionsProducing
+
+    init(optionsFactory: ImageProcessingOptionsProducing = ImageProcessingOptionsFactory()) {
+        self.optionsFactory = optionsFactory
+    }
+
     func loadImage(from url: URL) async throws -> UIImage {
         do {
-            return try await retrieve(url, options: Self.options)
-        } catch RemoteImageError.emptyImage {
-            return try await retrieve(url, options: Self.options + [.forceRefresh])
+            return try await retrieve(url, options: options + [.forceRefresh])
+        } catch {
+            guard let cached = try? await retrieve(url, options: options + [.onlyFromCache]) else {
+                throw error
+            }
+
+            return cached
         }
     }
 
@@ -126,12 +136,9 @@ final class KingfisherRemoteImageLoader: RemoteImageLoading {
         }
     }
 
-    private static let options: KingfisherOptionsInfo = [
-        .processor(SVGImageProcessor()),
-        .cacheSerializer(RemoteImageSerializer.shared),
-        .scaleFactor(UIScreen.main.scale),
-        .diskCacheExpiration(.never)
-    ]
+    private var options: KingfisherOptionsInfo {
+        optionsFactory.options(for: .originalImage, animated: false) + [.diskCacheExpiration(.never)]
+    }
 }
 
 enum RemoteImageError: Error {

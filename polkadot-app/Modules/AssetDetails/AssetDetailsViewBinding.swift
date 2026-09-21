@@ -14,9 +14,14 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
     private var lockedAmountString: String?
     private var assetLogo: UIImage?
     private var assetSymbol: String?
+    private var paymentAssetViewModel: PaymentAssetViewModelProtocol?
 
     init(viewModel: AssetDetailsViewModel) {
         self.viewModel = viewModel
+    }
+
+    deinit {
+        paymentAssetViewModel?.cancel()
     }
 
     var isSetup: Bool {
@@ -103,9 +108,18 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
         lockedAmountString = String(localized: .balanceOnhold(amount: lockedAmount.amount))
     }
 
-    func didReceive(assetLogo: UIImage?, symbol: String) {
-        self.assetLogo = assetLogo
-        assetSymbol = symbol
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol) {
+        paymentAssetViewModel?.cancel()
+        paymentAssetViewModel = paymentAsset
+
+        paymentAsset.bind { [weak self] brand in
+            self?.apply(brand)
+        }
+    }
+
+    private func apply(_ brand: PaymentAssetBrand) {
+        assetLogo = brand.wideIcon
+        assetSymbol = brand.symbol
 
         guard viewModel.balanceCardModel != nil else { return }
         emitCardUpdate()

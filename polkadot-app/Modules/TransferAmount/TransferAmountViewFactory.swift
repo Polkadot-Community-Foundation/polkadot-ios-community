@@ -141,10 +141,7 @@ enum TransferAmountViewFactory {
             config: config
         )
 
-        let view = TransferAmountViewController(
-            presenter: presenter,
-            assetBrand: PaymentAssetBranding.shared.current
-        )
+        let view = TransferAmountViewController(presenter: presenter)
 
         presenter.view = view
         interactor.presenter = presenter
