@@ -1,16 +1,21 @@
 name: Release (Dev)
 
 # Archives the polkadot-app iOS client in the DEV configuration and distributes it to the
-# external TestFlight group "Products Devnet". The Dev build is the PUBLIC developer build:
+# external TestFlight group named by the TESTFLIGHT_GROUP variable. The Dev build is the
+# PUBLIC developer build:
 # it MIRRORS Nightly's testnet contour via its own dedicated flag (it carries -DDEV /
 # -DTESTNET_FEATURE plus the FEATURE_* set named in polkadot-app/Configs/polkadot-app.dev.xcconfig
 # — upstream retired -DW3S — and every network gate is `#elseif NIGHTLY || DEV`, so it reads
 # `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah / nightly-people /
-# nightly-bulletin in KnownChains.swift). It ships under the PRODUCTION bundle id
-# io.pcf.polkadotapp (one app record — TestFlight-only records get binned) and the production
-# Firebase app; Remote Config tells the builds apart by the `build_channel=dev` CUSTOM SIGNAL
-# the Dev build sets at startup (FirebaseApplicationService), matched by the `dev_build_ios`
-# condition. Network wiring is delivered at runtime from Firebase Remote Config
+# nightly-bulletin in KnownChains.swift). It ships under its OWN bundle id
+# io.pcf.polkadotapp.devnet — it no longer squats on the intended PCF production id — with its
+# own App Store Connect record, TestFlight group, App Group and keychain group.
+#
+# ⭐ Because devnet now has a distinct APP ID, Remote Config can discriminate it with a plain
+# App ID condition. The `build_channel=dev` CUSTOM SIGNAL that FirebaseApplicationService sets
+# (matched by the `dev_build_ios` condition) existed only because the build shared the
+# production bundle id. Retire it only AFTER the RC conditions are switched over, and in its
+# own change — not here. Network wiring is delivered at runtime from Firebase Remote Config
 # (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
 # project whose GoogleService-Info plist you supply below.
 #
@@ -47,8 +52,9 @@ name: Release (Dev)
 # ValueTransferAuthPallet signing protocol it implemented; W3S statements are now signed with
 # the user's own wallet key. The repository secret can be revoked once this lands.
 # Optional repository variable:
-#   TESTFLIGHT_JOIN_URL  Public "Products Devnet" join link shown in the GitHub release body
-#                        (falls back to the hardcoded link if unset).
+#   TESTFLIGHT_JOIN_URL  Public join link shown in the GitHub release body (falls back to the
+#                        hardcoded link if unset). Must be re-pointed at the NEW app record.
+#   TESTFLIGHT_GROUP     External TestFlight group name (default "Polkadot Devnet Testers").
 
 on:
   workflow_dispatch:
@@ -176,11 +182,11 @@ jobs:
         run: |
           DATE=$(date -u +%Y-%m-%d)
           if [ "$IS_TAG" = "true" ]; then
-            CHANGELOG="Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${GITHUB_REF_NAME}."
+            CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${GITHUB_REF_NAME}."
           elif [ "$IS_WEEKLY" = "true" ]; then
-            CHANGELOG="Weekly Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}) — ${DATE}."
+            CHANGELOG="Weekly devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}) — ${DATE}."
           else
-            CHANGELOG="Products Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
+            CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
           fi
           {
             echo "date=$DATE"
@@ -204,7 +210,7 @@ jobs:
 
   # ---- TestFlight distribution — MANUAL APPROVAL GATE --------------------------------
   # Separate job so it can sit behind the protected `tester-distribution` environment,
-  # which carries a REQUIRED REVIEWER. Every push to the external "Products Devnet"
+  # which carries a REQUIRED REVIEWER. Every push to the external devnet
   # TestFlight group now waits for a human to approve it in the Actions UI — the same
   # shape as an npm publish approval.
   #
@@ -241,7 +247,7 @@ jobs:
           echo "$KEY_B64" | base64 --decode > "./private_keys/AuthKey_${KEY_ID}.p8"
           cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
 
-      - name: Distribute to TestFlight group "Products Devnet"
+      - name: Distribute to the external TestFlight group
 
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -250,6 +256,10 @@ jobs:
           # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
           # break out of the quoting.
           CHANGELOG: ${{ needs.testflight.outputs.changelog }}
+          # Same rule as CHANGELOG: read from the environment, never interpolated into the
+          # script body. The group lives on the app record, so it must exist there first —
+          # Apple only lets you create an external group once a build has been uploaded.
+          TF_GROUP: ${{ vars.TESTFLIGHT_GROUP || 'Polkadot Devnet Testers' }}
         run: |
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
           [ -n "$IPA" ] || { echo "::error::no .ipa in the build artifact"; exit 1; }
@@ -264,7 +274,7 @@ jobs:
             --api_key_path asc_api_key.json \
             --ipa "$IPA" \
             --distribute_external true \
-            --groups "Products Devnet" \
+            --groups "$TF_GROUP" \
             --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
             --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
             --changelog "$CHANGELOG"

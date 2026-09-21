@@ -29,10 +29,17 @@ OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-
 // Must stay AFTER the #include above, which is where the empty default comes from.
 ICON_SUFFIX     = Dev
 
-// PCF identity. APP_GROUP is deliberately NOT group.$(APP_MAIN_BUNDLE): the registered PCF
-// App Group predates the bundle id and must not change, or every installed tester loses the
-// shared container — keychain ids, UserDefaults suite and the Core Data store all live in it.
+// PCF devnet identity. The devnet build has its own bundle id so it no longer squats on the
+// intended PCF production id, and so Remote Config can tell it apart by APP ID rather than by
+// the build_channel custom signal.
+//
+// APP_GROUP moves WITH the bundle id on purpose. keychain-access-groups is
+// $(AppIdentifierPrefix)$(BUNDLE), so it follows the bundle id whether we like it or not.
+// Holding the old group while the keychain moves would give the devnet build a container full
+// of accounts whose keys it cannot read. A new bundle id installs as a SEPARATE app anyway, so
+// there is no in-place upgrade to protect: devnet gets its own container, and testers restore
+// from their mnemonic backup.
 APP_NAME        = $(BRAND_DISPLAY_NAME)
-APP_MAIN_BUNDLE = io.pcf.polkadotapp
-APP_GROUP       = group.pcf.polkadotapp
+APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet
+APP_GROUP       = group.pcf.polkadotapp.devnet
 BUNDLE          = $(APP_MAIN_BUNDLE)

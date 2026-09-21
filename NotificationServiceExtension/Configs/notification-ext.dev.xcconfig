@@ -9,6 +9,6 @@
 OTHER_SWIFT_FLAGS = $(inherited)
 
 APP_NAME        = $(BRAND_DISPLAY_NAME)
-APP_MAIN_BUNDLE = io.pcf.polkadotapp
-APP_GROUP       = group.pcf.polkadotapp
+APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet
+APP_GROUP       = group.pcf.polkadotapp.devnet
 BUNDLE          = $(APP_MAIN_BUNDLE).NotificationServiceExtension

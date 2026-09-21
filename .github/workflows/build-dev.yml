@@ -97,10 +97,10 @@ jobs:
             fi
           }
 
-          expect "APP_MAIN_BUNDLE = io.pcf.polkadotapp"
-          expect "BUNDLE = io.pcf.polkadotapp"
-          expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp"
-          expect "APP_GROUP = group.pcf.polkadotapp"
+          expect "APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet"
+          expect "BUNDLE = io.pcf.polkadotapp.devnet"
+          expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp.devnet"
+          expect "APP_GROUP = group.pcf.polkadotapp.devnet"
 
           # The Dev leaf includes base.release.xcconfig, which leaves ICON_SUFFIX unset on purpose
           # so Release ships "AppIcon". Inheriting that empty default is exactly the bug this lane

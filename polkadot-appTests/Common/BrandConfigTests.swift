@@ -52,9 +52,10 @@ struct BrandConfigTests {
 
     /// FORK DELTA. Upstream asserts `SharedContainerGroup.name == "group." + bundleIdentifier`,
     /// i.e. that the App Group is a pure expansion of the bundle id. That invariant does not hold
-    /// for this fork on purpose: the registered PCF App Group (`group.pcf.polkadotapp`) predates
-    /// the Dev build's bundle id (`io.pcf.polkadotapp`) and cannot be renamed without orphaning
-    /// every installed tester's shared container. The App Group is therefore carried by its own
+    /// for this fork on purpose. It happens to hold again for the devnet build, whose group IS
+    /// `group.` + its bundle id, but the fork still carries the App Group in its own
+    /// `APP_GROUP` variable rather than deriving it, because other configurations do not match
+    /// and because the coupling is what made the devnet bundle-id move risky. The App Group is
     /// `APP_GROUP` xcconfig variable, and what this test pins is that the two sources that must
     /// agree — the `BrandAppGroup` Info.plist key and `SharedContainerGroup` — still come from
     /// one expansion, and that the value is a well-formed group identifier.

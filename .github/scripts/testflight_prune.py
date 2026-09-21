@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Expire older TestFlight builds so only the latest N stay available to a beta group.
 
-Scoped to a single external beta group (default "Products Devnet"): only builds
+Scoped to a single external beta group (default "Polkadot Devnet Testers"): only builds
 attached to that group are ever candidates, so Nightly / production builds that
-share the same app record (io.pcf.polkadotapp) are never touched.
+share the same app record (io.pcf.polkadotapp.devnet) are never touched.
 
 Dry-run unless APPLY=true. Expiry is irreversible (Apple has no un-expire).
 
 Env:
   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_B64  App Store Connect API key (.p8 base64)
-  BUNDLE_ID                                app bundle id (default io.pcf.polkadotapp)
-  GROUP                                    beta group name (default "Products Devnet")
+  BUNDLE_ID                                app bundle id (default io.pcf.polkadotapp.devnet)
+  GROUP                                    beta group name (default "Polkadot Devnet Testers")
   KEEP                                     most-recent builds to keep active (default 1)
   APPLY                                    "true" to actually expire (else dry-run)
 """
@@ -66,8 +66,8 @@ def fmt(dt: str) -> str:
 
 
 def main() -> None:
-    bundle = os.environ.get("BUNDLE_ID", "io.pcf.polkadotapp")
-    group_name = os.environ.get("GROUP", "Products Devnet")
+    bundle = os.environ.get("BUNDLE_ID", "io.pcf.polkadotapp.devnet")
+    group_name = os.environ.get("GROUP", "Polkadot Devnet Testers")
     keep = max(1, int(os.environ.get("KEEP", "1") or "1"))
     apply = os.environ.get("APPLY", "").strip().lower() == "true"
 
