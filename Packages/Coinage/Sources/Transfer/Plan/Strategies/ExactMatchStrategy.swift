@@ -14,7 +14,7 @@ struct ExactMatchStrategy: TransferStrategy {
         self.durability = durability
     }
 
-    func prepare(groupId _: CoinageTxGroupId?) async throws -> PreparedStrategy {
+    func prepare() async throws -> PreparedStrategy {
         guard !coins.isEmpty else {
             throw TransferStrategyError.emptyCoins
         }

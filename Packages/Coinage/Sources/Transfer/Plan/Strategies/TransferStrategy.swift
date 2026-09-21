@@ -20,5 +20,8 @@ struct PreparedStrategy {
 protocol TransferStrategy {
     /// Mints outputs (persisted by the allocator) and pre-commits the handoff. Returns the memo
     /// entries, the handoff handle, and the transactions still to be scheduled.
-    func prepare(groupId: CoinageTxGroupId?) async throws -> PreparedStrategy
+    ///
+    /// Takes no group: a strategy declares transactions but registers none, so the group they are
+    /// registered under is the caller's to choose when it commits them.
+    func prepare() async throws -> PreparedStrategy
 }

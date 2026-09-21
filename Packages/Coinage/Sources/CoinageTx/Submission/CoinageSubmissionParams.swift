@@ -54,7 +54,7 @@ public enum CoinageSubmissionParams {
         let scale = try TransferParamsScale(scaleDecoder: ScaleDecoder(data: params))
 
         return TransferSubmissionParams(
-            buildUntil: Date(storedMilliseconds: scale.buildUntilMillis),
+            buildUntil: Date(timeIntervalSince1970: scale.buildUntilMillis.millisecondsToSeconds()),
             retryFailures: scale.retryFailures
         )
     }
@@ -63,7 +63,7 @@ public enum CoinageSubmissionParams {
         let scale = try ClaimParamsScale(scaleDecoder: ScaleDecoder(data: params))
 
         return ClaimSubmissionParams(
-            retryUntil: Date(storedMilliseconds: scale.retryUntilMillis),
+            retryUntil: Date(timeIntervalSince1970: scale.retryUntilMillis.millisecondsToSeconds()),
             receivedKey: scale.receivedKey
         )
     }
@@ -82,18 +82,6 @@ public extension TransferSubmissionParams {
     }
 }
 
-private extension Date {
-    /// Whole milliseconds since 1970, so a window opened on one launch means the same thing on the
-    /// next. Stored as an integer rather than a `Double` so the value round-trips exactly.
-    var storedMilliseconds: Int64 {
-        Int64(timeIntervalSince1970.milliseconds)
-    }
-
-    init(storedMilliseconds: Int64) {
-        self.init(timeIntervalSince1970: UInt64(max(0, storedMilliseconds)).millisecondsToSeconds())
-    }
-}
-
 /// Whether an attempt that failed with `failure` is worth building again while `now` is before
 /// `deadline`.
 ///
@@ -107,33 +95,37 @@ func retryableFailure(_ failure: DurableFailureKind, now: Date, deadline: Date) 
 
 // MARK: - Persisted shapes
 
+/// Deadlines are stored as whole milliseconds since 1970, so a window opened on one launch means the
+/// same thing on the next: an integer round-trips exactly where a `Double` would drift. Clamping
+/// rather than trapping is safe because every deadline here is `now` plus a window, so a value below
+/// the epoch is unreachable — and a clamp keeps a corrupt row from crashing the builder.
 private extension CoinageSubmissionParams {
     static func encode(_ params: TransferSubmissionParams) throws -> Data {
         try TransferParamsScale(
-            buildUntilMillis: params.buildUntil.storedMilliseconds,
+            buildUntilMillis: UInt64(clamping: params.buildUntil.timeIntervalSince1970.milliseconds),
             retryFailures: params.retryFailures
         ).scaleEncoded()
     }
 
     static func encode(_ params: ClaimSubmissionParams) throws -> Data {
         try ClaimParamsScale(
-            retryUntilMillis: params.retryUntil.storedMilliseconds,
+            retryUntilMillis: UInt64(clamping: params.retryUntil.timeIntervalSince1970.milliseconds),
             receivedKey: params.receivedKey
         ).scaleEncoded()
     }
 }
 
 private struct TransferParamsScale: ScaleCodable {
-    let buildUntilMillis: Int64
+    let buildUntilMillis: UInt64
     let retryFailures: Bool
 
-    init(buildUntilMillis: Int64, retryFailures: Bool) {
+    init(buildUntilMillis: UInt64, retryFailures: Bool) {
         self.buildUntilMillis = buildUntilMillis
         self.retryFailures = retryFailures
     }
 
     init(scaleDecoder: any ScaleDecoding) throws {
-        buildUntilMillis = try Int64(scaleDecoder: scaleDecoder)
+        buildUntilMillis = try UInt64(scaleDecoder: scaleDecoder)
         retryFailures = try Bool(scaleDecoder: scaleDecoder)
     }
 
@@ -144,16 +136,16 @@ private struct TransferParamsScale: ScaleCodable {
 }
 
 private struct ClaimParamsScale: ScaleCodable {
-    let retryUntilMillis: Int64
+    let retryUntilMillis: UInt64
     let receivedKey: Data
 
-    init(retryUntilMillis: Int64, receivedKey: Data) {
+    init(retryUntilMillis: UInt64, receivedKey: Data) {
         self.retryUntilMillis = retryUntilMillis
         self.receivedKey = receivedKey
     }
 
     init(scaleDecoder: any ScaleDecoding) throws {
-        retryUntilMillis = try Int64(scaleDecoder: scaleDecoder)
+        retryUntilMillis = try UInt64(scaleDecoder: scaleDecoder)
         receivedKey = try scaleDecoder.readAndConfirm(count: 32)
     }
 

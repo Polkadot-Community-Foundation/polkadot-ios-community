@@ -62,7 +62,7 @@ struct UnloadIntoCoinsStrategy {
 // MARK: - TransferStrategy
 
 extension UnloadIntoCoinsStrategy: TransferStrategy {
-    func prepare(groupId _: CoinageTxGroupId?) async throws -> PreparedStrategy {
+    func prepare() async throws -> PreparedStrategy {
         guard !perGroupAllocations.isEmpty else {
             throw TransferStrategyError.emptyVouchers
         }

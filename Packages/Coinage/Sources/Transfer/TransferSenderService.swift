@@ -30,7 +30,7 @@ protocol TransferSenderServicing: Actor {
         result: CoinSelectionResult,
         currentDate: Date,
         breakdownContext: DenominationBreakdownContext,
-        groupId: CoinageTxGroupId?
+        groupId: CoinageTxGroupId
     ) async throws -> PreparedTransfer
 }
 
@@ -38,7 +38,7 @@ extension TransferSenderServicing {
     func execute(
         result: CoinSelectionResult,
         breakdownContext: DenominationBreakdownContext,
-        groupId: CoinageTxGroupId?
+        groupId: CoinageTxGroupId
     ) async throws -> PreparedTransfer {
         try await execute(
             result: result,
@@ -104,7 +104,7 @@ extension TransferSenderService: TransferSenderServicing {
         result: CoinSelectionResult,
         currentDate: Date,
         breakdownContext: DenominationBreakdownContext,
-        groupId: CoinageTxGroupId?
+        groupId: CoinageTxGroupId
     ) async throws -> PreparedTransfer {
         try await markStallActivity("Execute transfer") {
             let plan: TransferPlan
@@ -121,7 +121,7 @@ extension TransferSenderService: TransferSenderServicing {
             // recovery pass / relaunch.
             let prepared: PreparedStrategy
             do {
-                prepared = try await plan.strategy.prepare(groupId: groupId)
+                prepared = try await plan.strategy.prepare()
             } catch {
                 logger?.error("Strategy preparation failed: \(error)")
                 throw TransferSenderServiceError.strategyFailed(error)

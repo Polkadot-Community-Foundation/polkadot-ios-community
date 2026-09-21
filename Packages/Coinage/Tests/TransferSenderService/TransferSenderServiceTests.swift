@@ -62,7 +62,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -107,7 +107,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -163,7 +163,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -219,7 +219,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -268,7 +268,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -316,7 +316,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -359,7 +359,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -401,7 +401,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -443,7 +443,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -484,7 +484,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -526,7 +526,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -577,7 +577,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -636,7 +636,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())
@@ -682,7 +682,7 @@ struct TransferSenderServiceTests {
             result: result,
             currentDate: now,
             breakdownContext: testContext,
-            groupId: nil
+            groupId: "transfer"
         )
         // Declared work only becomes real when the transport commits it.
         try prepared.commit(in: InMemoryRegistrationScope())

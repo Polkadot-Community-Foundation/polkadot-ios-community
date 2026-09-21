@@ -13,14 +13,14 @@ public struct PreparedTransfer {
     public let handoffCommit: any CoinageHandoffCommit
 
     private let transactions: [CoinageScheduledTxRequest]
-    private let groupId: CoinageTxGroupId?
+    private let groupId: CoinageTxGroupId
     private let txService: any CoinageTxServicing
 
     init(
         memo: TransferMemo,
         handoffCommit: any CoinageHandoffCommit,
         transactions: [CoinageScheduledTxRequest],
-        groupId: CoinageTxGroupId?,
+        groupId: CoinageTxGroupId,
         txService: any CoinageTxServicing
     ) {
         self.memo = memo
@@ -39,11 +39,7 @@ public struct PreparedTransfer {
 
         guard !transactions.isEmpty else { return }
 
-        // A caller with no id of its own still needs one to read the group back by; it just cannot
-        // correlate it to anything else.
-        let group = groupId ?? UUID().uuidString
-
-        try txService.scheduleTransactions(transactions, groupId: group, joining: scope)
+        try txService.scheduleTransactions(transactions, groupId: groupId, joining: scope)
     }
 
     /// Drops the reservation for a payment whose keys never left. Nothing was scheduled, so there is
