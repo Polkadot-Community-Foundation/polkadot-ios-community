@@ -2,7 +2,8 @@ import Foundation
 
 // Built from individual Firebase RemoteConfig keys:
 //   identity_backend_url, ipfs_gateway_url, game_dashboard_url, dot_ns_config, coinage_instance_id,
-//   funding_config { onrampUrl, offrampUrl }, account_data_store_config { contractAddress }, payment_asset_config { symbol, iconSquareUrl, iconWideUrl }
+//   funding_config { onrampUrl, offrampUrl }, account_data_store_config { contractAddress }, payment_asset_config {
+//   symbol, iconSquareUrl, iconWideUrl }
 // Each field nil if the corresponding key is missing or empty.
 struct RemoteAppConfig {
     let identityBackendUrl: URL?
