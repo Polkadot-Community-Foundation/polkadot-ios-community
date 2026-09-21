@@ -1,3 +1,4 @@
+import DurableTransactions
 import ExtrinsicService
 import Foundation
 import KeyDerivation
@@ -23,7 +24,8 @@ struct UnloadExtrinsicBuilder: Sendable {
     let originFactory: OriginCreating
     let blockInfoProvider: any BlockInfoProviding
     let quotaTracker: any UnloadQuotaTracking
-    let extrinsics: CoinageExtrinsicBuilding
+    let factory: any DurableTxMaking
+    let chainId: ChainId
     let logger: SDKLoggerProtocol?
 
     func build(_ unloads: [Unload], currentDate: Date) async throws -> [ExtrinsicBuiltModel] {
@@ -57,13 +59,13 @@ struct UnloadExtrinsicBuilder: Sendable {
 
             let call = try call(for: pair.0, key: key, revision: revision)
 
-            return CoinageExtrinsicParts(
+            return DurableTxRequest(
                 builder: { try $0.adding(call: call.callAsFunction()) },
                 origin: pair.1
             )
         }
 
-        let models = try await extrinsics.build(parts)
+        let models = try await factory.makeExtrinsics(parts, chainId: chainId)
 
         // Only a build that actually produced extrinsics has spent tokens.
         await quotaTracker.noteUnloadHappened(count: models.count)

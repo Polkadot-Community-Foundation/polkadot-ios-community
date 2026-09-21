@@ -1,3 +1,4 @@
+import DurableTransactions
 import ExtrinsicService
 import Foundation
 import KeyDerivation
@@ -12,19 +13,23 @@ import SubstrateSdk
 /// already made out of it keep waiting on it.
 struct ClaimExtrinsicBuilder: Sendable {
     let originFactory: OriginCreating
-    let extrinsics: CoinageExtrinsicBuilding
+    let factory: any DurableTxMaking
+    let chainId: ChainId
 
-    func parts(receivedKey: Data, destination: PublicKey) throws -> CoinageExtrinsicParts {
+    func request(receivedKey: Data, destination: PublicKey) throws -> DurableTxRequest {
         let call = CoinagePallet.Calls.Transfer(to: destination)
         let wallet = DynamicDerivedWallet(secretKeyProvider: { receivedKey })
 
-        return try CoinageExtrinsicParts(
+        return try DurableTxRequest(
             builder: { try $0.adding(call: call.callAsFunction()) },
             origin: originFactory.createAsCoinOrigin(for: wallet)
         )
     }
 
     func build(_ claims: [(receivedKey: Data, destination: PublicKey)]) async throws -> [ExtrinsicBuiltModel] {
-        try await extrinsics.build(claims.map { try parts(receivedKey: $0.receivedKey, destination: $0.destination) })
+        try await factory.makeExtrinsics(
+            claims.map { try request(receivedKey: $0.receivedKey, destination: $0.destination) },
+            chainId: chainId
+        )
     }
 }

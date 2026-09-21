@@ -1,3 +1,4 @@
+import DurableTransactions
 import ExtrinsicService
 import Foundation
 import KeyDerivation
@@ -12,21 +13,25 @@ import SubstrateSdk
 struct SplitExtrinsicBuilder: Sendable {
     let coinKeyFactory: any CoinKeyDeriving
     let originFactory: OriginCreating
-    let extrinsics: CoinageExtrinsicBuilding
+    let factory: any DurableTxMaking
+    let chainId: ChainId
 
-    func parts(coinToSplit: Coin, outputs: [Coin]) throws -> CoinageExtrinsicParts {
+    func request(coinToSplit: Coin, outputs: [Coin]) throws -> DurableTxRequest {
         let call = CoinagePallet.Calls.Split(
             splitInto: Self.destinations(of: outputs).sorted { $0.exponent < $1.exponent }
         )
 
-        return try CoinageExtrinsicParts(
+        return try DurableTxRequest(
             builder: { try $0.adding(call: call.callAsFunction()) },
             origin: origin(spending: coinToSplit)
         )
     }
 
     func build(_ splits: [(coinToSplit: Coin, outputs: [Coin])]) async throws -> [ExtrinsicBuiltModel] {
-        try await extrinsics.build(splits.map { try parts(coinToSplit: $0.coinToSplit, outputs: $0.outputs) })
+        try await factory.makeExtrinsics(
+            splits.map { try request(coinToSplit: $0.coinToSplit, outputs: $0.outputs) },
+            chainId: chainId
+        )
     }
 }
 

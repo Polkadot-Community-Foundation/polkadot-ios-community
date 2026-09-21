@@ -11,18 +11,8 @@ import SubstrateSdk
 
 /// Records what the submitter hands to the engine.
 final class RecordingEngine: DurableTxServicing, @unchecked Sendable {
-    let oracles = TxCompletionOracleRegistry()
     private(set) var submissions: [(domain: TxDomainId, requests: Int, groupId: DurableTxGroupId?)] = []
     let submittedId = UUID()
-
-    let policies = DurableSubmissionPolicyRegistry()
-
-    func buildExtrinsics(
-        _: [DurableTxRequest],
-        chainId _: ChainId
-    ) async throws -> [ExtrinsicBuiltModel] {
-        []
-    }
 
     func submitTransactions(
         domain: TxDomainId,

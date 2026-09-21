@@ -13,22 +13,6 @@ import SubstrateSdk
 /// This service never reads chain state of its own beyond block bodies and the heads — anything
 /// domain-shaped reaches it only through that domain's ``TxCompletionOracle``.
 public protocol DurableTxServicing: Sendable {
-    /// Where a domain registers its oracle before it submits anything.
-    var oracles: TxCompletionOracleRegistry { get }
-
-    /// Where a domain registers its submission policies before it submits anything carrying one.
-    var policies: DurableSubmissionPolicyRegistry { get }
-
-    /// Builds and signs declared extrinsics for one chain, through the same batching, ordering and
-    /// mortality handling registration uses.
-    ///
-    /// A domain's submission policy builds its rebuilt extrinsics with this rather than reaching for
-    /// the chain tools itself, so there is one build path and not two.
-    func buildExtrinsics(
-        _ requests: [DurableTxRequest],
-        chainId: ChainId
-    ) async throws -> [ExtrinsicBuiltModel]
-
     /// Builds, registers and submits several transactions as one operation: either all of them are
     /// recorded or none is. `onRegister` runs inside the registration transaction with the minted ids,
     /// so a domain's own rows commit together with the engine's. Returns once committed, which is before
@@ -140,7 +124,9 @@ public extension DurableTxServicing {
 /// ``DurableTxOwnershipSet`` carries its own lock. The head-driven task handle is the one mutable piece of
 /// state, guarded by a lock.
 public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
-    public let oracles: TxCompletionOracleRegistry
+    /// Kept to resolve a domain's chain at submission time; registration of oracles is
+    /// ``DurableTxServices``' job, not this service's.
+    private let oracles: TxCompletionOracleRegistry
 
     private let store: any DurableTxRepositoryProtocol
     private let registrar: DurableTxRegistrar
@@ -148,7 +134,6 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
     private let launcher: DurableSubmissionLauncher
     private let executor: DurableSubmissionExecutor
     private let pass: DurableRecoveryPass
-    public let policies: DurableSubmissionPolicyRegistry
     private let chainFactory: any PinnedChainViewFactoryProtocol
     private let chainTools: any DurableChainToolsProviding
     private let logger: SDKLoggerProtocol?
@@ -163,7 +148,6 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
         executor: DurableSubmissionExecutor,
         pass: DurableRecoveryPass,
         oracles: TxCompletionOracleRegistry,
-        policies: DurableSubmissionPolicyRegistry,
         chainFactory: any PinnedChainViewFactoryProtocol,
         chainTools: any DurableChainToolsProviding,
         logger: SDKLoggerProtocol?
@@ -175,20 +159,21 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
         self.executor = executor
         self.pass = pass
         self.oracles = oracles
-        self.policies = policies
         self.chainFactory = chainFactory
         self.chainTools = chainTools
         self.logger = logger
     }
 
-    /// Wires the engine over a store and the chain-bound seams.
+    /// Wires the engine over a store and the chain-bound seams, and hands back every entry point a
+    /// domain needs: the service to submit through, the two registries to register with before it
+    /// does, and the factory that turns declared transactions into signed ones.
     public static func make(
         store: any DurableTxRepositoryProtocol,
         chainViewFactory: any PinnedChainViewFactoryProtocol,
         chainTools: any DurableChainToolsProviding,
         backgroundExecutor: any BackgroundExecuting,
         logger: SDKLoggerProtocol?
-    ) -> DurableTxService {
+    ) -> DurableTxServices {
         let owned = DurableTxOwnershipSet()
         let oracles = TxCompletionOracleRegistry()
         let policies = DurableSubmissionPolicyRegistry()
@@ -231,7 +216,7 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
             logger: logger
         )
 
-        return DurableTxService(
+        let service = DurableTxService(
             store: store,
             registrar: DurableTxRegistrar(store: store, owned: owned, logger: logger),
             tracker: tracker,
@@ -239,10 +224,16 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
             executor: executor,
             pass: pass,
             oracles: oracles,
-            policies: policies,
             chainFactory: chainViewFactory,
             chainTools: chainTools,
             logger: logger
+        )
+
+        return DurableTxServices(
+            txService: service,
+            oracles: oracles,
+            policies: policies,
+            factory: DurableTxFactory(chainTools: chainTools, logger: logger)
         )
     }
 }
@@ -333,18 +324,6 @@ public extension DurableTxService {
         startRecoveryPass()
 
         return ids
-    }
-
-    func buildExtrinsics(
-        _ requests: [DurableTxRequest],
-        chainId: ChainId
-    ) async throws -> [ExtrinsicBuiltModel] {
-        guard !requests.isEmpty else { return [] }
-
-        let operationFactory = try await chainTools.extrinsicOperationFactory(for: chainId)
-
-        return try await ExtrinsicBatchBuilder(operationFactory: operationFactory, logger: logger)
-            .build(requests)
     }
 
     func subscribeTransactionStatus(_ id: DurableTxId) -> AnyAsyncSequence<DurableTxStatus> {
