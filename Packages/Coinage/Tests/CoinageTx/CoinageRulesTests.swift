@@ -265,7 +265,7 @@ struct CoinageRulesTests {
         let result = await evaluate(
             entry,
             evidence(finalizedNumber: Self.mortalityEnd + 1, unreadable: [receivedIn.publicKey]),
-            search: .foundFailed(block(120))
+            search: .foundFailed(block(120), reason: "Test.Failed")
         )
 
         #expect(result.status == .failure)

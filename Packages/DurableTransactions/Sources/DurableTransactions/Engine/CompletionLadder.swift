@@ -142,9 +142,15 @@ private extension CompletionLadder {
         switch await view.searchBodies(for: attempt.txHash, in: window) {
         case let .foundSucceeded(block):
             return decided(transaction, rule: "5 found, dispatch succeeded", .finalizedSuccess, at: block)
-        case .foundFailed:
+        case let .foundFailed(_, reason):
             // Inclusion is not success — an extrinsic can be applied and its dispatch still fail.
-            return decided(transaction, rule: "5 found, dispatch failed", .failure, at: nil, failure: .dispatchFailed)
+            return decided(
+                transaction,
+                rule: "5 found, dispatch failed: \(reason ?? "unknown error")",
+                .failure,
+                at: nil,
+                failure: .dispatchFailed
+            )
         case .foundOutcomeUnreadable:
             return decided(transaction, rule: "5 found, outcome unreadable", .pending, at: nil)
         case .notFoundWindowComplete:

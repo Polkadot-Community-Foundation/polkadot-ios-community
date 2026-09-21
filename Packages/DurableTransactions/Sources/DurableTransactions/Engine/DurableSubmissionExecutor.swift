@@ -1,3 +1,4 @@
+import BackgroundExecution
 import ExtrinsicService
 import Foundation
 import SDKLogger
@@ -55,7 +56,7 @@ public actor DurableSubmissionExecutor {
         }
     }
 
-    fileprivate struct Bucket: Hashable {
+    fileprivate struct Bucket: Hashable, Sendable {
         let domainId: TxDomainId
         let policyId: SubmissionPolicyId
         let groupId: DurableTxGroupId?
@@ -67,6 +68,7 @@ public actor DurableSubmissionExecutor {
     private let policies: DurableSubmissionPolicyRegistry
     private let launcher: DurableSubmissionLauncher
     private let onPendingSubmissions: @Sendable () -> Void
+    private let backgroundExecutor: any BackgroundExecuting
     private let timing: Timing
     private let logger: SDKLoggerProtocol?
 
@@ -82,6 +84,7 @@ public actor DurableSubmissionExecutor {
         policies: DurableSubmissionPolicyRegistry,
         launcher: DurableSubmissionLauncher,
         onPendingSubmissions: @escaping @Sendable () -> Void,
+        backgroundExecutor: any BackgroundExecuting,
         timing: Timing = .production,
         logger: SDKLoggerProtocol?
     ) {
@@ -89,6 +92,7 @@ public actor DurableSubmissionExecutor {
         self.policies = policies
         self.launcher = launcher
         self.onPendingSubmissions = onPendingSubmissions
+        self.backgroundExecutor = backgroundExecutor
         self.timing = timing
         self.logger = logger
     }
@@ -207,17 +211,33 @@ private extension DurableSubmissionExecutor {
 
         guard !transactions.isEmpty else { return true }
 
+        // Deliberately outside the assertion below: a cooldown runs to ten minutes, far past the window
+        // iOS grants, so holding one across it would spend the whole window waiting and then expire with
+        // no work done.
         await awaitRebuildCooldown(bucket, transactions)
 
-        let outcomes: [DurableTxId: SubmissionPreparation]
-
         do {
-            outcomes = try await policy.prepareSubmission(transactions)
+            return try await backgroundExecutor.execute {
+                try await self.prepareAndStart(transactions, in: bucket, policy: policy)
+            }
         } catch {
             logger?.warning("\(bucket.logId) prepare failed: \(error)")
 
             return false
         }
+    }
+
+    /// Building an extrinsic is the slow half — proofs, a pinned block, a reserved token — and none of it
+    /// survives being suspended part-way: the next round starts over and the work is spent for nothing.
+    /// So it runs under a background-task assertion, which the submission watch the launcher starts does
+    /// not nest inside: that watch is an unstructured task with an assertion of its own, so this one
+    /// expiring cannot cancel a submission already on the wire.
+    func prepareAndStart(
+        _ transactions: [ScheduledDurableTx],
+        in bucket: Bucket,
+        policy: any DurableSubmissionPolicy
+    ) async throws -> Bool {
+        let outcomes = try await policy.prepareSubmission(transactions)
 
         return await applyOutcomes(outcomes, for: transactions, in: bucket, chainId: policy.chainId)
     }

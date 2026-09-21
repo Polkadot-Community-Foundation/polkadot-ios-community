@@ -213,6 +213,7 @@ public final class DurableTxService: DurableTxServicing, @unchecked Sendable {
             // Anything waiting to be built keeps recovery scheduled: the loop is what holds the
             // process awake long enough for a policy to finish waiting on the chain.
             onPendingSubmissions: { Task { await pass.run() } },
+            backgroundExecutor: backgroundExecutor,
             logger: logger
         )
 

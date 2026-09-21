@@ -282,10 +282,13 @@ private extension DurableTxTracker {
         }
 
         switch await dispatchOutcome(blockHash: blockHash, transactionId: id, using: view) {
-        case .present(true):
+        case .present(.succeeded):
             await propose(id, attempt: txHash, Verdict(status: .pendingSuccess, successDetectedAt: block))
-        case .present(false),
-             .absent,
+        case let .present(.failed(reason)):
+            // Nothing is proposed — the block is not finalized — but the reason is the only place the
+            // chain ever states why, and by finality the events have long scrolled past.
+            logger?.error("Dispatch failed in block \(blockHash) for \(id): \(reason ?? "unknown error")")
+        case .absent,
              .failedRead:
             break
         }
@@ -298,10 +301,13 @@ private extension DurableTxTracker {
         using view: any PinnedChainViewProtocol
     ) async {
         switch await dispatchOutcome(blockHash: blockHash, transactionId: id, using: view) {
-        case .present(true):
+        case .present(.succeeded):
             let block = await blockOf(blockHash, using: view)
             await propose(id, attempt: txHash, Verdict(status: .finalizedSuccess, successDetectedAt: block))
-        case .present(false):
+        case let .present(.failed(reason)):
+            logger?.error(
+                "Dispatch failed at finality in block \(blockHash) for \(id): \(reason ?? "unknown error")"
+            )
             await propose(
                 id,
                 attempt: txHash,
@@ -348,7 +354,7 @@ private extension DurableTxTracker {
         blockHash: String,
         transactionId id: DurableTxId,
         using view: any PinnedChainViewProtocol
-    ) async -> ReadResult<Bool> {
+    ) async -> ReadResult<DispatchOutcome> {
         guard
             let entry = try? await store.getEntry(id: id),
             let block = await blockOf(blockHash, using: view)

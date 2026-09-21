@@ -200,7 +200,7 @@ struct CompletionLadderTests {
     @Test("Rule 5 fails on a failed dispatch — inclusion is not success")
     func rule5FailsOnFailedDispatch() async throws {
         let tx = entry()
-        try view.setBodySearchResponse(#require(tx.txHash), to: .foundFailed(.fixture(120)))
+        try view.setBodySearchResponse(#require(tx.txHash), to: .foundFailed(.fixture(120), reason: "Test.Failed"))
 
         let outcome = await evaluate(tx, scope: .unknown)
 
