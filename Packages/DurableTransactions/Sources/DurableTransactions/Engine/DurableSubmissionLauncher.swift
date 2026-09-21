@@ -3,9 +3,19 @@ import Foundation
 import SDKLogger
 import SubstrateSdk
 
+/// Makes a built extrinsic a transaction's next attempt and puts it on the wire.
+///
+/// The executor's one route out to the chain, behind a protocol so what it does with a policy's output —
+/// the buckets, the backoff, the cooldown — can be exercised without a connection.
+public protocol DurableAttemptStarting: Sendable {
+    /// Makes `model` the attempt of a transaction waiting to be built, then watches it. Returns whether
+    /// the transaction was still waiting.
+    func startAttempt(id: DurableTxId, model: ExtrinsicBuiltModel, chainId: ChainId) async throws -> Bool
+}
+
 /// Puts an attempt on the wire and follows it: the submission watch that registration starts, and the
 /// same watch for an attempt a policy built later, so a rebuilt transaction lands as fast as a fresh one.
-public struct DurableSubmissionLauncher: Sendable {
+public struct DurableSubmissionLauncher: DurableAttemptStarting, Sendable {
     private let store: any DurableTxRepositoryProtocol
     private let tracker: DurableTxTracker
     private let owned: DurableTxOwnershipSet

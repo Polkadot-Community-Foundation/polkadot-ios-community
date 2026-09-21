@@ -66,7 +66,7 @@ public actor DurableSubmissionExecutor {
 
     private let store: any DurableTxRepositoryProtocol
     private let policies: DurableSubmissionPolicyRegistry
-    private let launcher: DurableSubmissionLauncher
+    private let launcher: any DurableAttemptStarting
     private let onPendingSubmissions: @Sendable () -> Void
     private let backgroundExecutor: any BackgroundExecuting
     private let timing: Timing
@@ -82,7 +82,7 @@ public actor DurableSubmissionExecutor {
     public init(
         store: any DurableTxRepositoryProtocol,
         policies: DurableSubmissionPolicyRegistry,
-        launcher: DurableSubmissionLauncher,
+        launcher: any DurableAttemptStarting,
         onPendingSubmissions: @escaping @Sendable () -> Void,
         backgroundExecutor: any BackgroundExecuting,
         timing: Timing = .production,

@@ -12,7 +12,10 @@ import SubstrateSdk
 /// recipient already holds.
 struct SplitExtrinsicBuilder: Sendable {
     let coinKeyFactory: any CoinKeyDeriving
-    let originFactory: OriginCreating
+    /// The origin factory is a shared, stateless service, but its protocol cannot carry `Sendable`: the
+    /// app's conformer inherits from a base class, which Swift forbids a `Sendable` class from doing. The
+    /// reference is only read here, so it is vouched for at the property rather than for the whole type.
+    nonisolated(unsafe) let originFactory: OriginCreating
     let factory: any DurableTxMaking
     let chainId: ChainId
 

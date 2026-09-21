@@ -30,7 +30,12 @@ final class DurabilityHarness: @unchecked Sendable {
     let stateReader: FakeCoinageStateReader
     let store: MockCoinageTxRepository
     let submitter: FakeExtrinsicSubmitter
-    private let backgroundExecutor = StubBackgroundExecutor()
+
+    /// Registered once and kept across ``crash()``, the way an app re-registers its policies on launch.
+    /// Empty by default: a transaction without a policy fails for good, which is what most scenarios mean.
+    let policies = DurableSubmissionPolicyRegistry()
+
+    let backgroundExecutor = StubBackgroundExecutor()
 
     private var subsystem: Subsystem
     private var nextExtrinsicSeq: UInt64 = 0
@@ -54,9 +59,14 @@ final class DurabilityHarness: @unchecked Sendable {
             chainFactory: chainFactory,
             stateReader: stateReader,
             submitter: submitter,
-            backgroundExecutor: backgroundExecutor
+            backgroundExecutor: backgroundExecutor,
+            policies: policies
         )
     }
+
+    /// Where a retriable failure is turned into another attempt — the same writer the pass and the
+    /// submission watch both go through.
+    var verdictWriter: DurableVerdictWriter { subsystem.verdictWriter }
 
     /// Recovery being asked for is the observable half of a submission release.
     var recoveryRequestCount: Int { subsystem.recorder.count }
@@ -84,7 +94,8 @@ final class DurabilityHarness: @unchecked Sendable {
             chainFactory: chainFactory,
             stateReader: stateReader,
             submitter: submitter,
-            backgroundExecutor: backgroundExecutor
+            backgroundExecutor: backgroundExecutor,
+            policies: policies
         )
         pendingSubmissions.withLock { $0.removeAll() }
     }
@@ -332,6 +343,7 @@ private extension DurabilityHarness {
         let registrar: DurableTxRegistrar
         let tracker: DurableTxTracker
         let pass: DurableRecoveryPass
+        let verdictWriter: DurableVerdictWriter
         let recorder: RecoveryRecorder
 
         static func build(
@@ -339,7 +351,8 @@ private extension DurabilityHarness {
             chainFactory: FakePinnedChainViewFactory<CoinageChainState>,
             stateReader: FakeCoinageStateReader,
             submitter _: FakeExtrinsicSubmitter,
-            backgroundExecutor: StubBackgroundExecutor
+            backgroundExecutor: StubBackgroundExecutor,
+            policies: DurableSubmissionPolicyRegistry
         ) -> Subsystem {
             let owned = DurableTxOwnershipSet()
             let recorder = RecoveryRecorder()
@@ -349,11 +362,9 @@ private extension DurabilityHarness {
                 for: .coinage
             )
             let registrar = DurableTxRegistrar(store: store.durable, owned: owned, logger: nil)
-            // No policies registered: every harness transaction fails for good, the way one without a
-            // policy always has. Scenarios that exercise rebuilds install their own.
             let verdictWriter = DurableVerdictWriter(
                 store: store.durable,
-                policies: DurableSubmissionPolicyRegistry(),
+                policies: policies,
                 logger: nil
             )
             let pass = DurableRecoveryPass(
@@ -372,7 +383,14 @@ private extension DurabilityHarness {
                 backgroundExecutor: backgroundExecutor,
                 logger: nil
             )
-            return Subsystem(owned: owned, registrar: registrar, tracker: tracker, pass: pass, recorder: recorder)
+            return Subsystem(
+                owned: owned,
+                registrar: registrar,
+                tracker: tracker,
+                pass: pass,
+                verdictWriter: verdictWriter,
+                recorder: recorder
+            )
         }
     }
 }

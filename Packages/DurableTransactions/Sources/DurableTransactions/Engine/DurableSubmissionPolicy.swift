@@ -1,4 +1,4 @@
-import ExtrinsicService
+@preconcurrency import ExtrinsicService
 import Foundation
 import SubstrateSdk
 

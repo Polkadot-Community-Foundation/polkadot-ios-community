@@ -3,7 +3,7 @@ import ExtrinsicService
 import Foundation
 import KeyDerivation
 import SDKLogger
-import SubstrateOperation
+@preconcurrency import SubstrateOperation
 import SubstrateSdk
 
 /// Declares a payment's recycler unloads: the vouchers each one redeems and the coins it mints.
@@ -21,7 +21,10 @@ struct UnloadExtrinsicBuilder: Sendable {
     let instanceId: CoinageInstanceId
     let voucherKeyFactory: any VoucherKeyDeriving
     let recyclerLoader: RecyclerReadinessLoading
-    let originFactory: OriginCreating
+    /// The origin factory is a shared, stateless service, but its protocol cannot carry `Sendable`: the
+    /// app's conformer inherits from a base class, which Swift forbids a `Sendable` class from doing. The
+    /// reference is only read here, so it is vouched for at the property rather than for the whole type.
+    nonisolated(unsafe) let originFactory: OriginCreating
     let blockInfoProvider: any BlockInfoProviding
     let quotaTracker: any UnloadQuotaTracking
     let factory: any DurableTxMaking

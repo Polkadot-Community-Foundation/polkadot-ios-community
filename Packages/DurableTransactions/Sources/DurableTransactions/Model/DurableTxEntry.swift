@@ -256,9 +256,9 @@ public struct DurableTxSchedule: Sendable, Equatable {
 public extension DurableTxSchedule {
     /// Builds the row the repository stores for a transaction that has not been built yet.
     ///
-    /// Its attempt fields are placeholders — a scheduled row has no bytes, no anchor and no window — and
-    /// stay meaningless until ``DurableTxEntry/withAttempt(_:)`` replaces them. Nothing reads them while
-    /// the status is ``DurableTxStatus/pendingSubmission``: the recovery pass filters on
+    /// It carries no attempt — a scheduled row has no bytes, no anchor and no window — until
+    /// ``DurableTxEntry/withAttempt(_:)`` gives it one. Nothing needs one while the status is
+    /// ``DurableTxStatus/pendingSubmission``: the recovery pass filters on
     /// ``DurableTxStatus/awaitsVerdict``, and a store never returns such a row from
     /// `getAllEntries(domain:)`. The row is still a ``DurableTxEntry`` so a caller watching its operation
     /// group sees the transaction exist and waits for it, rather than reading an empty group as a

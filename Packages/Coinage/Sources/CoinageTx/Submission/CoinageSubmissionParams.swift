@@ -135,6 +135,9 @@ private struct TransferParamsScale: ScaleCodable {
     }
 }
 
+/// `receivedKey` is a coin's 64-byte secret, written length-prefixed rather than as raw bytes: a fixed
+/// width here silently truncates the key, and a claim that cannot derive its source key is one the policy
+/// gives up on.
 private struct ClaimParamsScale: ScaleCodable {
     let retryUntilMillis: UInt64
     let receivedKey: Data
@@ -146,11 +149,11 @@ private struct ClaimParamsScale: ScaleCodable {
 
     init(scaleDecoder: any ScaleDecoding) throws {
         retryUntilMillis = try UInt64(scaleDecoder: scaleDecoder)
-        receivedKey = try scaleDecoder.readAndConfirm(count: 32)
+        receivedKey = try Data(scaleDecoder: scaleDecoder)
     }
 
     func encode(scaleEncoder: any ScaleEncoding) throws {
         try retryUntilMillis.encode(scaleEncoder: scaleEncoder)
-        scaleEncoder.appendRaw(data: receivedKey)
+        try receivedKey.encode(scaleEncoder: scaleEncoder)
     }
 }

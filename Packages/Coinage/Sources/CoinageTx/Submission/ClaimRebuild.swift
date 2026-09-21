@@ -2,7 +2,7 @@ import AsyncExtensions
 import DurableTransactions
 import ExtrinsicService
 import Foundation
-import NovaCrypto
+@preconcurrency import NovaCrypto
 
 /// A claim of a coin a peer handed us, rebuilt into the coin its first attempt recorded.
 ///
