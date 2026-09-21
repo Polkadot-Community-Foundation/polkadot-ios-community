@@ -1,5 +1,6 @@
 import DurableTransactions
 import Foundation
+import FoundationExt
 import SubstrateSdk
 
 /// What a transfer's policy needs beyond the ledger.
@@ -53,7 +54,7 @@ public enum CoinageSubmissionParams {
         let scale = try TransferParamsScale(scaleDecoder: ScaleDecoder(data: params))
 
         return TransferSubmissionParams(
-            buildUntil: Date(millisecondsSince1970: scale.buildUntilMillis),
+            buildUntil: Date(storedMilliseconds: scale.buildUntilMillis),
             retryFailures: scale.retryFailures
         )
     }
@@ -62,7 +63,7 @@ public enum CoinageSubmissionParams {
         let scale = try ClaimParamsScale(scaleDecoder: ScaleDecoder(data: params))
 
         return ClaimSubmissionParams(
-            retryUntil: Date(millisecondsSince1970: scale.retryUntilMillis),
+            retryUntil: Date(storedMilliseconds: scale.retryUntilMillis),
             receivedKey: scale.receivedKey
         )
     }
@@ -78,6 +79,18 @@ public extension TransferSubmissionParams {
             buildUntil: start.addingTimeInterval(CoinageConstants.claimRetryWindow),
             retryFailures: true
         )
+    }
+}
+
+private extension Date {
+    /// Whole milliseconds since 1970, so a window opened on one launch means the same thing on the
+    /// next. Stored as an integer rather than a `Double` so the value round-trips exactly.
+    var storedMilliseconds: Int64 {
+        Int64(timeIntervalSince1970.milliseconds)
+    }
+
+    init(storedMilliseconds: Int64) {
+        self.init(timeIntervalSince1970: UInt64(max(0, storedMilliseconds)).millisecondsToSeconds())
     }
 }
 
@@ -97,14 +110,14 @@ func retryableFailure(_ failure: DurableFailureKind, now: Date, deadline: Date) 
 private extension CoinageSubmissionParams {
     static func encode(_ params: TransferSubmissionParams) throws -> Data {
         try TransferParamsScale(
-            buildUntilMillis: params.buildUntil.millisecondsSince1970,
+            buildUntilMillis: params.buildUntil.storedMilliseconds,
             retryFailures: params.retryFailures
         ).scaleEncoded()
     }
 
     static func encode(_ params: ClaimSubmissionParams) throws -> Data {
         try ClaimParamsScale(
-            retryUntilMillis: params.retryUntil.millisecondsSince1970,
+            retryUntilMillis: params.retryUntil.storedMilliseconds,
             receivedKey: params.receivedKey
         ).scaleEncoded()
     }
@@ -147,16 +160,5 @@ private struct ClaimParamsScale: ScaleCodable {
     func encode(scaleEncoder: any ScaleEncoding) throws {
         try retryUntilMillis.encode(scaleEncoder: scaleEncoder)
         scaleEncoder.appendRaw(data: receivedKey)
-    }
-}
-
-private extension Date {
-    /// Whole milliseconds, so a window opened on one launch means the same thing on the next.
-    var millisecondsSince1970: Int64 {
-        Int64((timeIntervalSince1970 * 1_000).rounded())
-    }
-
-    init(millisecondsSince1970: Int64) {
-        self.init(timeIntervalSince1970: TimeInterval(millisecondsSince1970) / 1_000)
     }
 }

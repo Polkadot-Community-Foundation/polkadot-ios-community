@@ -184,6 +184,21 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
         }
     }
 
+    @discardableResult
+    public func abandonSubmissions(domain: TxDomainId, policyId: SubmissionPolicyId) async throws -> Int {
+        let doomed = state.withLock { current in
+            Self.pending(in: current)
+                .filter { $0.domainId == domain && $0.policy.id == policyId }
+                .map(\.id)
+        }
+
+        for id in doomed {
+            _ = try await abandonSubmission(id: id)
+        }
+
+        return doomed.count
+    }
+
     public func getSubmissionPolicy(id: DurableTxId) async throws -> SubmissionPolicy? {
         state.withLock { $0.policies[id] }
     }
@@ -218,7 +233,7 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
             guard let entry = current.entries[id],
                   entry.status.isLive,
                   entry.status == expectedCurrentStatus,
-                  entry.txHash == expectedTxHash
+                  entry.attempt?.txHash == expectedTxHash
             else {
                 return false
             }

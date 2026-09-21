@@ -56,10 +56,11 @@ public actor DurableSubmissionExecutor {
     }
 
     fileprivate struct Bucket: Hashable {
+        let domainId: TxDomainId
         let policyId: SubmissionPolicyId
         let groupId: DurableTxGroupId?
 
-        var logId: String { "policy=\(policyId) group=\(groupId ?? "none")" }
+        var logId: String { "domain=\(domainId) policy=\(policyId) group=\(groupId ?? "none")" }
     }
 
     private let store: any DurableTxRepositoryProtocol
@@ -143,7 +144,11 @@ private extension DurableSubmissionExecutor {
     }
 
     func bucket(of transaction: ScheduledDurableTx) -> Bucket {
-        Bucket(policyId: transaction.policy.id, groupId: transaction.groupId)
+        Bucket(
+            domainId: transaction.domainId,
+            policyId: transaction.policy.id,
+            groupId: transaction.groupId
+        )
     }
 
     func launchIfIdle(_ bucket: Bucket) {
@@ -288,14 +293,17 @@ private extension DurableSubmissionExecutor {
         }
     }
 
+    /// Every row naming this policy is unbuildable, whatever group it is in, so the store fails them
+    /// all in one write rather than this reading them back and deciding one at a time.
     func abandonAll(in bucket: Bucket) async {
-        let waiting = await (try? store.getPendingSubmissions(
-            policyId: bucket.policyId,
-            groupId: bucket.groupId
-        )) ?? []
-
-        for transaction in waiting {
-            _ = await abandon(transaction.id)
+        do {
+            let count = try await store.abandonSubmissions(
+                domain: bucket.domainId,
+                policyId: bucket.policyId
+            )
+            logger?.info("\(bucket.logId) abandoned=\(count) reason=no-registered-policy")
+        } catch {
+            logger?.warning("\(bucket.logId) abandon-all failed: \(error)")
         }
     }
 

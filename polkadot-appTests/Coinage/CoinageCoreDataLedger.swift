@@ -31,10 +31,15 @@ struct CoinageCoreDataLedger {
     /// against; the id is the one the store mints, not the entry's.
     @discardableResult
     func register(_ entry: CoinageTxEntry) async throws -> CoinageTxId {
+        // These suites register rows that were built, so a missing attempt is a broken fixture.
+        guard let attempt = entry.attempt else {
+            throw CoinageTxError.entryNotFound(entry.id)
+        }
+
         let registration = CoinageTxRegistration(
-            txHash: entry.txHash,
-            checkpoint: entry.checkpoint,
-            mortalityBlocks: entry.mortality,
+            txHash: attempt.txHash,
+            checkpoint: attempt.checkpoint,
+            mortalityBlocks: attempt.mortalityBlocks,
             groupId: entry.groupId,
             inputs: entry.inputs,
             outputs: entry.outputs
@@ -49,10 +54,14 @@ struct CoinageCoreDataLedger {
         guard let current = try await durable.getEntry(id: id) else {
             throw CoinageTxError.entryNotFound(id)
         }
+        guard let attempt = current.attempt else {
+            throw CoinageTxError.entryNotFound(id)
+        }
+
         _ = try await durable.updateTxStatus(
             for: id,
             expectedCurrentStatus: current.status,
-            expectedTxHash: current.txHash,
+            expectedTxHash: attempt.txHash,
             verdict: Verdict(status: status, successDetectedAt: nil)
         )
     }

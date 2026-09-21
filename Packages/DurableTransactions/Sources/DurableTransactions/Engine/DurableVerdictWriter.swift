@@ -26,12 +26,16 @@ public struct DurableVerdictWriter: Sendable {
     /// wrote.
     @discardableResult
     public func write(_ observed: DurableTxEntry, _ verdict: Verdict) async throws -> Bool {
+        // Only an attempt can be compared against, so a row without one is not this writer's to
+        // decide — the executor owns it until it has bytes.
+        guard let attempt = observed.attempt else { return false }
+
         let effective = try await effectiveVerdict(for: observed, verdict)
 
         return try await store.updateTxStatus(
             for: observed.id,
             expectedCurrentStatus: observed.status,
-            expectedTxHash: observed.txHash,
+            expectedTxHash: attempt.txHash,
             verdict: effective
         )
     }

@@ -1,6 +1,7 @@
 import ExtrinsicService
 import Foundation
 import SubstrateSdk
+import SubstrateSdkExt
 
 /// One attempt at a transaction: the bytes' hash and the window they can land in.
 ///
@@ -19,6 +20,18 @@ public struct DurableTxAttempt: Sendable, Equatable {
 }
 
 public extension DurableTxAttempt {
+    /// The last block this attempt can still execute in. Widened so a checkpoint near `UInt32.max`
+    /// cannot overflow.
+    var mortalityEnd: UInt64 {
+        UInt64(checkpoint.number) + UInt64(mortalityBlocks)
+    }
+
+    /// True when the extrinsic can no longer be included: `finalizedNumber` is past the last block of
+    /// the mortality window.
+    func isWindowClosed(atFinalized finalizedNumber: UInt32) -> Bool {
+        UInt64(finalizedNumber) > mortalityEnd
+    }
+
     /// Reads the attempt off a built extrinsic.
     ///
     /// Both the checkpoint and the mortality window come from the extrinsic's own `CheckMortality` era —
@@ -33,7 +46,7 @@ public extension DurableTxAttempt {
         }
 
         try self.init(
-            txHash: Data(hexString: model.extrinsic).blake2b32(),
+            txHash: model.extrinsic.fromHex().blake2b32(),
             checkpoint: BlockRef(number: anchor.blockNumber, hash: anchor.blockHash),
             mortalityBlocks: UInt32(period)
         )

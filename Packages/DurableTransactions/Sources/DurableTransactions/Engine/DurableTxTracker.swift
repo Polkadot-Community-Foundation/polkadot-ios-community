@@ -7,6 +7,7 @@ import os
 @preconcurrency import SDKLogger
 import StructuredConcurrency
 import SubstrateSdk
+import SubstrateSdkExt
 
 /// Follows one already-built extrinsic from submission to a terminal outcome.
 ///
@@ -41,7 +42,7 @@ public final class DurableTxTracker: Sendable {
 
         /// The hash of the bytes this watch follows — the attempt every verdict it writes is about.
         public var txHash: Data? {
-            try? Data(hexString: model.extrinsic).blake2b32()
+            try? model.extrinsic.fromHex().blake2b32()
         }
     }
 
@@ -317,7 +318,7 @@ private extension DurableTxTracker {
     /// because leaving `pendingSuccess` on a block that no longer exists would keep the domain's effects
     /// trusted for a whole mortality window on nothing.
     func clearRecordIfItNames(_ id: DurableTxId, attempt txHash: Data, blockHash: String) async {
-        guard let hash = try? Data(hexString: blockHash),
+        guard let hash = try? blockHash.fromHex(),
               let entry = try? await store.getEntry(id: id),
               entry.successDetectedAt?.hash == hash
         else { return }
@@ -332,7 +333,7 @@ private extension DurableTxTracker {
     func propose(_ id: DurableTxId, attempt txHash: Data, _ verdict: Verdict) async {
         guard let observed = try? await store.getEntry(id: id),
               observed.status.awaitsVerdict,
-              observed.txHash == txHash
+              observed.attempt?.txHash == txHash
         else { return }
 
         do {
@@ -353,11 +354,13 @@ private extension DurableTxTracker {
             let block = await blockOf(blockHash, using: view)
         else { return .failedRead }
 
-        return await view.dispatchOutcome(txHash: entry.txHash, at: block)
+        guard let attempt = entry.attempt else { return .failedRead }
+
+        return await view.dispatchOutcome(txHash: attempt.txHash, at: block)
     }
 
     func blockOf(_ blockHash: String, using view: any PinnedChainViewProtocol) async -> BlockRef? {
-        guard let hash = try? Data(hexString: blockHash) else { return nil }
+        guard let hash = try? blockHash.fromHex() else { return nil }
         return await view.blockRef(forHash: hash).value
     }
 }

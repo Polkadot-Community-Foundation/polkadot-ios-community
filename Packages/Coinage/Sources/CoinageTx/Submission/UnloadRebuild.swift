@@ -2,6 +2,7 @@ import AsyncExtensions
 import DurableTransactions
 import ExtrinsicService
 import Foundation
+import FoundationExt
 
 /// A payment's recycler unload, read back from the ledger: the vouchers it redeems and the coins it
 /// mints, in order.
@@ -21,7 +22,7 @@ struct UnloadRebuild: CoinageRebuild {
     let builder: UnloadExtrinsicBuilder
     /// The local tracked-voucher snapshots the gate watches — the same rows ``build(_:)`` reads.
     let voucherSnapshots: @Sendable () -> AnyAsyncSequence<[TrackedVoucher]>
-    let now: @Sendable () -> Date
+    let dateProvider: any DateProviding
 
     func terms(of params: Data) -> RebuildTerms? {
         guard let transfer = try? CoinageSubmissionParams.decodeTransfer(params) else { return nil }
@@ -85,7 +86,7 @@ struct UnloadRebuild: CoinageRebuild {
             )
         }
 
-        return try await builder.build(unloads, currentDate: now())
+        return try await builder.build(unloads, currentDate: dateProvider.read())
     }
 }
 

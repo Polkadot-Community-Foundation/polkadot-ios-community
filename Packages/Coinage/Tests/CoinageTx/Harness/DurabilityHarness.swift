@@ -290,7 +290,8 @@ final class DurabilityHarness: @unchecked Sendable {
             chainFactory.faults.everyBlockUnreadable = true
         case .outcomes:
             let entries = await (try? store.getAllEntries()) ?? []
-            chainFactory.faults.unreadableOutcomes.formUnion(entries.map(\.txHash))
+            // Only a row with an attempt has an outcome to make unreadable.
+            chainFactory.faults.unreadableOutcomes.formUnion(entries.compactMap(\.txHash))
         case .pin:
             chainFactory.faults.pinFails = true
         }

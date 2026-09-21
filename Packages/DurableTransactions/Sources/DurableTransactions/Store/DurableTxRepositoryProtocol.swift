@@ -71,6 +71,14 @@ public protocol DurableTxRepositoryProtocol: Sendable {
     /// Fails a transaction waiting to be built, for good. Returns whether it wrote.
     func abandonSubmission(id: DurableTxId) async throws -> Bool
 
+    /// Fails every transaction of `domain` waiting to be built by `policyId`, in one write.
+    ///
+    /// For a policy nothing has registered: every row naming it is unbuildable whatever group it is
+    /// in, so the store selects them with a predicate rather than having a caller read them all back
+    /// and decide one at a time. Returns how many it failed.
+    @discardableResult
+    func abandonSubmissions(domain: TxDomainId, policyId: SubmissionPolicyId) async throws -> Int
+
     /// The policy that may build this transaction again, if it has one.
     func getSubmissionPolicy(id: DurableTxId) async throws -> SubmissionPolicy?
 

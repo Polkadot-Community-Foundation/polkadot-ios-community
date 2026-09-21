@@ -353,7 +353,7 @@ private extension CoinageRulesTests {
         recordedStillCanonical: Bool? = nil
     ) async -> LadderEvaluation {
         let view = StubPinnedChainView(finalized: evidence.finalized, best: evidence.best)
-        view.setBodySearchResponse(entry.txHash, to: search)
+        view.setBodySearchResponse(entry.submittedAttempt.txHash, to: search)
         let scope = CoinagePassScope(dag: dag ?? self.dag(entry), evidence: [entry.id: evidence])
 
         let outcome = await CompletionLadder().evaluate(
@@ -362,7 +362,7 @@ private extension CoinageRulesTests {
             view: view,
             recordedStillCanonical: recordedStillCanonical
         )
-        return LadderEvaluation(outcome: outcome, view: view, txHash: entry.txHash)
+        return LadderEvaluation(outcome: outcome, view: view, txHash: entry.submittedAttempt.txHash)
     }
 
     func dag(_ entries: CoinageTxEntry..., handedOff: Set<PublicKey> = []) -> CoinageEntryDag {

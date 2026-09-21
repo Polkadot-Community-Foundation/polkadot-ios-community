@@ -3,6 +3,7 @@ import DurableTransactions
 import Foundation
 import Operation_iOS
 import SubstrateSdk
+import SubstrateSdkExt
 
 /// Maps the engine's ``DurableTxEntry`` to `CDDurableTx` — the domain-neutral fields only. A domain's
 /// rows hang off the same entity through their own relations and are written by that domain's store.
@@ -28,46 +29,39 @@ final class DurableTxMapper: CoreDataMapperProtocol {
 
         let successDetectedAt: BlockRef? =
             if let successHash = entity.successHash, let successNumber = entity.successNumber {
-                try BlockRef(number: successNumber.uint32Value, hash: Data(hexString: successHash))
+                try BlockRef(number: successNumber.uint32Value, hash: successHash.fromHex())
             } else {
                 nil
             }
 
-        // A row waiting to be built carries no attempt, so these columns are NULL and the entry gets
-        // the same placeholders ``DurableTxSchedule/makeEntry(id:sequence:)`` mints. Nothing reads them
-        // while the status is `pendingSubmission`.
-        let attempt = try Self.attempt(of: entity)
-
-        return DurableTxEntry(
+        return try DurableTxEntry(
             id: id,
             domainId: TxDomainId(domainId),
             sequence: entity.sequence,
             groupId: entity.groupId,
-            txHash: attempt.txHash,
-            checkpoint: attempt.checkpoint,
-            mortality: attempt.mortalityBlocks,
+            attempt: Self.attempt(of: entity),
             successDetectedAt: successDetectedAt,
             status: status,
             createdAt: createdAt
         )
     }
 
-    /// The attempt a row carries, or the placeholder triple for one that has none yet.
-    static func attempt(of entity: CDDurableTx) throws -> DurableTxAttempt {
+    /// The attempt a row carries, or `nil` when it has none.
+    ///
+    /// A row scheduled but not yet built stores NULL in all three columns. A row that stores only some
+    /// of them is not a half-attempt to be guessed at — it is unreadable, and `nil` keeps it out of
+    /// every rule rather than inventing a window for it.
+    static func attempt(of entity: CDDurableTx) throws -> DurableTxAttempt? {
         guard let txHashString = entity.txHash,
               let checkpointHash = entity.checkpointHash,
               let checkpointNumber = entity.checkpointNumber
         else {
-            return DurableTxAttempt(
-                txHash: Data(),
-                checkpoint: BlockRef(number: 0, hash: Data()),
-                mortalityBlocks: 0
-            )
+            return nil
         }
 
         return try DurableTxAttempt(
-            txHash: Data(hexString: txHashString),
-            checkpoint: BlockRef(number: checkpointNumber.uint32Value, hash: Data(hexString: checkpointHash)),
+            txHash: txHashString.fromHex(),
+            checkpoint: BlockRef(number: checkpointNumber.uint32Value, hash: checkpointHash.fromHex()),
             mortalityBlocks: UInt32(bitPattern: entity.mortality)
         )
     }
@@ -101,15 +95,7 @@ final class DurableTxMapper: CoreDataMapperProtocol {
         entity.groupId = model.groupId
         entity.createdAt = model.createdAt
 
-        let attempt: DurableTxAttempt? = model.status == .pendingSubmission
-            ? nil
-            : DurableTxAttempt(
-                txHash: model.txHash,
-                checkpoint: model.checkpoint,
-                mortalityBlocks: model.mortality
-            )
-
-        Self.apply(attempt: attempt, to: entity)
+        Self.apply(attempt: model.attempt, to: entity)
         Self.apply(status: model.status, successDetectedAt: model.successDetectedAt, to: entity)
     }
 

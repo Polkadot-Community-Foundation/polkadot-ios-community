@@ -39,15 +39,12 @@ public struct DurableTxEntry: Sendable, Equatable {
     /// A label only: no rule reads it. It lets an operation's transactions be found together.
     public let groupId: DurableTxGroupId?
 
-    /// Hash of the built extrinsic, fixed at registration. The body search looks block bodies up for it.
-    public let txHash: Data
-
-    /// The block the extrinsic's era is anchored to. The search window starts here, so no block below it
-    /// can contain this extrinsic.
-    public let checkpoint: BlockRef
-
-    /// Blocks after `checkpoint` during which the extrinsic can still be included.
-    public let mortality: UInt32
+    /// The bytes currently in flight and the window they can land in.
+    ///
+    /// `nil` for a transaction that has been scheduled but not built yet, and for a stored row whose
+    /// attempt columns cannot be read back. Nothing a rule needs is knowable without it, which is why
+    /// the ladder treats a missing attempt as undecided rather than guessing.
+    public let attempt: DurableTxAttempt?
 
     /// Block where execution was first observed. Only ever written where success is already proven, so
     /// Rule 0 need only re-check that the block is still canonical.
@@ -62,9 +59,7 @@ public struct DurableTxEntry: Sendable, Equatable {
         domainId: TxDomainId,
         sequence: Int64 = 0,
         groupId: DurableTxGroupId? = nil,
-        txHash: Data,
-        checkpoint: BlockRef,
-        mortality: UInt32,
+        attempt: DurableTxAttempt?,
         successDetectedAt: BlockRef? = nil,
         status: DurableTxStatus = .pending,
         createdAt: Date = Date()
@@ -73,12 +68,39 @@ public struct DurableTxEntry: Sendable, Equatable {
         self.domainId = domainId
         self.sequence = sequence
         self.groupId = groupId
-        self.txHash = txHash
-        self.checkpoint = checkpoint
-        self.mortality = mortality
+        self.attempt = attempt
         self.successDetectedAt = successDetectedAt
         self.status = status
         self.createdAt = createdAt
+    }
+
+    /// Convenience for a caller that already has the three parts of an attempt.
+    public init(
+        id: DurableTxId = UUID(),
+        domainId: TxDomainId,
+        sequence: Int64 = 0,
+        groupId: DurableTxGroupId? = nil,
+        txHash: Data,
+        checkpoint: BlockRef,
+        mortality: UInt32,
+        successDetectedAt: BlockRef? = nil,
+        status: DurableTxStatus = .pending,
+        createdAt: Date = Date()
+    ) {
+        self.init(
+            id: id,
+            domainId: domainId,
+            sequence: sequence,
+            groupId: groupId,
+            attempt: DurableTxAttempt(
+                txHash: txHash,
+                checkpoint: checkpoint,
+                mortalityBlocks: mortality
+            ),
+            successDetectedAt: successDetectedAt,
+            status: status,
+            createdAt: createdAt
+        )
     }
 }
 
@@ -89,17 +111,9 @@ extension DurableTxEntry: Operation_iOS.Identifiable {
 }
 
 public extension DurableTxEntry {
-    /// The last block this transaction can still execute in. Widened so a checkpoint near `UInt32.max`
-    /// cannot overflow.
-    var mortalityEnd: UInt64 {
-        UInt64(checkpoint.number) + UInt64(mortality)
-    }
-
-    /// True when the extrinsic can no longer be included: `finalizedNumber` is past the last block of
-    /// the mortality window.
-    func isWindowClosed(atFinalized finalizedNumber: UInt32) -> Bool {
-        UInt64(finalizedNumber) > mortalityEnd
-    }
+    var txHash: Data? { attempt?.txHash }
+    var checkpoint: BlockRef? { attempt?.checkpoint }
+    var mortality: UInt32? { attempt?.mortalityBlocks }
 
     /// A copy with `status` replaced — the entry is immutable, so a status write rebuilds it.
     func withStatus(_ status: DurableTxStatus) -> DurableTxEntry {
@@ -108,9 +122,7 @@ public extension DurableTxEntry {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: txHash,
-            checkpoint: checkpoint,
-            mortality: mortality,
+            attempt: attempt,
             successDetectedAt: successDetectedAt,
             status: status,
             createdAt: createdAt
@@ -126,9 +138,7 @@ public extension DurableTxEntry {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: attempt.txHash,
-            checkpoint: attempt.checkpoint,
-            mortality: attempt.mortalityBlocks,
+            attempt: attempt,
             successDetectedAt: nil,
             status: .pending,
             createdAt: createdAt
@@ -142,9 +152,7 @@ public extension DurableTxEntry {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: txHash,
-            checkpoint: checkpoint,
-            mortality: mortality,
+            attempt: attempt,
             successDetectedAt: block,
             status: status,
             createdAt: createdAt
@@ -158,9 +166,7 @@ public extension DurableTxEntry {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: txHash,
-            checkpoint: checkpoint,
-            mortality: mortality,
+            attempt: attempt,
             successDetectedAt: successDetectedAt,
             status: status,
             createdAt: createdAt
@@ -225,9 +231,7 @@ public extension DurableTxRegistration {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: attempt.txHash,
-            checkpoint: attempt.checkpoint,
-            mortality: attempt.mortalityBlocks,
+            attempt: attempt,
             status: .pending
         )
     }
@@ -265,9 +269,7 @@ public extension DurableTxSchedule {
             domainId: domainId,
             sequence: sequence,
             groupId: groupId,
-            txHash: Data(),
-            checkpoint: BlockRef(number: 0, hash: Data()),
-            mortality: 0,
+            attempt: nil,
             status: .pendingSubmission
         )
     }

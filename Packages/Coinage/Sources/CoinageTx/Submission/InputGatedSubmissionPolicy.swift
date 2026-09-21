@@ -40,7 +40,9 @@ final class InputGatedSubmissionPolicy<Rebuild: CoinageRebuild>: DurableSubmissi
     func canRetry(_: DurableTxEntry, params: Data, failure: DurableFailureKind) async -> Bool {
         guard let terms = rebuild.terms(of: params) else { return false }
 
-        return terms.retriesFailures && retryableFailure(failure, now: timing.now(), deadline: terms.deadline)
+        let now = await timing.dateProvider.read()
+
+        return terms.retriesFailures && retryableFailure(failure, now: now, deadline: terms.deadline)
     }
 
     func prepareSubmission(
@@ -120,8 +122,14 @@ private extension InputGatedSubmissionPolicy {
         let inputs = waiting.reduce(into: Set<Rebuild.InputKey>()) { $0.formUnion($1.inputs) }
 
         // The earliest deadline in the call decides when a look is the last word: a transaction that
-        // may still give up must not be held open by one that will keep waiting.
-        let deadline = waiting.map(\.terms.deadline).min() ?? timing.now()
+        // may still give up must not be held open by one that will keep waiting. With none to compare,
+        // now is already the deadline.
+        let deadline: Date =
+            if let earliest = waiting.map(\.terms.deadline).min() {
+                earliest
+            } else {
+                await timing.dateProvider.read()
+            }
 
         return try await Coinage.awaitInputs(
             presence: rebuild.presence(of: inputs),

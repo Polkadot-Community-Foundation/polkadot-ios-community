@@ -222,6 +222,35 @@ extension DurableTxCoreDataRepository {
         )
     }
 
+    @discardableResult
+    func abandonSubmissions(domain: TxDomainId, policyId: SubmissionPolicyId) async throws -> Int {
+        try await withTransaction { context in
+            let request = NSFetchRequest<CDDurableTx>(entityName: "CDDurableTx")
+            request.predicate = NSPredicate(
+                format: "%K == %@ AND %K == %@ AND %K == %d",
+                #keyPath(CDDurableTx.domainId),
+                domain.rawValue,
+                #keyPath(CDDurableTx.submissionPolicyId),
+                policyId.rawValue,
+                #keyPath(CDDurableTx.status),
+                DurableTxStatus.pendingSubmission.rawValue
+            )
+            request.returnsObjectsAsFaults = false
+
+            let entities = try context.fetch(request)
+
+            for entity in entities {
+                DurableTxMapper.apply(status: .failure, successDetectedAt: nil, to: entity)
+
+                for observer in self.rowObservers {
+                    observer.didChangeStatus(of: entity, in: context)
+                }
+            }
+
+            return entities.count
+        }
+    }
+
     func getSubmissionPolicy(id: DurableTxId) async throws -> SubmissionPolicy? {
         try await databaseService.performRead { context in
             try self.entity(id, in: context).flatMap { DurableTxMapper.policy(of: $0) }

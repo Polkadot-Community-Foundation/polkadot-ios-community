@@ -1,5 +1,6 @@
 import AsyncExtensions
 import Foundation
+import FoundationExt
 import os
 import StructuredConcurrency
 
@@ -18,14 +19,14 @@ struct InputWaitTiming: Sendable {
     /// executor another call, and bounds how long a look that never arrives can hold a call open.
     let idleLimit: Duration
 
-    /// The wall-clock time the deadline is checked against. Kept as a date rather than a clock instant
-    /// so a window opened on one launch means the same thing on the next.
-    let now: @Sendable () -> Date
+    /// The wall-clock time the deadline is checked against. A date rather than a clock instant, so a
+    /// window opened on one launch means the same thing on the next.
+    let dateProvider: any DateProviding
 
     static let production = InputWaitTiming(
         holdOut: .seconds(30),
         idleLimit: .seconds(300),
-        now: { Date() }
+        dateProvider: NowDateProvider()
     )
 }
 
@@ -91,13 +92,13 @@ func awaitInputs<Key: Hashable & Sendable>(
             }
 
             // Nothing visible and the window has closed: this look is the last word.
-            if timing.now() >= deadline { break }
+            if await timing.dateProvider.read() >= deadline { break }
         }
     }
 
     let seen = latest.withLock { $0 }
 
-    return InputsLook(present: seen ?? [], looked: seen != nil, takenAt: timing.now())
+    return await InputsLook(present: seen ?? [], looked: seen != nil, takenAt: timing.dateProvider.read())
 }
 
 /// Waits a little longer for the inputs a first look was missing.

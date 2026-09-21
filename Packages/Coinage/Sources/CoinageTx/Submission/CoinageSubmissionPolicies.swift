@@ -1,6 +1,7 @@
 import AsyncExtensions
 import DurableTransactions
 import Foundation
+import FoundationExt
 import NovaCrypto
 import SDKLogger
 import SubstrateSdk
@@ -56,7 +57,7 @@ private extension CoinageSubmissionPolicies {
                 voucherService: deps.voucherService,
                 builder: deps.unloadBuilder,
                 voucherSnapshots: deps.voucherSnapshots,
-                now: { Date() }
+                dateProvider: NowDateProvider()
             ),
             ledger: deps.ledger,
             logger: deps.logger
