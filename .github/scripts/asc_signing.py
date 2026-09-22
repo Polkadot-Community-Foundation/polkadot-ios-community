@@ -215,9 +215,12 @@ def load_signing_material() -> None:
 def preflight() -> None:
     s = session()
     bundle = os.environ.get("BUNDLE_ID") or "io.pcf.polkadotapp"
-    apps = get_all(s, f"{API}/v1/apps", {"filter[bundleId]": bundle, "limit": 200})
-    if not apps:
-        die(f"key accepted, but no app record for {bundle} is visible to it")
+    # filter[bundleId] also returns apps whose bundle id merely contains it: match exactly.
+    found = get_all(s, f"{API}/v1/apps", {"filter[bundleId]": bundle, "limit": 200})
+    apps = [a for a in found if a["attributes"].get("bundleId") == bundle]
+    if len(apps) != 1:
+        seen = ", ".join(sorted(str(a["attributes"].get("bundleId")) for a in found)) or "none"
+        die(f"key accepted, but {len(apps)} app records match {bundle} exactly (returned: {seen})")
     app_id = apps[0]["id"]
     print(f"key accepted; app record {bundle} = {app_id}")
 
