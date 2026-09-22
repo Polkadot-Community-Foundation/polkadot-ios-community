@@ -3059,17 +3059,6 @@
         }
       }
     },
-    "token.name": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CASH"
-          }
-        }
-      }
-    },
     "transaction.details.title": {
       "extractionState": "manual",
       "localizations": {
@@ -3175,7 +3164,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Available now"
+            "value": "Ready to send"
           }
         }
       }

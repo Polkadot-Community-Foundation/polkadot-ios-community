@@ -17,14 +17,13 @@ public struct AssetDetailsBalanceCard: View {
         content
             .accessibilityId(AccessibilityID.Wallet.cashCard)
             .cardAspectRatio()
-            .motionShine(.balanceCard)
             .bordered(
                 width: 0.5,
                 cornerRadius: 24,
                 gradient: LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
-                        .init(color: Color(hex: 0xEFEDED).opacity(0.5), location: 0.37)
+                        .init(color: Color(hex: 0xEFEDED).opacity(0.1), location: 0.37)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -38,13 +37,27 @@ public struct AssetDetailsBalanceCard: View {
                 .resizable()
                 .scaledToFill()
                 .clipped()
-                .opacity(isExpanded ? 1 : 0.2)
+                .overlay(alignment: .trailing) {
+                    Image(.cashBgIcon)
+                        .motionShineReveal(
+                            .balanceCardIcon,
+                            baseOpacity: 0.2,
+                            isActive: isExpanded
+                        )
+                }
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
-                    Image(.iconCashLogo)
-                    Text(.walletCardTitle)
-                        .textStyle(.title18SemiBold())
+                    if let logo = viewModel.logo {
+                        Image(uiImage: logo)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: Constants.logoHeight)
+                    } else {
+                        Image(.iconCashLogo)
+                        Text(viewModel.symbol ?? String(localized: .walletCardTitle))
+                            .textStyle(.title18SemiBold())
+                    }
 
                     Spacer()
 
@@ -109,11 +122,21 @@ public extension AssetDetailsBalanceCard {
     struct ViewModel {
         let balance: String?
         let readyBalance: String?
+        let logo: UIImage?
+        let symbol: String?
 
-        public init(balance: String?, readyBalance: String?) {
+        public init(balance: String?, readyBalance: String?, logo: UIImage? = nil, symbol: String? = nil) {
             self.balance = balance
             self.readyBalance = readyBalance
+            self.logo = logo
+            self.symbol = symbol
         }
+    }
+}
+
+private extension AssetDetailsBalanceCard {
+    enum Constants {
+        static let logoHeight: CGFloat = 35
     }
 }
 
