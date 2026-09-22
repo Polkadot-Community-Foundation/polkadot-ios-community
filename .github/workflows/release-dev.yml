@@ -119,10 +119,12 @@ jobs:
           echo "key_path=$PWD/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
 
       # Isolated venv: the runner's Homebrew python refuses a global pip install.
+      # Hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
       - name: Install App Store Connect tooling
         run: |
           python3 -m venv "$RUNNER_TEMP/ascenv"
-          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet pyjwt cryptography requests
+          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet --require-hashes --no-deps --only-binary :all: \
+            -r .github/scripts/requirements-asc.txt
 
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
@@ -208,6 +210,7 @@ jobs:
       # this runner created so the team account never fills up. Runs even when signing failed.
       - name: Revoke certificates created by this runner
         if: always()
+        timeout-minutes: 10
         env:
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
