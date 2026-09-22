@@ -34,6 +34,27 @@ struct VerdictWriterTests {
         #expect(store.statusSnapshot(of: entry.id) == .failure)
     }
 
+    @Test("a policy attached at registration survives, so an eager submission can still retry")
+    func policyOnRegistrationIsPersisted() async throws {
+        // A claim is built and submitted eagerly — it is registered, never scheduled — and still carries a
+        // policy. Dropping it at the persistence boundary makes every one of those failures terminal.
+        let store = InMemoryDurableTxRepository()
+        let policy = ScriptedSubmissionPolicy()
+        policy.answerRetry(true)
+        let writer = makeWriter(store: store, policy: policy)
+        let params = Data([4, 2])
+
+        let id = try await store.registerOne(policyId: policyId, params: params)
+        let entry = try #require(try await store.getEntry(id: id))
+
+        #expect(try await store.getSubmissionPolicy(id: id) == SubmissionPolicy(id: policyId, params: params))
+
+        let wrote = try await writer.write(entry, .dispatchFailure)
+
+        #expect(wrote)
+        #expect(store.statusSnapshot(of: id) == .pendingSubmission)
+    }
+
     @Test("a policy that wants it back sends it to pendingSubmission instead")
     func retryDefersToPendingSubmission() async throws {
         let store = InMemoryDurableTxRepository()
@@ -188,6 +209,25 @@ extension InMemoryDurableTxRepository {
         insert(entry)
 
         return try #require(allEntries.first { $0.id == entry.id })
+    }
+
+    /// Registers one already-built transaction carrying a policy — the eager-submission shape.
+    func registerOne(
+        policyId: SubmissionPolicyId,
+        params: Data = Data(),
+        payload: String = "first"
+    ) async throws -> DurableTxId {
+        let ids = try await register(
+            [DurableTxRegistration(
+                domainId: .test,
+                groupId: nil,
+                attempt: DurableTxAttempt(from: .fixture(payload: payload)),
+                policy: SubmissionPolicy(id: policyId, params: params)
+            )],
+            onRegister: { _, _ in }
+        )
+
+        return try #require(ids.first)
     }
 
     /// Schedules one transaction and returns its id, leaving it `pendingSubmission`.

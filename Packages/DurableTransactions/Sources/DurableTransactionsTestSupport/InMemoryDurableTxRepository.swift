@@ -74,6 +74,9 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
             for registration in registrations {
                 let id = DurableTxId()
                 current.entries[id] = registration.makeEntry(id: id, sequence: current.nextSequence)
+                // A registration carries a policy too: an eagerly submitted transaction is built now and
+                // may still be built again after a failure.
+                current.policies[id] = registration.policy
                 current.nextSequence += 1
                 ids.append(id)
             }
@@ -87,6 +90,7 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
         } catch {
             state.withLock { current in
                 current.entries = snapshot.entries
+                current.policies = snapshot.policies
                 current.nextSequence = snapshot.nextSequence
             }
             throw error

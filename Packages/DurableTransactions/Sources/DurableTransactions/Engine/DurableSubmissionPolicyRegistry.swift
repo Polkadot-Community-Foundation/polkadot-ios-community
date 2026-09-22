@@ -1,6 +1,5 @@
 import Foundation
 import os
-import SubstrateSdk
 
 /// The submission policies the engine knows, keyed by id. A domain registers its policies before it
 /// schedules anything.
@@ -21,12 +20,5 @@ public final class DurableSubmissionPolicyRegistry: Sendable {
 
     public func policy(for id: SubmissionPolicyId) -> (any DurableSubmissionPolicy)? {
         policies.withLock { $0[id] }
-    }
-
-    /// Every chain some registered policy builds for, deduplicated.
-    public var chainIds: [ChainId] {
-        var seen: Set<ChainId> = []
-        return policies.withLock { $0.values.map(\.chainId) }
-            .filter { seen.insert($0).inserted }
     }
 }

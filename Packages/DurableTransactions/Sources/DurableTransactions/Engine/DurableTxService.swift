@@ -29,24 +29,12 @@ public protocol DurableTxServicing: Sendable {
         onRegister: @escaping DurableTxRegistrationHook
     ) async throws -> [DurableTxId]
 
-    /// Registers transactions that have not been built yet, one per policy, as one operation. Each is
-    /// built and submitted by its policy afterwards, and built again as `submitTransactions` describes.
+    /// Registers transactions that have not been built yet, one per policy, as one operation, joining a
+    /// write the caller already opened.
     ///
-    /// What they will consume is locked from the moment this commits. When `scope` is given the rows join
-    /// that open transaction instead of opening one, so a caller already inside a write — the transport
-    /// that persists whatever carries the payment — commits its row and these together.
-    @discardableResult
-    func schedule(
-        domain: TxDomainId,
-        groupId: DurableTxGroupId?,
-        policies: [SubmissionPolicy],
-        in scope: (any DurableTxRegistrationScope)?,
-        onRegister: @escaping DurableTxRegistrationHook
-    ) async throws -> [DurableTxId]
-
-    /// The scope-joining half of ``schedule(domain:groupId:policies:in:onRegister:)``, synchronous
-    /// because its caller already is — a transport writing the row that carries a payment runs inside
-    /// its store's write block, which cannot suspend.
+    /// What they will consume is locked from the moment that write commits, so the payment's row and
+    /// these become durable together. Synchronous because its caller already is — a transport writing the
+    /// row that carries a payment runs inside its store's write block, which cannot suspend.
     @discardableResult
     func schedule(
         domain: TxDomainId,
@@ -95,23 +83,6 @@ public extension DurableTxServicing {
             requests: requests,
             groupId: groupId,
             policies: [],
-            onRegister: onRegister
-        )
-    }
-
-    /// Schedules transactions in a transaction of the engine's own.
-    @discardableResult
-    func schedule(
-        domain: TxDomainId,
-        groupId: DurableTxGroupId?,
-        policies: [SubmissionPolicy],
-        onRegister: @escaping DurableTxRegistrationHook
-    ) async throws -> [DurableTxId] {
-        try await schedule(
-            domain: domain,
-            groupId: groupId,
-            policies: policies,
-            in: nil,
             onRegister: onRegister
         )
     }
@@ -277,29 +248,6 @@ public extension DurableTxService {
         for (id, model) in zip(ids, models) {
             launcher.watch(id: id, model: model, chainId: chainId, submitter: submitter)
         }
-
-        return ids
-    }
-
-    @discardableResult
-    func schedule(
-        domain: TxDomainId,
-        groupId: DurableTxGroupId?,
-        policies: [SubmissionPolicy],
-        in scope: (any DurableTxRegistrationScope)?,
-        onRegister: @escaping DurableTxRegistrationHook
-    ) async throws -> [DurableTxId] {
-        let schedules = policies.map {
-            DurableTxSchedule(domainId: domain, groupId: groupId, policy: $0)
-        }
-
-        let ids = try await registrar.schedule(schedules, in: scope, onRegister: onRegister)
-
-        logger?.debug("Scheduled transactions=\(ids.count) groupId=\(String(describing: groupId))")
-
-        // Nothing is built until the executor reads these rows, so this is safe while an enclosing
-        // transaction has not committed them yet.
-        startRecoveryPass()
 
         return ids
     }

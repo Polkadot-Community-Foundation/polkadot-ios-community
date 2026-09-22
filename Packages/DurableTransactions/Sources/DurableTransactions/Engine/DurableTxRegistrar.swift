@@ -48,23 +48,6 @@ public struct DurableTxRegistrar: Sendable {
             throw error
         }
     }
-
-    /// Schedules every transaction atomically, with no attempt and no ownership — nothing is in flight
-    /// for them, so there is nothing for a pass to be kept away from.
-    ///
-    /// A non-`nil` `scope` is an already-open write transaction these rows join.
-    public func schedule(
-        _ schedules: [DurableTxSchedule],
-        in scope: (any DurableTxRegistrationScope)?,
-        onRegister: @escaping DurableTxRegistrationHook
-    ) async throws -> [DurableTxId] {
-        guard !schedules.isEmpty else { return [] }
-
-        let ids = try await store.schedule(schedules, in: scope, onRegister: onRegister)
-        logger?.debug("Scheduled \(ids.count) durable transaction(s)")
-
-        return ids
-    }
 }
 
 /// Collects the attempts the hook took ownership of, so ownership can be handed back if the transaction

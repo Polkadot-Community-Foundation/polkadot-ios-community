@@ -43,7 +43,7 @@ extension DurableTxCoreDataRepository {
             var ids: [DurableTxId] = []
             for registration in registrations {
                 let entry = try registration.makeEntry(id: DurableTxId(), sequence: self.nextSequence(in: context))
-                try self.insert(entry, in: context)
+                try self.insert(entry, policy: registration.policy, in: context)
                 ids.append(entry.id)
             }
 
@@ -325,9 +325,20 @@ private extension DurableTxCoreDataRepository {
         return (entities.first?.sequence ?? 0) + 1
     }
 
-    func insert(_ entry: DurableTxEntry, in context: NSManagedObjectContext) throws {
+    /// The one place a durable row is created.
+    ///
+    /// The policy is a separate argument because ``DurableTxEntry`` carries none — it belongs to the
+    /// registration, and a row's policy is read back on its own. Requiring it here is what stops a
+    /// creation path from silently dropping it: an eagerly submitted transaction that loses its policy
+    /// has no retry, and nothing downstream can tell that from one that never had a policy.
+    func insert(
+        _ entry: DurableTxEntry,
+        policy: SubmissionPolicy?,
+        in context: NSManagedObjectContext
+    ) throws {
         let entity = try context.insertNew(CDDurableTx.self)
         try mapper.populate(entity: entity, from: entry, using: context)
+        DurableTxMapper.apply(policy: policy, to: entity)
     }
 
     func insertSchedules(
@@ -339,9 +350,7 @@ private extension DurableTxCoreDataRepository {
 
         for schedule in schedules {
             let entry = try schedule.makeEntry(id: DurableTxId(), sequence: nextSequence(in: context))
-            let entity = try context.insertNew(CDDurableTx.self)
-            try mapper.populate(entity: entity, from: entry, using: context)
-            DurableTxMapper.apply(policy: schedule.policy, to: entity)
+            try insert(entry, policy: schedule.policy, in: context)
             ids.append(entry.id)
         }
 

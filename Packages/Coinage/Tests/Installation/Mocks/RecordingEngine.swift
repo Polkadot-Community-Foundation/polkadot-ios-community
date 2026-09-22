@@ -29,16 +29,6 @@ final class RecordingEngine: DurableTxServicing, @unchecked Sendable {
         domain _: TxDomainId,
         groupId _: DurableTxGroupId?,
         policies _: [SubmissionPolicy],
-        in _: (any DurableTxRegistrationScope)?,
-        onRegister _: @escaping DurableTxRegistrationHook
-    ) async throws -> [DurableTxId] {
-        []
-    }
-
-    func schedule(
-        domain _: TxDomainId,
-        groupId _: DurableTxGroupId?,
-        policies _: [SubmissionPolicy],
         joining _: any DurableTxRegistrationScope,
         onRegister _: DurableTxRegistrationHook
     ) throws -> [DurableTxId] {
