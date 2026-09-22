@@ -1,70 +1,43 @@
-name: Build (Production, unsigned)
+name: Build (Production)
 
-# PCF-231 / PCF-239. Compiles the **Release** configuration and proves the production feature
-# set builds. It produces an UNSIGNED artifact and distributes NOTHING — no TestFlight, no App
-# Store Connect upload, no GitHub release, no S3.
+# PCF-231 / PCF-239. Builds the Release configuration (the production surface: no environment,
+# no feature flags) and asserts its identity. Dispatch-only.
 #
-# Why this file exists at all, and why it is build-only:
+#   signing: none        unsigned compile proof; evidence goes to the private bucket only.
+#   signing: production  additionally archives, signs and uploads to TestFlight, available ONLY
+#                        to the INTERNAL group "Release Internal". Never an external group, never
+#                        App Store review. The `sign` job waits on `production-distribution`
+#                        (required reviewers).
 #
-#   The fork deleted every upstream release workflow, and upstream's own release distribution
-#   (`_build_distribute.yml`) has failed every run since 2026-08-21. More decisively, the Release
-#   configuration's identity is PARITY's, not PCF's: Configs/brand.xcconfig sets
-#   BRAND_BUNDLE_ROOT = io.parity.polkadotapp, Configs/base.release.xcconfig sets
-#   APP_MAIN_BUNDLE = $(BRAND_BUNDLE_ROOT), and polkadot-app.xcodeproj hardcodes
-#   DEVELOPMENT_TEAM = P2PX3JU8FT in the Release build configuration. PCF holds no Apple team
-#   (PCF-29, In Progress), no App Store record, and no signing certificates. A workflow that
-#   pretended to produce a shippable production build would be a lie.
-#
-#   So the honest deliverable today is the half that IS real: does the Release configuration —
-#   the one with NO feature flags, i.e. the actual production surface — still compile on this
-#   fork, and is it still the production surface? Nothing in this repository answers that today.
-#   build-dev.yml only ever builds `Dev`, upstream's pr.yml cannot run here (it wants Parity's
-#   Match repo), so the fork's -DDEV edits to KnownChains.swift, SupportedAssets.swift,
-#   AppConfig.swift and FirebaseApplicationService.swift have NEVER had their `#else` (Release)
-#   arm compiled by any CI. This lane compiles it.
-#
-# Modelled on .github/workflows/build-dev.yml, which is already build-only and is the correct
-# template. It deliberately does NOT extend or call _build_distribute.yml: that workflow always
-# distributes to TestFlight.
-#
-# Lane isolation (must be runnable at the same time as the devnet lane):
+# Lane isolation (runnable alongside the devnet lane):
 #   concurrency group  build-production-*        (devnet: build-dev-*, release-dev)
-#   output             private bucket, prefix ios/   (devnet: Actions artifacts polkadot-ios-dev,
-#                                                 dev-icon-evidence, storage-migration-test-results)
-#                      Never an Actions artifact: this repository is public and its artifacts are
-#                      downloadable by any signed-in GitHub user.
+#   output             private bucket, prefix ios/; TestFlight internal group "Release Internal"
+#                      Never an Actions artifact: this repository is public.
 #   configuration      Release                   (devnet: Dev)
-#   environment        production                (devnet declares only tester-distribution, and
-#                                                 only on its `distribute` job)
-# No production value is ever set at repository level: everything this job reads that is
-# production-specific comes from the `production` GitHub Environment, which only a job that
-# declares it can see. Every other job in the repository keeps resolving repository-level
-# values exactly as today.
+#   build number       10000 + run number        (devnet: release-dev run number). Both lanes
+#                      upload to the same App Store record (io.pcf.polkadotapp), so the ranges
+#                      must never meet.
 #
-# Environment `production` (no protection — public configuration only):
-#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64
-#       base64 of the GoogleService-Info.plist for the PRODUCTION PCF iOS Firebase app.
-#       NOT SET TODAY and no PCF iOS app is known to exist in the Firebase project
-#       (PCF-227 / PCF-29). When absent this job falls back to the committed PLACEHOLDER
-#       template and says so loudly. The fallback is fine for a compile; the artifact cannot
-#       reach Firebase at runtime.
-#   secret MELD_BASIC_AUTH_TOKEN   (optional) Meld on-ramp Basic token, baked in by
-#       Runscripts/generate_secrets.sh. Absent => empty => the on-ramp is inert.
-#   var    PRODUCTION_BUNDLE_ID    (optional) the PCF production bundle id, once PCF-29 lands.
-#       Used ONLY to assert what the build actually resolved. It does not drive the build:
-#       the identity lives in Configs/brand.xcconfig.
+# Environment `production` (no protection):
+#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  (optional) production Firebase plist. Falls back
+#       to the repo-level GOOGLESERVICE_INFO_PLIST_DEV_BASE64, which is the Firebase app registered
+#       for io.pcf.polkadotapp (the Dev build shares it), then to the committed placeholder.
+#   secret MELD_BASIC_AUTH_TOKEN   (optional) Meld on-ramp token. Absent => on-ramp inert.
+#   var    PRODUCTION_BUNDLE_ID    asserted against what the build resolved.
 #
-# Environment `production-distribution` (REQUIRED REVIEWERS — key material only):
-#   declared by the `sign` job below. Empty today; see guides/production/builds/ios.md.
+# Environment `production-distribution` (REQUIRED REVIEWERS):
+#   secrets PRODUCTION_APPLE_TEAM_ID, PRODUCTION_APP_STORE_CONNECT_KEY_ID,
+#   PRODUCTION_APP_STORE_CONNECT_ISSUER_ID, PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT.
+#   Interim: each falls back to the repo-level devnet App Store Connect key (APPLE_TEAM_ID,
+#   APP_STORE_CONNECT_*), same team, same app record. Set the PRODUCTION_* names to split them.
 #
-# SENTRY_* is deliberately not wired: Sentry is compiled only under TESTNET_FEATURE and is
-# therefore absent from Release (polkadot-app/Common/Analytics/IssueMonitoringService.swift).
+# SENTRY_* is deliberately not wired: Sentry is compiled only under TESTNET_FEATURE.
 
 on:
   workflow_dispatch:
     inputs:
       signing:
-        description: 'none = unsigned build only (the only thing PCF can do today). production = requires the production-distribution environment and FAILS until PCF-29 lands.'
+        description: 'none = unsigned build only. production = also archive, sign and upload to the internal TestFlight group "Release Internal" (waits for production-distribution approval).'
         type: choice
         options:
           - none
@@ -124,35 +97,6 @@ jobs:
           done
           exit "$missing"
 
-      # Fails BEFORE the expensive build, so nobody waits 40 minutes to learn PCF cannot sign.
-      # When PCF-29 lands: delete this step, and the `sign` job below becomes reachable.
-      - name: Refuse a production-signed build until PCF-29 lands
-        if: inputs.signing == 'production'
-        run: |
-          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-          ## `signing: production` is not available yet
-
-          PCF holds no Apple Developer team, no App Store Connect record for a PCF bundle id,
-          and no distribution certificate. Tracked by **PCF-29** (Set up Apple Dev account,
-          In Progress) and **PCF-231**.
-
-          The Apple credentials that DO exist in this repository (`APPLE_TEAM_ID`,
-          `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`,
-          `APP_STORE_CONNECT_KEY_CONTENT`) belong to the devnet TestFlight lane under Parity's
-          team. They must NOT be reused for a production identity.
-
-          What `production-distribution` needs on the day PCF-29 lands — see
-          `guides/production/builds/ios.md`:
-          `PRODUCTION_APPLE_TEAM_ID`, `PRODUCTION_APP_STORE_CONNECT_KEY_ID`,
-          `PRODUCTION_APP_STORE_CONNECT_ISSUER_ID`, `PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT`,
-          and a certificate source (a PCF `match` repository plus `PRODUCTION_MATCH_PASSWORD`
-          and `PRODUCTION_MATCH_RO_PAT`, or `-allowProvisioningUpdates` with the API key alone).
-
-          Re-run with `signing: none` for an unsigned Release build.
-          EOF
-          echo "::error::signing=production is unavailable: PCF has no Apple team (PCF-29). Re-run with signing=none."
-          exit 1
-
       - uses: actions/checkout@v4
         with:
           # Empty string = actions/checkout's default (the dispatched ref).
@@ -171,16 +115,22 @@ jobs:
       # RUN_IN_CI=true. Provide it here, exactly as build-dev.yml does for Dev.
       - name: Provide GoogleService-Info.plist (production Firebase app)
         env:
-          GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
+          GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
+          GS_APP_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
         run: |
-          if [ -n "$GS_B64" ]; then
-            echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
-            echo "::notice::Firebase: using the production plist from GOOGLESERVICE_INFO_PLIST_PROD_BASE64"
+          if [ -n "$GS_PROD_B64" ]; then
+            echo "$GS_PROD_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+            echo "::notice::Firebase: GOOGLESERVICE_INFO_PLIST_PROD_BASE64"
+          elif [ -n "$GS_APP_B64" ]; then
+            echo "$GS_APP_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+            echo "::notice::Firebase: repo-level GOOGLESERVICE_INFO_PLIST_DEV_BASE64 (the io.pcf.polkadotapp Firebase app)"
           else
             cp polkadot-app/GoogleService/GoogleService-Info-Release.plist.template \
                polkadot-app/GoogleService-Info.plist
-            echo "::warning::Firebase: GOOGLESERVICE_INFO_PLIST_PROD_BASE64 is not set in the 'production' environment. Falling back to the committed PLACEHOLDER template — this artifact CANNOT reach Firebase Remote Config at runtime, so it is a compile proof only. Tracked by PCF-227 / PCF-29."
+            echo "::warning::Firebase: no plist secret; using the committed PLACEHOLDER. This build cannot reach Remote Config at runtime."
           fi
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' polkadot-app/GoogleService-Info.plist 2>/dev/null || true)
+          echo "Firebase plist BUNDLE_ID: ${bundle:-<none>}"
 
       # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
       # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
@@ -206,7 +156,7 @@ jobs:
       #   polkadot-app/Configs/polkadot-app.release.xcconfig  BUNDLE = $(APP_MAIN_BUNDLE)
       #     -> Configs/base.release.xcconfig                  APP_MAIN_BUNDLE = $(BRAND_BUNDLE_ROOT)
       #                                                       BASE_SWIFT_FLAGS =   (empty, on purpose)
-      #     -> Configs/brand.xcconfig                         BRAND_BUNDLE_ROOT = io.parity.polkadotapp
+      #     -> Configs/brand.xcconfig                         BRAND_BUNDLE_ROOT = io.pcf.polkadotapp
       - name: Verify the Release configuration is the production surface
         run: |
           set -o pipefail
@@ -270,7 +220,7 @@ jobs:
               echo "::error::the Release configuration still resolves to a Parity bundle identifier (${resolved}); refusing to sign"
               fail=1
             else
-              echo "::warning::the Release configuration resolves to Parity's bundle identifier (${resolved}) and Parity's DEVELOPMENT_TEAM. This artifact is a COMPILE PROOF, not a shippable PCF build. Fixed by PCF-29 + a PCF value for BRAND_BUNDLE_ROOT in Configs/brand.xcconfig."
+              echo "::warning::the Release configuration resolves to Parity's bundle identifier (${resolved}) and Parity's DEVELOPMENT_TEAM. PCF must never ship under io.parity.*; check BRAND_BUNDLE_ROOT in Configs/brand.xcconfig."
             fi
           fi
 
@@ -362,50 +312,175 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Where real signing will live. UNREACHABLE TODAY: the guard in `build` fails the run first,
-  # so this job is never scheduled and nobody is asked to approve a job that can only fail.
-  #
-  # It is declared now so the gating model (PCF-239) is in the file rather than in someone's
-  # head: `production-distribution` is the environment that carries REQUIRED REVIEWERS and the
-  # key material, and it is declared by the job that signs — never by the job that builds.
-  #
-  # ⚠️ The gate lives in the ENVIRONMENT, not in this file. If `production-distribution` does
-  # not exist, GitHub auto-creates it UNPROTECTED on first use and this job runs straight
-  # through. Configure it under Settings → Environments → required reviewers BEFORE the guard
-  # above is removed.
+  # Archive, sign and upload to TestFlight for the INTERNAL group "Release Internal" only.
+  # Runs after `build` has proved the Release identity, and waits for a reviewer on
+  # `production-distribution`. The gate lives in the ENVIRONMENT: if it is ever deleted, GitHub
+  # recreates it unprotected and this job runs straight through.
   sign:
-    name: Sign for production (blocked on PCF-29)
+    name: Sign + TestFlight (Release Internal)
     needs: build
     if: inputs.signing == 'production'
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 120
     environment: production-distribution
+    env:
+      RUN_IN_CI: 'true'
+      TESTFLIGHT_GROUP: Release Internal
+      # PRODUCTION_* first; interim fallback to the repo-level devnet App Store Connect key.
+      TEAM_ID: ${{ secrets.PRODUCTION_APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+      KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+      ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
     steps:
-      - name: Assert the production signing material is present
+      - name: Require the signing material
         env:
-          TEAM_ID: ${{ secrets.PRODUCTION_APPLE_TEAM_ID }}
-          KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID }}
-          KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT }}
+          KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+          USING_PRODUCTION_KEY: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID != '' }}
         run: |
           missing=''
-          [ -n "$TEAM_ID" ]   || missing="$missing PRODUCTION_APPLE_TEAM_ID"
-          [ -n "$KEY_ID" ]    || missing="$missing PRODUCTION_APP_STORE_CONNECT_KEY_ID"
-          [ -n "$ISSUER_ID" ] || missing="$missing PRODUCTION_APP_STORE_CONNECT_ISSUER_ID"
-          [ -n "$KEY_B64" ]   || missing="$missing PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT"
+          [ -n "$TEAM_ID" ]   || missing="$missing TEAM_ID"
+          [ -n "$KEY_ID" ]    || missing="$missing KEY_ID"
+          [ -n "$ISSUER_ID" ] || missing="$missing ISSUER_ID"
+          [ -n "$KEY_B64" ]   || missing="$missing KEY_CONTENT"
           if [ -n "$missing" ]; then
-            echo "::error::missing in the production-distribution environment:$missing (PCF-29)"
+            echo "::error::missing App Store Connect inputs:$missing"
             exit 1
           fi
-          echo "all four App Store Connect inputs are present"
+          if [ "$USING_PRODUCTION_KEY" = "true" ]; then
+            echo "App Store Connect key: PRODUCTION_* (production-distribution)"
+          else
+            echo "::warning::App Store Connect key: repo-level devnet key (interim). Set PRODUCTION_APP_STORE_CONNECT_* in production-distribution to split it."
+          fi
+          # 10000 + run number: disjoint from the devnet lane's build numbers in the shared record.
+          BUILD_NUMBER=$((10000 + GITHUB_RUN_NUMBER))
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "build number: $BUILD_NUMBER"
 
-      # Signing itself is NOT implemented, on purpose. Writing an archive/export step against
-      # material nobody has ever held would be untested code that looks tested. The shape it
-      # will take is release-dev.yml's `testflight` job (archive -allowProvisioningUpdates with
-      # an ASC API key, then -exportArchive) with the production identity substituted — see
-      # guides/production/builds/ios.md. Even then this job ARCHIVES ONLY: uploading to App
-      # Store Connect is a separate decision tracked by PCF-231.
-      - name: Not implemented
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # Same resolution as the build job.
+      - name: Provide GoogleService-Info.plist (production Firebase app)
+        env:
+          GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
+          GS_APP_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
         run: |
-          echo "::error::production signing is not implemented; see guides/production/builds/ios.md"
-          exit 1
+          if [ -n "$GS_PROD_B64" ]; then
+            echo "$GS_PROD_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+          elif [ -n "$GS_APP_B64" ]; then
+            echo "$GS_APP_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+          else
+            echo "::error::no Firebase plist; refusing to ship a TestFlight build that cannot reach Remote Config"
+            exit 1
+          fi
+
+      - name: Generate build-time secrets
+        env:
+          MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
+        run: ./Runscripts/generate_secrets.sh
+
+      - name: Install App Store Connect API key
+        id: asc
+        env:
+          KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8"
+          echo "key_path=$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve SwiftPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+
+      - name: Write ExportOptions.plist
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          EOF
+
+      - name: Archive (Release)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project polkadot-app.xcodeproj \
+            -scheme polkadot-app \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/polkadot-app.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            archive 2>&1 | tail -n 200
+
+      - name: Export signed .ipa
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/polkadot-app.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build/ \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
+
+      - name: Verify the signed .ipa identity
+        run: |
+          set -euo pipefail
+          IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
+          [ -n "$IPA" ] || { echo "::error::no .ipa exported"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ipa" && unzip -q "$IPA" -d "$RUNNER_TEMP/ipa"
+          app=$(find "$RUNNER_TEMP/ipa/Payload" -maxdepth 1 -name '*.app' | head -1)
+          id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          ver=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")
+          num=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")
+          codesign -d --entitlements :- "$app" > "$RUNNER_TEMP/entitlements.plist" 2>/dev/null
+          aps=$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$RUNNER_TEMP/entitlements.plist" 2>/dev/null || echo '<none>')
+          {
+            echo "### Signed production build"
+            echo '```'
+            echo "bundle id       $id"
+            echo "version         $ver ($num)"
+            echo "aps-environment $aps"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          expected='${{ vars.PRODUCTION_BUNDLE_ID }}'
+          if [ -n "$expected" ] && [ "$id" != "$expected" ]; then
+            echo "::error::signed bundle id '$id' != PRODUCTION_BUNDLE_ID '$expected'"
+            exit 1
+          fi
+          [ "$num" = "$BUILD_NUMBER" ] || { echo "::error::CFBundleVersion $num != $BUILD_NUMBER"; exit 1; }
+          echo "IPA=$IPA" >> "$GITHUB_ENV"
+
+      # Internal group only: no --distribute_external, so no Beta App Review and no public link.
+      - name: Upload to TestFlight (internal group only)
+        run: |
+          jq -n \
+            --arg key_id "$KEY_ID" \
+            --arg issuer_id "$ISSUER_ID" \
+            --rawfile key "${{ steps.asc.outputs.key_path }}" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > "$RUNNER_TEMP/asc_api_key.json"
+          fastlane pilot upload \
+            --api_key_path "$RUNNER_TEMP/asc_api_key.json" \
+            --ipa "$IPA" \
+            --distribute_external false \
+            --groups "$TESTFLIGHT_GROUP" \
+            --changelog "Production (Release) build ${BUILD_NUMBER} (${GITHUB_SHA:0:7}). Internal testing only."
+          {
+            echo "### TestFlight"
+            echo "Uploaded build ${BUILD_NUMBER} to internal group **${TESTFLIGHT_GROUP}**."
+          } >> "$GITHUB_STEP_SUMMARY"
