@@ -92,16 +92,11 @@ struct AssetDetailsView: View {
     }
 
     private func actions() -> some View {
-        HStack(spacing: 12) {
-            DSButton(.actionSendCash, leadingIcon: .iconArrowUp16, expands: true) {
+        HStack(spacing: DSSpacings.small) {
+            DSButton(.actionSendCash, expands: true) {
                 viewModel.onSendMoney?()
             }
             .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
-
-            circleButton(.iconArrowUpRight24, isLoading: viewModel.isWithdrawInProgress) {
-                viewModel.onWithdraw?()
-            }
-            .accessibilityId(AccessibilityID.Wallet.withdrawButton)
 
             // Get CASH (the funding ramp) opens the DotNS product named by
             // AppConfig.DotNs.dotNsGetSome, which Remote Config publishes as `funding_url` /
@@ -110,20 +105,38 @@ struct AssetDetailsView: View {
             // defines no TESTNET_FEATURE, so the production entry point is unchanged. Delete
             // this one gate to bring the button back once the funding product is deployed.
             //
-            // Upstream refactored the fork's `topUpButton()` into `circleButton` and added the
-            // sibling withdraw button above. Only the funding (top-up) entry point is gated,
-            // which is exactly the original fork delta — withdraw resolves offrampPage(), a
-            // different product, and is left as upstream ships it.
-            //
-            // This is NOT the faucet: testnetTopUpButton() below is a separate feature and
-            // deliberately stays visible.
+            // Only the funding (top-up) entry point is gated: withdraw resolves offrampPage(),
+            // a different product, and stays as upstream ships it. This is NOT the faucet —
+            // testnetTopUpButton() below is a separate feature and deliberately stays visible.
             #if !TESTNET_FEATURE
                 circleButton(.add24, isLoading: viewModel.isTopUpInProgress) {
                     viewModel.onTopUp?()
                 }
                 .accessibilityId(AccessibilityID.Wallet.addFundsButton)
             #endif
+
+            withdrawButton()
         }
+    }
+
+    private func withdrawButton() -> some View {
+        Button {
+            viewModel.onWithdraw?()
+        } label: {
+            Group {
+                if viewModel.isWithdrawInProgress {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.fgPrimaryInverted)
+                } else {
+                    Text(String(localized: .actionWithdraw))
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.ds(style: .primary, shape: .pill, size: .large))
+        .disabled(viewModel.isWithdrawInProgress)
+        .accessibilityId(AccessibilityID.Wallet.withdrawButton)
     }
 
     private func circleButton(
@@ -200,29 +213,33 @@ private struct CoinageBalanceBreakdownView: View {
     @State private var showExplanation = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(String(localized: .coinageSummaryTitle))
-                .textStyle(.title16SemiBold())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityId(AccessibilityID.Wallet.coinageHeader)
+        VStack(spacing: DSSpacings.extraMedium) {
+            VStack(spacing: 0) {
+                Text(.coinageSummaryTitle)
+                    .typography(.bodyMedium)
+                    .foregroundStyle(.fgSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityId(AccessibilityID.Wallet.coinageHeader)
 
-            totalHeadline
+                totalHeadline
+            }
 
             CoinageCompositionBar(model: breakdown.composition)
-                .padding(.vertical, 2)
+                .padding(.vertical, DSSpacings.extraTiny)
 
             summaryLegend
 
             Button {
                 withAnimation { showDetails.toggle() }
             } label: {
-                HStack {
+                HStack(spacing: DSSpacings.extraSmall) {
+                    Image(.iconArrowUp16)
+                        .renderingMode(.template)
+                        .rotationEffect(.degrees(showDetails ? 0 : 180))
                     Text(String(localized: showDetails ? .coinageHideDetails : .coinageShowDetails))
-                        .textStyle(.body14SemiBold())
-                    Image(systemName: showDetails ? "chevron.up" : "chevron.down")
-                        .font(.caption)
+                        .typography(.bodyMediumEmphasized)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(.fgPrimary)
             }
 
@@ -231,47 +248,39 @@ private struct CoinageBalanceBreakdownView: View {
                 CoinageExplanationView(isExpanded: $showExplanation)
             }
         }
-        .padding(16)
-        .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: 24))
+        .padding(DSSpacings.mediumIncreased)
+        .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: DSRadii.large))
     }
 
     private var totalHeadline: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(String(localized: .coinageTotalBalance))
-                .textStyle(.caption12Regular())
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(breakdown.totalBalance)
+                .typography(.displaySmall)
+                .lineLimit(1)
+                .accessibilityId(AccessibilityID.Wallet.coinageTotalBalanceValue)
+
+            Text(breakdown.symbol)
+                .typography(.titleMedium)
                 .foregroundStyle(Color.fgSecondary)
-                .accessibilityId(AccessibilityID.Wallet.coinageTotalBalanceLabel)
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(breakdown.totalBalance)
-                    .textStyle(.title32SemiBold())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .accessibilityId(AccessibilityID.Wallet.coinageTotalBalanceValue)
-
-                Text(breakdown.symbol)
-                    .textStyle(.caption12Regular())
-                    .foregroundStyle(Color.fgSecondary)
-            }
-            .foregroundStyle(Color.fgPrimary)
         }
+        .foregroundStyle(Color.fgPrimary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The three figures partition the total and are the three sections of the bar above, in the
+    /// The two figures partition the total and are the two sections of the bar above, in the
     /// same order, each keyed to its section by a swatch.
     ///
-    /// A grid rather than three stacked columns: a label long enough to wrap would otherwise push
-    /// its own value down and leave the three figures on different lines.
+    /// A grid rather than two stacked columns: a label long enough to wrap would otherwise push
+    /// its own value down and leave the two figures on different lines.
     private var summaryLegend: some View {
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+        Grid(alignment: .leading, horizontalSpacing: DSSpacings.small, verticalSpacing: DSSpacings.tiny) {
             GridRow {
                 ForEach(legendEntries) { entry in
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpacings.extraSmall) {
                         CoinageLegendSwatch(kind: entry.kind)
 
                         Text(entry.title)
-                            .textStyle(.caption12Regular())
+                            .typography(.bodySmall)
                             .foregroundStyle(Color.fgSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityId(entry.labelAccessibilityId)
@@ -284,7 +293,7 @@ private struct CoinageBalanceBreakdownView: View {
             GridRow {
                 ForEach(legendEntries) { entry in
                     Text(entry.value)
-                        .textStyle(.body14SemiBold())
+                        .typography(.titleLarge)
                         .foregroundStyle(Color.fgPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -309,13 +318,6 @@ private struct CoinageBalanceBreakdownView: View {
                 kind: .gainingPrivacy,
                 title: String(localized: .coinageLoading),
                 value: breakdown.gainingPrivacyBalance
-            ),
-            LegendEntry(
-                kind: .unavailable,
-                title: String(localized: .coinageUnavailable),
-                value: breakdown.pendingBalance,
-                labelAccessibilityId: AccessibilityID.Wallet.coinagePendingBalanceLabel,
-                valueAccessibilityId: AccessibilityID.Wallet.coinagePendingBalanceValue
             )
         ]
     }
@@ -331,9 +333,9 @@ private struct CoinageDetailsView: View {
     @State private var amountColumnWidth: CGFloat?
 
     var body: some View {
-        LazyVStack(spacing: 18) {
+        LazyVStack(spacing: DSSpacings.mediumIncreased) {
             ForEach(breakdown.holdings) { holding in
-                HStack(spacing: 12) {
+                HStack(spacing: DSSpacings.extraMedium) {
                     amountText(holding.amount)
                         .frame(width: amountColumnWidth, alignment: .trailing)
 
@@ -374,7 +376,7 @@ private extension CoinageDetailsView {
     }
 }
 
-/// One of the three figures under the summary bar.
+/// One of the two figures under the summary bar.
 private struct LegendEntry: Identifiable {
     let kind: CoinageLegendSwatch.Kind
     let title: String

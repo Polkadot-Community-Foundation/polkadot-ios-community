@@ -38,7 +38,10 @@ decode models (`ReviveDryRunResult`, `ReviveStorageDeposit`, `ReviveExecResult`,
 2. **A revert is an error.** Both the read-only call and the dry run throw `ReviveContractRevertedError`
    when the return flags carry the revert bit; a dispatch error (the pallet refused the call) is
    `ReviveContractError.callFailed`. Callers never see revert bytes as content. DotNs wraps either as
-   `DotNsContractError.contractCallFailed`.
+   `DotNsContractError.contractCallFailed`, with one exception: a revert carrying no data is Solidity's
+   bare `revert()` on a selector the contract does not implement (a registry entry can name a contract
+   that is not a resolver), so `ReviveDotNsContractApi` reads it as "no record" and falls back exactly
+   as it does for empty output.
 3. **`EvmAddress` at every contract seam.** Contract addresses, `Revive.call`'s `dest`, and H160s are
    `EvmAddress`. Because it is an alias, bytes that come from outside pass `EvmAddressFormat.validate`
    at the boundary: the remote-config readers (`FirebaseApplicationService`, `AppConfig.DotNs.config()`)

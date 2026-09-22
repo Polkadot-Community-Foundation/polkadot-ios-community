@@ -126,10 +126,10 @@ private final class StubRemoteConfig: RemoteConfigManaging, @unchecked Sendable 
             dotNsResolver: nil,
             dotNsNameRegistry: nil,
             coinageInstanceId: nil,
-            fundingDomain: nil,
             fundingUrl: nil,
             offrampUrl: nil,
-            accountDataStoreContract: nil
+            accountDataStoreContract: nil,
+            paymentAsset: nil
         )
     }
 
