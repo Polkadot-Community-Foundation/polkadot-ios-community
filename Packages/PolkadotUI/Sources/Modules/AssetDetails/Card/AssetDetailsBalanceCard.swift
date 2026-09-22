@@ -17,14 +17,13 @@ public struct AssetDetailsBalanceCard: View {
         content
             .accessibilityId(AccessibilityID.Wallet.cashCard)
             .cardAspectRatio()
-            .motionShine(.balanceCard)
             .bordered(
                 width: 0.5,
                 cornerRadius: 24,
                 gradient: LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
-                        .init(color: Color(hex: 0xEFEDED).opacity(0.5), location: 0.37)
+                        .init(color: Color(hex: 0xEFEDED).opacity(0.1), location: 0.37)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -40,7 +39,11 @@ public struct AssetDetailsBalanceCard: View {
                 .clipped()
                 .overlay(alignment: .trailing) {
                     Image(.cashBgIcon)
-                        .opacity(isExpanded ? 1 : 0.2)
+                        .motionShineReveal(
+                            .balanceCardIcon,
+                            baseOpacity: 0.2,
+                            isActive: isExpanded
+                        )
                 }
 
             VStack(alignment: .leading, spacing: 0) {
