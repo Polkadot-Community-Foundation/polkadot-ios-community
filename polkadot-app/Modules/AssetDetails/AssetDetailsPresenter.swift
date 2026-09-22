@@ -24,7 +24,6 @@ final class AssetDetailsPresenter {
 
     private let chainAsset: ChainAsset
     private var balance: Decimal = 0
-    private var lockedAmount: Decimal = 0
     /// Classified alongside the balance figures, so the rows and the bar always account for
     /// exactly the total shown above them.
     private var holdings: CoinageHoldings = .empty
@@ -72,18 +71,18 @@ final class AssetDetailsPresenter {
 
         view?.didReceiveData(viewModel: .token(balanceViewModel), index: 0)
 
-        guard lockedAmount > 0 else {
-            view?.didReceive(lockedAmount: nil)
+        guard (coinageAmounts?.gainingPrivacy ?? 0) > 0 else {
+            view?.didReceive(readyAmount: nil)
             return
         }
 
-        let lockedViewModel = balanceViewModelFactory.balanceFromPrice(
-            lockedAmount,
+        let readyViewModel = balanceViewModelFactory.balanceFromPrice(
+            coinageAmounts?.availableNow ?? 0,
             priceData: price
         )
         .value(for: .current)
 
-        view?.didReceive(lockedAmount: lockedViewModel)
+        view?.didReceive(readyAmount: readyViewModel)
     }
 }
 
@@ -162,6 +161,7 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
     func didReceive(coinageAmounts: CoinageAmounts, holdings: CoinageHoldings) {
         self.coinageAmounts = coinageAmounts
         self.holdings = holdings
+        provideAssetBalance()
         provideCoinageBreakdown()
     }
 
@@ -183,14 +183,6 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
 
     func didReceive(balance: Decimal) {
         self.balance = balance
-        provideAssetBalance()
-        #if TESTNET_FEATURE
-            provideCoinageBreakdown()
-        #endif
-    }
-
-    func didReceive(lockedAmount: Decimal) {
-        self.lockedAmount = lockedAmount
         provideAssetBalance()
         #if TESTNET_FEATURE
             provideCoinageBreakdown()
@@ -335,7 +327,6 @@ private extension AssetDetailsPresenter {
             totalBalance: formatted(from: amounts.total, includeSymbol: false),
             availableNowBalance: formatted(from: amounts.availableNow, includeSymbol: false),
             gainingPrivacyBalance: formatted(from: amounts.gainingPrivacy, includeSymbol: false),
-            pendingBalance: formatted(from: amounts.pending, includeSymbol: false),
             symbol: chainAsset.asset.digitalDollarDisplayInfo.symbol,
             composition: context.map {
                 CoinageBreakdownFactory.composition(of: holdings, context: $0)

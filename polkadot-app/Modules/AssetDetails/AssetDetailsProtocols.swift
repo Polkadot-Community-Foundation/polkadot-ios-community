@@ -9,7 +9,7 @@ import Products
 protocol AssetDetailsViewProtocol: ControllerBackedProtocol {
     func didSetCards(viewModels: [WalletCardCreateViewModel])
     func didReceiveData(viewModel: WalletCardDataViewModel, index: Int)
-    func didReceive(lockedAmount: BalanceViewModelProtocol?)
+    func didReceive(readyAmount: BalanceViewModelProtocol?)
     func didReceive(paymentAsset: PaymentAssetViewModelProtocol)
     func didReceive(fundingStates: [AssetFundingStatusView.FundingState])
     func didReceive(isRecoveryInProgress: Bool)
@@ -60,7 +60,6 @@ protocol AssetDetailsInteractorInputProtocol: AnyObject {
 @MainActor
 protocol AssetDetailsInteractorOutputProtocol: AnyObject {
     func didReceive(balance: Decimal)
-    func didReceive(lockedAmount: Decimal)
 
     func didReceive(price: PriceData?)
     func didReceive(fiatOnrampStatuses: Set<FiatOnrampTransactionStatusPayload>)

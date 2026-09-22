@@ -38,6 +38,7 @@ public struct AssetDetailsBalanceCard: View {
                 .resizable()
                 .scaledToFill()
                 .clipped()
+                .opacity(isExpanded ? 1 : 0.2)
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
@@ -65,27 +66,37 @@ public struct AssetDetailsBalanceCard: View {
                 .animation(.easeInOut, value: isExpanded)
                 Spacer()
 
-                Group {
-                    if isUpdating {
-                        SwiftUI.Label {
-                            Text(.walletCardUpdatingBalance)
-                                .textStyle(.body14Regular())
-                        } icon: {
-                            SpinningUpdateIcon()
+                if isUpdating {
+                    SwiftUI.Label {
+                        Text(.walletCardUpdatingBalance)
+                            .textStyle(.body14Regular())
+                    } icon: {
+                        SpinningUpdateIcon()
+                    }
+                    .foregroundStyle(.white)
+                }
+
+                if isExpanded, let readyBalance = viewModel.readyBalance, let balance = viewModel.balance {
+                    VStack(alignment: .leading, spacing: DSSpacings.small) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(.walletCardReady)
+                                .typography(.bodyMedium)
+                                .foregroundStyle(Color.fgSecondary)
+                            Text(readyBalance)
+                                .typography(.bodyMedium)
                         }
-                    } else if let lockedAmount = viewModel.lockedAmount {
-                        SwiftUI.Label {
-                            Text(lockedAmount)
-                                .textStyle(.body14Regular())
-                        } icon: {
-                            Image(.iconAssetLock)
-                                .renderingMode(.template)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(.walletCardTotalBalance)
+                                .typography(.bodyMedium)
+                                .foregroundStyle(Color.fgSecondary)
+                            Text(balance)
+                                .typography(.headlineMedium)
+                                .shimmering(active: isUpdating)
+                                .accessibilityId(AccessibilityID.Wallet.totalBalance)
                         }
                     }
-                }
-                .foregroundStyle(.white)
-
-                if let balance = viewModel.balance {
+                } else if let balance = viewModel.balance {
                     Text(balance)
                         .typography(.headlineMedium)
                         .shimmering(active: isUpdating)
@@ -93,8 +104,10 @@ public struct AssetDetailsBalanceCard: View {
                 }
             }
             .foregroundStyle(Color.white)
-            .padding(.vertical, 18)
-            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, DSSpacings.mediumIncreased)
+            .padding(.leading, DSSpacings.large)
+            .padding(.trailing, 22)
         }
     }
 }
@@ -102,13 +115,13 @@ public struct AssetDetailsBalanceCard: View {
 public extension AssetDetailsBalanceCard {
     struct ViewModel {
         let balance: String?
-        let lockedAmount: String?
+        let readyBalance: String?
         let logo: UIImage?
         let symbol: String?
 
-        public init(balance: String?, lockedAmount: String?, logo: UIImage? = nil, symbol: String? = nil) {
+        public init(balance: String?, readyBalance: String?, logo: UIImage? = nil, symbol: String? = nil) {
             self.balance = balance
-            self.lockedAmount = lockedAmount
+            self.readyBalance = readyBalance
             self.logo = logo
             self.symbol = symbol
         }
@@ -125,8 +138,19 @@ private extension AssetDetailsBalanceCard {
     ZStack {
         Color.gray
         AssetDetailsBalanceCard(
-            viewModel: AssetDetailsBalanceCard.ViewModel(balance: "123", lockedAmount: "123"),
+            viewModel: AssetDetailsBalanceCard.ViewModel(balance: "123", readyBalance: nil),
             isUpdating: true
+        )
+    }
+}
+
+#Preview("Expanded with Ready balance") {
+    ZStack {
+        Color.gray
+        AssetDetailsBalanceCard(
+            viewModel: AssetDetailsBalanceCard.ViewModel(balance: "456", readyBalance: "100"),
+            isUpdating: false,
+            isExpanded: true
         )
     }
 }
