@@ -353,6 +353,7 @@ jobs:
           # 10000 + run number: disjoint from the devnet lane's build numbers in the shared record.
           BUILD_NUMBER=$((10000 + GITHUB_RUN_NUMBER))
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
           echo "build number: $BUILD_NUMBER"
 
       - uses: actions/checkout@v4
@@ -391,7 +392,26 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/asc"
           echo "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8"
+          mkdir -p ~/.appstoreconnect/private_keys
+          cp "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
           echo "key_path=$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
+
+      # Isolated venv: the runner's Homebrew python refuses a global pip install.
+      - name: Install App Store Connect tooling
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ascenv"
+          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet pyjwt cryptography requests
+
+      # Fails in seconds, before the archive: key accepted, app record visible, group internal.
+      - name: Preflight App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+          BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID || 'io.pcf.polkadotapp' }}
+        run: |
+          echo "team ${TEAM_ID:0:4}…"
+          "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py preflight
 
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
@@ -484,3 +504,15 @@ jobs:
             echo "### TestFlight"
             echo "Uploaded build ${BUILD_NUMBER} to internal group **${TESTFLIGHT_GROUP}**."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Automatic signing on a fresh runner creates a certificate every run; revoke the ones
+      # this runner created so the team account never fills up. Runs even when signing failed.
+      - name: Revoke certificates created by this runner
+        if: always()
+        env:
+          ASC_KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          [ -x "$RUNNER_TEMP/ascenv/bin/python" ] || { echo "tooling was never installed; nothing to revoke"; exit 0; }
+          "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py revoke-runner-certs
