@@ -12,9 +12,16 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
     private var cardCreateModel: WalletCardCreateViewModel?
     private var amount: String?
     private var readyAmountString: String?
+    private var assetLogo: UIImage?
+    private var assetSymbol: String?
+    private var paymentAssetViewModel: PaymentAssetViewModelProtocol?
 
     init(viewModel: AssetDetailsViewModel) {
         self.viewModel = viewModel
+    }
+
+    deinit {
+        paymentAssetViewModel?.cancel()
     }
 
     var isSetup: Bool {
@@ -101,6 +108,23 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
         readyAmountString = readyAmount.amount
     }
 
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol) {
+        paymentAssetViewModel?.cancel()
+        paymentAssetViewModel = paymentAsset
+
+        paymentAsset.bind { [weak self] brand in
+            self?.apply(brand)
+        }
+    }
+
+    private func apply(_ brand: PaymentAssetBrand) {
+        assetLogo = brand.wideIcon
+        assetSymbol = brand.symbol
+
+        guard viewModel.balanceCardModel != nil else { return }
+        emitCardUpdate()
+    }
+
     func didReceive(coinageBreakdown: CoinageBalanceBreakdownViewModel) {
         viewModel.coinageBreakdown = coinageBreakdown
     }
@@ -152,7 +176,9 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
     private func emitCardUpdate() {
         viewModel.balanceCardModel = .init(
             balance: amount,
-            readyBalance: readyAmountString
+            readyBalance: readyAmountString,
+            logo: assetLogo,
+            symbol: assetSymbol
         )
     }
 }

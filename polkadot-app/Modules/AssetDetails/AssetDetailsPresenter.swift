@@ -15,6 +15,7 @@ final class AssetDetailsPresenter {
     let interactor: AssetDetailsInteractorInputProtocol?
 
     let viewModelFactory: WalletCardViewModelFactoryProtocol
+    let paymentAssetViewModelFactory: PaymentAssetViewModelMaking
     private let balanceFormatterFactory: AssetBalanceFormatterFactoryProtocol
     private var balanceFormatter: LocalizableDecimalFormatting?
     private var priceFormatter: LocalizableDecimalFormatting?
@@ -39,7 +40,8 @@ final class AssetDetailsPresenter {
         viewModelFactory: WalletCardViewModelFactoryProtocol,
         logger: LoggerProtocol,
         chainAsset: ChainAsset,
-        balanceFormatterFactory: AssetBalanceFormatterFactoryProtocol = AssetBalanceFormatterFactory()
+        balanceFormatterFactory: AssetBalanceFormatterFactoryProtocol = AssetBalanceFormatterFactory(),
+        paymentAssetViewModelFactory: PaymentAssetViewModelMaking = PaymentAssetViewModelFactory()
     ) {
         self.interactor = interactor
         self.wireframe = wireframe
@@ -47,6 +49,7 @@ final class AssetDetailsPresenter {
         self.logger = logger
         self.chainAsset = chainAsset
         self.balanceFormatterFactory = balanceFormatterFactory
+        self.paymentAssetViewModelFactory = paymentAssetViewModelFactory
     }
 
     private func provideAssets() {
@@ -101,6 +104,7 @@ extension AssetDetailsPresenter: AssetDetailsPresenterProtocol {
     func setup() {
         provideAssets()
         provideAssetBalance()
+        view?.didReceive(paymentAsset: paymentAssetViewModelFactory.makeViewModel())
         interactor?.setup()
     }
 

@@ -11,10 +11,15 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
 
     var keyboardHandler: KeyboardHandler?
     private var isAmountInputEnabled = true
+    private var paymentAssetViewModel: PaymentAssetViewModelProtocol?
 
     init(presenter: TransferAmountPresenterProtocol) {
         self.presenter = presenter
         super.init(nibName: nil, bundle: nil)
+    }
+
+    deinit {
+        paymentAssetViewModel?.cancel()
     }
 
     @available(*, unavailable)
@@ -204,6 +209,15 @@ extension TransferAmountViewController: TransferAmountViewProtocol {
 
     func didReceive(assetViewModel: AssetAmountViewModel) {
         rootView.amountInputView.bind(assetViewModel: assetViewModel)
+    }
+
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol) {
+        paymentAssetViewModel?.cancel()
+        paymentAssetViewModel = paymentAsset
+
+        paymentAsset.bind { [weak self] brand in
+            self?.rootView.apply(assetBrand: brand)
+        }
     }
 
     func didReceive(feeViewModel _: BalanceViewModelProtocol?) {

@@ -12,6 +12,7 @@ import UIKitExt
 protocol TransferAmountViewProtocol: ControllerBackedProtocol, ValidationResultPresentable {
     func didReceive(amountViewModel: AmountInputViewModelProtocol)
     func didReceive(assetViewModel: AssetAmountViewModel)
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol)
     func didReceive(availableBalance: String)
     /// The "Extra … is spendable at the risk of reducing your privacy" hint, or nil to hide it.
     func didReceive(privacyHint: String?)

@@ -1,5 +1,6 @@
 import Foundation
 import PolkadotUI
+import UIKit
 import Coinage
 import UIKitExt
 import ChainRegistry
@@ -9,6 +10,7 @@ protocol AssetDetailsViewProtocol: ControllerBackedProtocol {
     func didSetCards(viewModels: [WalletCardCreateViewModel])
     func didReceiveData(viewModel: WalletCardDataViewModel, index: Int)
     func didReceive(readyAmount: BalanceViewModelProtocol?)
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol)
     func didReceive(fundingStates: [AssetFundingStatusView.FundingState])
     func didReceive(isRecoveryInProgress: Bool)
     func didReceive(isAccountBackupPending: Bool)
