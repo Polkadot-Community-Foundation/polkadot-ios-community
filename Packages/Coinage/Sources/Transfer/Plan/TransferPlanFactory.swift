@@ -14,40 +14,19 @@ protocol TransferPlanCreating {
 }
 
 final class TransferPlanFactory {
-    private let instanceId: CoinageInstanceId
     private let minter: any CoinMinting
-    private let voucherKeyFactory: any VoucherKeyDeriving
-    private let coinKeyFactory: any CoinKeyDeriving
     private let durability: any CoinageTxServicing
-    private let originFactory: OriginCreating
-    private let quotaTracker: any UnloadQuotaTracking
-    private let recyclerLoader: RecyclerReadinessLoading
-    private let blockInfoProvider: any BlockInfoProviding
     private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
     init(
-        instanceId: CoinageInstanceId,
         minter: any CoinMinting,
-        voucherKeyFactory: any VoucherKeyDeriving,
-        coinKeyFactory: any CoinKeyDeriving,
         durability: any CoinageTxServicing,
-        originFactory: OriginCreating,
-        quotaTracker: any UnloadQuotaTracking,
-        recyclerLoader: RecyclerReadinessLoading,
-        blockInfoProvider: any BlockInfoProviding,
         dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
-        self.instanceId = instanceId
         self.minter = minter
-        self.voucherKeyFactory = voucherKeyFactory
-        self.coinKeyFactory = coinKeyFactory
         self.durability = durability
-        self.originFactory = originFactory
-        self.quotaTracker = quotaTracker
-        self.recyclerLoader = recyclerLoader
-        self.blockInfoProvider = blockInfoProvider
         self.dateProvider = dateProvider
         self.logger = logger
     }
@@ -68,25 +47,17 @@ extension TransferPlanFactory: TransferPlanCreating {
                 targetDenominations: targetDenominations,
                 changeDenominations: changeDenominations,
                 minter: minter,
-                coinKeyFactory: coinKeyFactory,
                 txService: durability,
-                originFactory: originFactory,
                 dateProvider: dateProvider,
                 logger: logger
             ))
 
         case let .unloadIntoCoins(coins, perGroupAllocations):
             TransferPlan(strategy: UnloadIntoCoinsStrategy(
-                instanceId: instanceId,
                 readyCoins: coins,
                 perGroupAllocations: perGroupAllocations,
                 minter: minter,
-                voucherKeyFactory: voucherKeyFactory,
-                recyclerLoader: recyclerLoader,
                 txService: durability,
-                originFactory: originFactory,
-                quotaTracker: quotaTracker,
-                blockInfoProvider: blockInfoProvider,
                 dateProvider: dateProvider,
                 logger: logger
             ))

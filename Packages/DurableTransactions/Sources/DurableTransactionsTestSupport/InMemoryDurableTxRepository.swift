@@ -44,6 +44,21 @@ public final class InMemoryDurableTxRepository: DurableTxRepositoryProtocol, @un
         state.withLock { $0.entries[id]?.status }
     }
 
+    /// How many waiting-submission streams are open. A collector subscribes asynchronously, so a test
+    /// that means to end its stream has to wait for it to exist first.
+    public var pendingStreamCount: Int {
+        state.withLock { $0.pendingObservers.count }
+    }
+
+    /// Test convenience: ends every open waiting-submission stream, as a subscription that fails or
+    /// completes does. The collector watching it then returns — which must not leave it unable to start.
+    public func finishPendingStreams() {
+        state.withLock { current in
+            current.pendingObservers.forEach { $0.finish() }
+            current.pendingObservers.removeAll()
+        }
+    }
+
     /// Test convenience: records a prepared entry keeping its id and status, assigning the next sequence.
     public func insert(_ entry: DurableTxEntry) {
         state.withLock { current in

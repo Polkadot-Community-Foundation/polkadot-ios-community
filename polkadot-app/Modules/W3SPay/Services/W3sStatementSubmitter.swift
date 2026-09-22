@@ -58,8 +58,6 @@ final class W3sStatementSubmitter {
 }
 
 extension W3sStatementSubmitter: TransferSubmitting {
-    var isFailureFatal: Bool { true }
-
     func sendTransfer(
         _ memo: TransferMemo,
         to _: AccountId,

@@ -23,6 +23,7 @@ enum CoinageSubmissionPolicies {
         let unloadBuilder: UnloadExtrinsicBuilder
         let claimBuilder: ClaimExtrinsicBuilder
         let snKeyFactory: any SNKeyFactoryProtocol
+        let dateProvider: any DateProviding
         let logger: SDKLoggerProtocol?
     }
 
@@ -57,7 +58,7 @@ private extension CoinageSubmissionPolicies {
                 voucherService: deps.voucherService,
                 builder: deps.unloadBuilder,
                 voucherSnapshots: deps.voucherSnapshots,
-                dateProvider: NowDateProvider()
+                dateProvider: deps.dateProvider
             ),
             ledger: deps.ledger,
             logger: deps.logger

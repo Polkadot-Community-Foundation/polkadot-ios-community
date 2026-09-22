@@ -8,10 +8,6 @@ import SubstrateSdk
 import SDKLogger
 
 protocol TransferSubmitting {
-    /// When `true`, the interactor propagates `sendChatMessage` errors instead
-    /// of swallowing them. Default `false` matches best-effort chat-memo delivery.
-    var isFailureFatal: Bool { get }
-
     /// `messageId` is the id the caller pre-generated for this transfer, used both as the coinage
     /// transactions' groupId and as the id of the chat message that carries the memo.
     ///
@@ -26,16 +22,7 @@ protocol TransferSubmitting {
     ) async throws
 }
 
-extension TransferSubmitting {
-    var isFailureFatal: Bool { false }
-}
-
 final class ContactChatSubmitter: TransferSubmitting {
-    /// Fatal: without a contact there is no message, so nothing would carry the keys. Reporting that
-    /// as a quiet skip would leave the user believing a transfer happened when nothing was committed
-    /// and nothing was scheduled.
-    var isFailureFatal: Bool { true }
-
     private let chatContactsProvider: ContactsLocalStorageServicing
     private let createMessageFactory: LocalMessageCreatingOperationMaking
     private let messageStore: ChatMessageTransactionalStoring

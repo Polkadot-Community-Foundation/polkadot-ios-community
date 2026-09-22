@@ -262,8 +262,7 @@ extension DurableTxCoreDataRepository {
         groupId: DurableTxGroupId?
     ) async throws -> [ScheduledDurableTx] {
         try await databaseService.performRead { context in
-            try self.pendingSubmissions(in: context)
-                .filter { $0.policy.id == policyId && $0.groupId == groupId }
+            try self.pendingSubmissions(in: context, policyId: policyId, groupId: groupId)
         }
     }
 
@@ -277,10 +276,16 @@ extension DurableTxCoreDataRepository {
             ),
             transform: { $0.sorted { $0.sequence < $1.sequence } }
         )
-        .map { [weak self] entries in
+        // The snapshot is the trigger; the rows come from one fetch that reads each policy with its
+        // entry, rather than a query per row. A failed read ends the stream instead of reading as
+        // "nothing is waiting" — an empty emission launches no bucket, and with no further change to
+        // the table there would be no later emission to correct it.
+        .map { [weak self] _ -> [ScheduledDurableTx] in
             guard let self else { return [] }
 
-            return await (try? scheduled(for: entries)) ?? []
+            return try await databaseService.performRead { context in
+                try self.pendingSubmissions(in: context)
+            }
         }
         .eraseToAnyAsyncSequence()
     }
@@ -359,35 +364,38 @@ private extension DurableTxCoreDataRepository {
         return ids
     }
 
-    /// Reads the policy of each already-fetched waiting row, so the stream does not re-fetch them.
-    func scheduled(for entries: [DurableTxEntry]) async throws -> [ScheduledDurableTx] {
-        guard !entries.isEmpty else { return [] }
+    /// Every transaction waiting to be built, narrowed in the fetch rather than in memory: a bucket asks
+    /// for its own rows twice a round, and the table grows for the life of the installation.
+    func pendingSubmissions(
+        in context: NSManagedObjectContext,
+        policyId: SubmissionPolicyId? = nil,
+        groupId: DurableTxGroupId? = nil
+    ) throws -> [ScheduledDurableTx] {
+        var predicates = [
+            NSPredicate(
+                format: "%K == %d",
+                #keyPath(CDDurableTx.status),
+                DurableTxStatus.pendingSubmission.rawValue
+            )
+        ]
 
-        return try await databaseService.performRead { context in
-            try entries.compactMap { entry in
-                guard let entity = try self.entity(entry.id, in: context),
-                      let policy = DurableTxMapper.policy(of: entity)
-                else {
-                    return nil
-                }
-
-                return ScheduledDurableTx(
-                    id: entry.id,
-                    domainId: entry.domainId,
-                    groupId: entry.groupId,
-                    policy: policy
-                )
-            }
+        if let policyId {
+            predicates.append(NSPredicate(
+                format: "%K == %@",
+                #keyPath(CDDurableTx.submissionPolicyId),
+                policyId.rawValue
+            ))
         }
-    }
 
-    func pendingSubmissions(in context: NSManagedObjectContext) throws -> [ScheduledDurableTx] {
+        if let groupId {
+            predicates.append(NSPredicate(format: "%K == %@", #keyPath(CDDurableTx.groupId), groupId))
+        } else if policyId != nil {
+            // An ungrouped bucket is the rows with no group, not every group's rows.
+            predicates.append(NSPredicate(format: "%K == nil", #keyPath(CDDurableTx.groupId)))
+        }
+
         let request = NSFetchRequest<CDDurableTx>(entityName: "CDDurableTx")
-        request.predicate = NSPredicate(
-            format: "%K == %d",
-            #keyPath(CDDurableTx.status),
-            DurableTxStatus.pendingSubmission.rawValue
-        )
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         request.sortDescriptors = [NSSortDescriptor(key: #keyPath(CDDurableTx.sequence), ascending: true)]
         request.returnsObjectsAsFaults = false
 

@@ -173,15 +173,8 @@ public extension CoinageService {
         )
 
         let planFactory = TransferPlanFactory(
-            instanceId: instanceId,
             minter: coinageMinter,
-            voucherKeyFactory: voucherKeypairFactory,
-            coinKeyFactory: coinKeypairFactory,
             durability: txService,
-            originFactory: originFactory,
-            quotaTracker: quotaTracker,
-            recyclerLoader: readinessLoader,
-            blockInfoProvider: blockNumberProvider,
             dateProvider: dateProvider,
             logger: logger
         )
@@ -301,6 +294,7 @@ public extension CoinageService {
                     chainId: chain.chainId
                 ),
                 snKeyFactory: SNKeyFactory(),
+                dateProvider: dateProvider,
                 logger: logger
             )
         )

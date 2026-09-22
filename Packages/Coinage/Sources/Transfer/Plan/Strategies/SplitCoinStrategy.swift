@@ -22,9 +22,7 @@ struct SplitCoinStrategy {
     private let targetDenominations: [Denomination]
     private let changeDenominations: [Denomination]
     private let minter: any CoinMinting
-    private let coinKeyFactory: any CoinKeyDeriving
     private let txService: any CoinageTxServicing
-    private let originFactory: OriginCreating
     private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
@@ -34,9 +32,7 @@ struct SplitCoinStrategy {
         targetDenominations: [Denomination],
         changeDenominations: [Denomination],
         minter: any CoinMinting,
-        coinKeyFactory: any CoinKeyDeriving,
         txService: any CoinageTxServicing,
-        originFactory: OriginCreating,
         dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
@@ -45,9 +41,7 @@ struct SplitCoinStrategy {
         self.targetDenominations = targetDenominations
         self.changeDenominations = changeDenominations
         self.minter = minter
-        self.coinKeyFactory = coinKeyFactory
         self.txService = txService
-        self.originFactory = originFactory
         self.dateProvider = dateProvider
         self.logger = logger
     }
@@ -110,32 +104,5 @@ extension SplitCoinStrategy: TransferStrategy {
             handoffCommit: handoffCommit,
             transactions: [scheduled]
         )
-    }
-}
-
-// MARK: - Private
-
-private extension SplitCoinStrategy {
-    func buildSplitDestinations(
-        from coins: [Coin]
-    ) throws -> [CoinagePallet.Calls.Split.SplitDestination] {
-        var grouped: [Int16: [Data]] = [:]
-        for coin in coins {
-            grouped[coin.exponent, default: []].append(coin.publicKey)
-        }
-
-        return grouped.map { exponent, accounts in
-            CoinagePallet.Calls.Split.SplitDestination(
-                exponent: exponent,
-                accounts: accounts
-            )
-        }
-    }
-
-    func makeOrigin() throws -> ExtrinsicOriginDefining {
-        let coinPrivateKey = try coinKeyFactory.derivePrivateKey(for: overflowCoin)
-        let coinAccount = DynamicDerivedWallet(secretKeyProvider: { coinPrivateKey })
-
-        return try originFactory.createAsCoinOrigin(for: coinAccount)
     }
 }

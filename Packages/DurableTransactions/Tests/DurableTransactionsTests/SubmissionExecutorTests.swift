@@ -181,6 +181,26 @@ struct SubmissionExecutorTests {
         #expect(harness.policy.prepareCalls.allSatisfy { $0.allSatisfy { $0.id == mine } })
     }
 
+    @Test("a collector whose stream ended is started again")
+    func endedCollectorIsRestarted() async throws {
+        // A stream that fails or completes returns the collector normally, and a task that returned is
+        // not cancelled. Keying the restart on cancellation left the executor permanently deaf, so one
+        // transient subscription failure stranded every scheduled transaction until relaunch.
+        let harness = Harness(policyId: policyId)
+        harness.policy.script(.buildAll)
+
+        await harness.executor.ensureStarted()
+        // The collector subscribes inside its task, so wait for the stream to exist before ending it —
+        // otherwise there is nothing to end and the test proves nothing.
+        await harness.settle(until: { harness.store.pendingStreamCount > 0 })
+        harness.store.finishPendingStreams()
+
+        let id = try await harness.store.scheduleOne(policyId: policyId)
+        await harness.run { try await harness.status(id) == .pending }
+
+        #expect(try await harness.status(id) == .pending)
+    }
+
     @Test("the policy is given the params the row was scheduled with")
     func scheduledParamsReachThePolicy() async throws {
         let harness = Harness(policyId: policyId)
@@ -223,20 +243,33 @@ private extension SubmissionExecutorTests {
             )
         }
 
+        /// Waits for `condition`, yielding between checks — for the points where a test has to know the
+        /// executor's own task reached a state before it acts.
+        func settle(until condition: @escaping @Sendable () -> Bool) async {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(60))
+            while ContinuousClock.now < deadline {
+                if condition() { return }
+
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+        }
+
         /// Starts the executor and waits for `condition`, then closes it.
         ///
         /// The executor is driven by the ledger rather than by the caller, so a test cannot know how many
         /// rounds its scenario takes: it names the state it is waiting for instead. A condition that never
         /// holds simply times out and the test's own expectation reports what was actually reached.
         func run(until condition: @escaping @Sendable () async throws -> Bool) async {
-            await executor.ensureStarted()
-
             // A backstop against a stalled executor, not an expected duration: the loop exits as soon as
             // the condition holds, so a passing test finishes in milliseconds. It is generous because a
             // loaded CI runner can stall for seconds, and a budget that expires early would fail a test
             // that is merely slow.
             let deadline = ContinuousClock.now.advanced(by: .seconds(60))
             while ContinuousClock.now < deadline {
+                // Asked each round, as production does — the app asks on every new head and the call is
+                // idempotent. A collector whose stream ended has to be replaced by one of these.
+                await executor.ensureStarted()
+
                 if await (try? condition()) == true { break }
 
                 try? await Task.sleep(for: .milliseconds(1))

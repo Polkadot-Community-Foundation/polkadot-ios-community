@@ -73,6 +73,11 @@ public actor DurableSubmissionExecutor {
     private let logger: SDKLoggerProtocol?
 
     private var collector: Task<Void, Never>?
+
+    /// Tells a collector that has just ended apart from one replaced since, so a stale task cannot
+    /// clear a live one.
+    private var collectorGeneration = 0
+
     private var buckets: [Bucket: Task<Void, Never>] = [:]
 
     /// In memory on purpose: a relaunch starting every transaction's cooldown over costs one early
@@ -98,12 +103,28 @@ public actor DurableSubmissionExecutor {
     }
 
     /// Starts watching the ledger for transactions to build. Idempotent.
+    ///
+    /// Keyed on there being no collector rather than on the last one being cancelled: a collector whose
+    /// stream failed or finished returns normally, and such a task is *not* cancelled — so testing
+    /// `isCancelled` would leave a dead collector in place and no-op for the rest of the process,
+    /// stranding every scheduled transaction until relaunch.
     public func ensureStarted() {
-        guard collector?.isCancelled ?? true else { return }
+        guard collector == nil else { return }
+
+        collectorGeneration += 1
+        let generation = collectorGeneration
 
         collector = Task { [weak self] in
             await self?.collectPendingSubmissions()
+            await self?.collectorEnded(generation)
         }
+    }
+
+    /// Clears the handle of a collector that has ended, so the next ``ensureStarted()`` starts a new one.
+    private func collectorEnded(_ generation: Int) {
+        guard generation == collectorGeneration else { return }
+
+        collector = nil
     }
 
     /// Cancels the collector and every bucket this instance owns.
@@ -172,7 +193,11 @@ private extension DurableSubmissionExecutor {
             // A row nothing can build would otherwise wait for ever.
             logger?.error("\(bucket.logId) submission skipped reason=no-registered-policy")
             await abandonAll(in: bucket)
-            _ = await finishBucket(bucket)
+
+            // Unconditionally, unlike the loop below: `abandonAll` swallows its own failure, so rows can
+            // still be waiting here. Leaving the handle behind would keep this bucket permanently
+            // "running" and stop it ever being launched again.
+            buckets[bucket] = nil
 
             return
         }

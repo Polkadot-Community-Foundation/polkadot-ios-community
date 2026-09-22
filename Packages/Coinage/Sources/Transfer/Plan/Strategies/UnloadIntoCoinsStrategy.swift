@@ -18,43 +18,25 @@ import SubstrateOperation
 /// sharing a recycler do not conflict — they are built and submitted independently by the unload
 /// policy, and each call's vouchers are fixed by the row it was registered as.
 struct UnloadIntoCoinsStrategy {
-    private let instanceId: CoinageInstanceId
     private let readyCoins: [Coin]
     private let perGroupAllocations: [RecyclerGroupAllocation]
     private let minter: any CoinMinting
-    private let voucherKeyFactory: any VoucherKeyDeriving
-    private let recyclerLoader: RecyclerReadinessLoading
     private let txService: any CoinageTxServicing
-    private let originFactory: OriginCreating
-    private let quotaTracker: any UnloadQuotaTracking
-    private let blockInfoProvider: any BlockInfoProviding
     private let dateProvider: any DateProviding
     private let logger: SDKLoggerProtocol?
 
     init(
-        instanceId: CoinageInstanceId,
         readyCoins: [Coin],
         perGroupAllocations: [RecyclerGroupAllocation],
         minter: any CoinMinting,
-        voucherKeyFactory: any VoucherKeyDeriving,
-        recyclerLoader: RecyclerReadinessLoading,
         txService: any CoinageTxServicing,
-        originFactory: OriginCreating,
-        quotaTracker: any UnloadQuotaTracking,
-        blockInfoProvider: any BlockInfoProviding,
         dateProvider: any DateProviding,
         logger: SDKLoggerProtocol?
     ) {
-        self.instanceId = instanceId
         self.readyCoins = readyCoins
         self.perGroupAllocations = perGroupAllocations
         self.minter = minter
-        self.voucherKeyFactory = voucherKeyFactory
-        self.recyclerLoader = recyclerLoader
         self.txService = txService
-        self.originFactory = originFactory
-        self.quotaTracker = quotaTracker
-        self.blockInfoProvider = blockInfoProvider
         self.dateProvider = dateProvider
         self.logger = logger
     }

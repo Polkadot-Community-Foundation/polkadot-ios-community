@@ -48,8 +48,6 @@ public protocol CoinageAssetLedgerProtocol: Sendable {
         validation: @escaping (any CoinageTxValidationContextProtocol) throws -> Void
     ) async throws
 
-    /// Promotes provisional marks to final — the keys have durably left. Keyed by ``OwnAsset/publicKey``,
-
     /// Clears every uncommitted mark. Runs once, on launch.
     func releaseUncommittedHandoffs() async throws
 

@@ -178,12 +178,13 @@ private extension TransferAmountInteractor {
                 try prepared.commit(in: scope)
             }
         } catch {
-            if transferSubmitter.isFailureFatal {
-                // The keys never left: drop the reservation now rather than waiting for a relaunch.
-                try? await prepared.abandon()
-                throw error
-            }
-            logger?.error("Non-fatal chat submitter failure: \(error)")
+            // Every transport runs the hook inside a transaction, and only once whatever carries the
+            // keys is durable — so a throw from here means nothing was committed and nothing scheduled.
+            // Drop the reservation now rather than waiting for a relaunch, and never report a transfer
+            // the recipient has no way to claim.
+            try? await prepared.abandon()
+
+            throw error
         }
         lifecycleReporter.start(with: .coinageMemo(prepared.memo))
     }
