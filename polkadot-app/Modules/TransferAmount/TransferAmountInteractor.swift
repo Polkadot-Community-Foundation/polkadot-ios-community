@@ -225,10 +225,6 @@ private extension TransferAmountInteractor {
                         gainingPrivacy: gainingPrivacy
                     )
                     await self?.presenter?.didReceive(spendableBreakdown: breakdown)
-                    // Everything not reachable now, matching AssetDetails' locked (`total - available`).
-                    // Under max privacy this includes the withheld gaining-privacy bucket, which
-                    // `balance.pending` would omit — leaving the info sheet's total understated.
-                    await self?.presenter?.didReceive(lockedBalance: balance.total - balance.available)
                 }
             } catch {
                 self?.logger?.error("Failed to observe coinage balance: \(error)")

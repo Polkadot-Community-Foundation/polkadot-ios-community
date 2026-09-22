@@ -30,21 +30,6 @@ final class TransferAmountViewLayout: UIView, AdaptiveDesignable {
 
     let balanceView = BalanceView()
 
-    let infoButton: UIButton = {
-        let button = UIButton(type: .system)
-        button.setImage(UIImage(resource: .iconInfo20), for: .normal)
-        button.tintColor = .fgSecondary
-        return button
-    }()
-
-    let privacyHintLabel: PolkadotUI.Label = .create {
-        $0.typography = .bodyMedium
-        $0.textColor = .fgSecondary
-        $0.numberOfLines = 0
-        $0.textAlignment = .center
-        $0.isHidden = true
-    }
-
     let amountInputView: AmountInputView = .create {
         $0.symbolImage = .cashLogo
     }
@@ -130,31 +115,17 @@ final class TransferAmountViewLayout: UIView, AdaptiveDesignable {
         balanceView.preferredHeight = Constants.balanceRowHeight
         balanceView.controlContentView.contentInsets = .zero
 
-        let balanceRow = UIStackView(arrangedSubviews: [balanceView, infoButton])
-        balanceRow.axis = .horizontal
-        balanceRow.alignment = .center
-        balanceRow.spacing = DSSpacings.extraSmall
-        addSubview(balanceRow)
-
-        balanceRow.snp.makeConstraints { make in
+        addSubview(balanceView)
+        balanceView.snp.makeConstraints { make in
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview().offset(24)
             make.height.equalTo(Constants.balanceRowHeight)
-        }
-        infoButton.snp.makeConstraints { make in
-            make.size.equalTo(20)
-        }
-
-        addSubview(privacyHintLabel)
-        privacyHintLabel.snp.makeConstraints { make in
-            make.leading.trailing.equalToSuperview().inset(24)
-            make.top.equalTo(balanceRow.snp.bottom).offset(DSSpacings.tiny)
         }
 
         addSubview(amountInputView)
         amountInputView.snp.makeConstraints { make in
             make.leading.trailing.equalToSuperview().inset(24)
-            make.top.equalTo(privacyHintLabel.snp.bottom).offset(DSSpacings.tiny)
+            make.top.equalTo(balanceView.snp.bottom).offset(DSSpacings.tiny)
             make.height.equalTo(80)
         }
 
@@ -188,7 +159,7 @@ final class TransferAmountViewLayout: UIView, AdaptiveDesignable {
         let amountGroupGuide = UILayoutGuide()
         addLayoutGuide(amountGroupGuide)
         amountGroupGuide.snp.makeConstraints { make in
-            make.top.equalTo(balanceRow.snp.top)
+            make.top.equalTo(balanceView.snp.top)
             make.bottom.equalTo(cashLabel.snp.bottom)
             make.leading.trailing.equalToSuperview()
             make.centerY.equalTo(contentGuide.snp.centerY)
@@ -235,11 +206,6 @@ final class TransferAmountViewLayout: UIView, AdaptiveDesignable {
 
     var confirmView: UIView {
         transferButtonController.view
-    }
-
-    func bind(privacyHint: String?) {
-        privacyHintLabel.text = privacyHint
-        privacyHintLabel.isHidden = privacyHint == nil
     }
 
     func bind(recipient: TransferRecipientViewModel) {

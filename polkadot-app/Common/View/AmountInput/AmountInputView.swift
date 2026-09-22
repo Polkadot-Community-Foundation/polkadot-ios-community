@@ -11,7 +11,7 @@ class AmountInputView: UIControl {
 
     let symbolImageView: UIImageView = .create { view in
         view.contentMode = .scaleAspectFit
-        view.tintColor = .fgPrimary
+        view.tintColor = .fgTertiary
         view.isHidden = true
     }
 
