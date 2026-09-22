@@ -98,12 +98,12 @@ struct AssetDetailsView: View {
             }
             .accessibilityId(AccessibilityID.Wallet.sendPaymentButton)
 
-            // Get CASH (the funding ramp) opens the DotNS product named by
-            // AppConfig.DotNs.dotNsGetSome, which Remote Config publishes as `funding_url` /
-            // `funding_domain`. That name is not registered on devnet, so the lookup resolves to
-            // nothing and the user lands on a 404. Hidden on testnet builds only — Release
-            // defines no TESTNET_FEATURE, so the production entry point is unchanged. Delete
-            // this one gate to bring the button back once the funding product is deployed.
+            // Get CASH (the funding ramp) opens the DotNS product named by Remote Config
+            // `funding_config.onrampUrl`. That product is not registered on devnet, so the
+            // lookup resolves to nothing and the user lands on a 404. Hidden on testnet
+            // builds only — Release defines no TESTNET_FEATURE, so the production entry point
+            // is unchanged. Delete this one gate to bring the button back once the funding
+            // product is deployed.
             //
             // Only the funding (top-up) entry point is gated: withdraw resolves offrampPage(),
             // a different product, and stays as upstream ships it. This is NOT the faucet —
