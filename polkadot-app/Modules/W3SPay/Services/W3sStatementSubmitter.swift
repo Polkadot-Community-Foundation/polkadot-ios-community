@@ -76,15 +76,20 @@ extension W3sStatementSubmitter: TransferSubmitting {
             )
         }
 
-        // The statement is about to go out, so this is the moment the keys are on their way. The
-        // history record is auxiliary and may have failed, so the hook is not tied to it: it runs in
-        // its own transaction, before the statement leaves.
-        try await databaseService.performWrite { context in
-            try onSaved(CoreDataRegistrationScope(context: context))
-        }
-
         try await backgroundExecutor.execute {
             try await self.submitStatement(memo: memo)
+
+            // Only now are the keys on their way, so only now may the hook run: it makes the handoff
+            // final and schedules the payment's transactions, and `abandon()` undoes neither — it drops
+            // provisional marks only. Run before the statement, a submit failure would leave the coins
+            // given away and the split broadcast to a recipient holding nothing.
+            //
+            // Inside the same assertion as the submit: the window between the statement leaving and the
+            // commit landing is the one place this flow must not be suspended. The history record is
+            // auxiliary and may have failed, so the hook runs in a transaction of its own.
+            try await self.databaseService.performWrite { context in
+                try onSaved(CoreDataRegistrationScope(context: context))
+            }
         }
     }
 }
@@ -114,11 +119,11 @@ private extension W3sStatementSubmitter {
                 )
             }
         } catch {
-            // Coins already moved on-chain before the statement submit. A submit
-            // error here is often a false-negative (statement landed, response
-            // lost), so never mark the payment failed — leave the record for the
-            // tracking service to reconcile against chain truth. Still rethrow:
-            // the chat submitter is fatal for this flow.
+            // A submit error here is often a false-negative (the statement landed, the response was
+            // lost), so never mark the payment failed — leave the record for the tracking service to
+            // reconcile against chain truth. Still rethrow: this submitter is fatal for the flow, and
+            // the caller drops the reservation rather than giving coins away for a statement that may
+            // never have left.
             logger?.error("W3S payment \(details.paymentId) statement submission failed: \(error)")
             throw error
         }
