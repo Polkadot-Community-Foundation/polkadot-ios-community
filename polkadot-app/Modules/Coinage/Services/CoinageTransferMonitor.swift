@@ -15,6 +15,7 @@ final class CoinageTransferMonitor {
     private let coinageService: any CoinageServicing
     private let messageProviderFactory: ChatMessageDataProviderMaking
     private let claimStatusStore: ClaimStatusStore
+    private let claimTransferStore: any ClaimTransferStoring
     private let logger: LoggerProtocol
 
     /// Top-level tasks that listen to the CoreData message streams.
@@ -29,11 +30,14 @@ final class CoinageTransferMonitor {
         coinageService: any CoinageServicing,
         storageFacade: StorageFacadeProtocol,
         claimStatusStore: ClaimStatusStore,
+        claimTransferStore: (any ClaimTransferStoring)? = nil,
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
         logger: LoggerProtocol = Logger.shared
     ) {
         self.coinageService = coinageService
         self.claimStatusStore = claimStatusStore
+        self.claimTransferStore = claimTransferStore
+            ?? ClaimTransferCoreDataStore(storageFacade: storageFacade)
         self.logger = logger
 
         let repositoryFactory = ChatMessageRepositoryFactory(storageFacade: storageFacade)
@@ -90,17 +94,35 @@ private extension CoinageTransferMonitor {
         guard await taskRegistry.contains(messageId) == false else { return }
 
         let memo = content.transferMemo
-        let task = Task { [coinageService, claimStatusStore, taskRegistry, logger] in
+
+        // Asked of the ledger, not of the status last published: that status is written by this
+        // method's own catch, so a transient chain read failing would otherwise record a permanence
+        // the system never reached. The ledger only ever records work that actually happened.
+        //
+        // Checked before the task is registered so a settled message costs nothing at all, and an
+        // unreadable ledger leaves the message for the next launch rather than deciding it.
+        do {
+            guard try await !isClaimTerminal(messageId: messageId, memoCoins: Set(memo.entries)) else {
+                logger.debug("Skipping settled incoming coinage message=\(messageId)")
+                return
+            }
+        } catch {
+            logger.error("Cannot read claim group for \(messageId); left for next launch: \(error)")
+            return
+        }
+
+        let task = Task { [coinageService, claimStatusStore, claimTransferStore, taskRegistry, logger] in
             defer { Task { await taskRegistry.remove(forMessageId: messageId) } }
             do {
                 let context = try await coinageService.denominationContext()
-                // Anchored to the message, not to now: this runs again for the same message on every
-                // launch, and a window measured from "now" would reset each time and never close. The
-                // sender's own window runs from when it sent, so anchoring here keeps the two sides
-                // trying for the same stretch. A message first seen after its window closed is still
-                // attempted once — `claim` always makes one attempt.
-                let retryUntil = Date
-                    .fromChatTimestamp(message.timestamp)
+
+                // Anchored to this device's first attempt, written once and reused. It used to be
+                // `message.timestamp` — the *sender's* wall clock, compared against the receiver's — so
+                // two devices' clocks decided the window, and a message first seen after it had already
+                // elapsed registered a claim whose deadline was already past. The submission policy
+                // reads that as "proven absent" on its first look and gives up terminally.
+                let retryUntil = try await claimTransferStore
+                    .firstAttempt(for: messageId)
                     .addingTimeInterval(CoinageConstants.claimRetryWindow)
 
                 logger.debug("Starting processing incoming coinage message=\(messageId)")
@@ -120,6 +142,34 @@ private extension CoinageTransferMonitor {
             }
         }
         await taskRegistry.register(task, forMessageId: messageId)
+    }
+
+    func isClaimTerminal(messageId: String, memoCoins: Set<PublicKey>) async throws -> Bool {
+        let entries = try await coinageService.txService.getOperationGroupStatuses(messageId)
+
+        return Self.isClaimTerminal(entries: entries, memoCoins: memoCoins)
+    }
+}
+
+extension CoinageTransferMonitor {
+    /// Whether this claim is finished for good, decided from what the ledger holds — the layer that
+    /// actually knows. Deliberately not derived from the published ``ClaimStatus``, which this monitor's
+    /// own catch writes: a transient chain read failing would otherwise record a permanence the system
+    /// never reached.
+    ///
+    /// Pure, so the three states it distinguishes can be exercised without a chain or a store.
+    static func isClaimTerminal(entries: [CoinageTxEntry], memoCoins: Set<PublicKey>) -> Bool {
+        // Nothing was ever registered — the coins were not yet visible when an earlier pass ran. There
+        // is nothing to be final about, and the next launch must try again. This is the ordinary
+        // late-arrival case: a sender who was offline, or a slow chain.
+        guard !entries.isEmpty else { return false }
+
+        // Something is still in flight.
+        guard entries.allSatisfy({ !$0.status.isLive }) else { return false }
+
+        // Every coin must be accounted for by a settled entry. One with no entry naming it is work the
+        // claim loop still has to do, whatever the entries that do exist have settled on.
+        return memoCoins.isSubset(of: entries.receivedPublicKeys())
     }
 }
 
