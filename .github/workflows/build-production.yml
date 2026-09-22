@@ -18,18 +18,28 @@ name: Build (Production)
 #                      upload to the same App Store record (io.pcf.polkadotapp), so the ranges
 #                      must never meet.
 #
-# Environment `production` (no protection):
+# Environment `production` (no protection), the unsigned `build` job:
 #   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  (optional) production Firebase plist. Falls back
 #       to the repo-level GOOGLESERVICE_INFO_PLIST_DEV_BASE64, which is the Firebase app registered
 #       for io.pcf.polkadotapp (the Dev build shares it), then to the committed placeholder.
 #   secret MELD_BASIC_AUTH_TOKEN   (optional) Meld on-ramp token. Absent => on-ramp inert.
-#   var    PRODUCTION_BUNDLE_ID    asserted against what the build resolved.
+#   var    PRODUCTION_BUNDLE_ID    pins the id the unsigned Release build resolves to.
 #
-# Environment `production-distribution` (REQUIRED REVIEWERS):
-#   secrets PRODUCTION_APPLE_TEAM_ID, PRODUCTION_APP_STORE_CONNECT_KEY_ID,
-#   PRODUCTION_APP_STORE_CONNECT_ISSUER_ID, PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT.
-#   Interim: each falls back to the repo-level devnet App Store Connect key (APPLE_TEAM_ID,
-#   APP_STORE_CONNECT_*), same team, same app record. Set the PRODUCTION_* names to split them.
+# Environment `production-distribution` (REQUIRED REVIEWERS), the `sign` job. It cannot read
+# `production` secrets, and it never falls back to repo-level devnet material:
+#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  REQUIRED. Its BUNDLE_ID must be PRODUCTION_BUNDLE_ID.
+#   secret MELD_BASIC_AUTH_TOKEN     (optional) as above.
+#   var PRODUCTION_BUNDLE_ID         REQUIRED. The signed .ipa is asserted against it before upload.
+#   var IOS_SIGNING_SECRET           Secret Manager secret holding the App Store Connect key
+#                                    (key-id, issuer-id, team-id, private-key), read at run time.
+#   var IOS_SIGNING_SERVICE_ACCOUNT  the only identity allowed to read it; federated for this
+#                                    repository in this environment only.
+#   var GCP_WORKLOAD_IDENTITY_PROVIDER
+#   No GitHub secret holds Apple signing material for this lane.
+#
+# Signing runs only when dispatched on the `production` branch or a production/* tag, with `ref`
+# empty or a production/* tag: the built code's build phases run while the key is on disk. The
+# signing helper itself always comes from the dispatched commit, never from `ref`.
 #
 # SENTRY_* is deliberately not wired: Sentry is compiled only under TESTNET_FEATURE.
 
@@ -44,7 +54,7 @@ on:
           - production
         default: none
       ref:
-        description: 'Git ref to build (branch, tag or SHA). Empty = the ref this workflow was dispatched on. Lets a frozen production baseline be rebuilt later without editing this file.'
+        description: 'Git ref to build (branch, tag or SHA). Empty = the ref this workflow was dispatched on. Lets a frozen production baseline be rebuilt later without editing this file. signing=production accepts only empty or a production/* tag.'
         type: string
         required: false
         default: ''
@@ -97,13 +107,13 @@ jobs:
           done
           exit "$missing"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Empty string = actions/checkout's default (the dispatched ref).
           ref: ${{ inputs.ref }}
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
@@ -284,13 +294,13 @@ jobs:
       # Private bucket ONLY (keyless sign-in, create and read under `ios/` only). No Actions
       # artifact, no softprops/action-gh-release, no upload_to_testflight, no firebase
       # appdistribution:distribute, no aws s3 cp.
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         if: always()
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         if: always()
 
       - name: Upload the unsigned production build to the private bucket
@@ -316,6 +326,8 @@ jobs:
   # Runs after `build` has proved the Release identity, and waits for a reviewer on
   # `production-distribution`. The gate lives in the ENVIRONMENT: if it is ever deleted, GitHub
   # recreates it unprotected and this job runs straight through.
+  # Signing material is read from Secret Manager at run time by an identity federated for this
+  # repository in `production-distribution` only, written under $RUNNER_TEMP and removed at the end.
   sign:
     name: Sign + TestFlight (Release Internal)
     needs: build
@@ -323,32 +335,68 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 120
     environment: production-distribution
+    permissions:
+      contents: read
+      id-token: write
     env:
       RUN_IN_CI: 'true'
       TESTFLIGHT_GROUP: Release Internal
-      # PRODUCTION_* first; interim fallback to the repo-level devnet App Store Connect key.
-      TEAM_ID: ${{ secrets.PRODUCTION_APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
-      KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
-      ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
     steps:
-      - name: Require the signing material
+      # Before any checkout or credential. INPUT_REF comes through env, never into the script text,
+      # and is echoed only once it has matched the tag pattern.
+      - name: Require a trusted ref
+        id: trusted
         env:
-          KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
-          USING_PRODUCTION_KEY: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID != '' }}
+          INPUT_REF: ${{ inputs.ref }}
         run: |
-          missing=''
-          [ -n "$TEAM_ID" ]   || missing="$missing TEAM_ID"
-          [ -n "$KEY_ID" ]    || missing="$missing KEY_ID"
-          [ -n "$ISSUER_ID" ] || missing="$missing ISSUER_ID"
-          [ -n "$KEY_B64" ]   || missing="$missing KEY_CONTENT"
-          if [ -n "$missing" ]; then
-            echo "::error::missing App Store Connect inputs:$missing"
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/heads/production | refs/tags/production/*) ;;
+            *)
+              echo "::error::signing runs only when dispatched on the production branch or a production/* tag"
+              exit 1
+              ;;
+          esac
+          if [ -z "$INPUT_REF" ]; then
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "building the dispatched commit $GITHUB_SHA ($GITHUB_REF)"
+            exit 0
+          fi
+          if [[ ! "$INPUT_REF" =~ ^production/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::with signing=production, ref must be empty or a production/* tag; branches and SHAs are refused"
             exit 1
           fi
-          if [ "$USING_PRODUCTION_KEY" = "true" ]; then
-            echo "App Store Connect key: PRODUCTION_* (production-distribution)"
-          else
-            echo "::warning::App Store Connect key: repo-level devnet key (interim). Set PRODUCTION_APP_STORE_CONNECT_* in production-distribution to split it."
+          # Public repository: no credential needed. Annotated tags resolve through their peeled ^{} line.
+          refs=$(git ls-remote --tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" \
+            "refs/tags/$INPUT_REF" "refs/tags/$INPUT_REF^{}")
+          sha=$(awk -v t="refs/tags/$INPUT_REF" '$2 == t "^{}" {p = $1} $2 == t {d = $1} END {print (p != "" ? p : d)}' <<< "$refs")
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::tag $INPUT_REF does not exist"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "building tag $INPUT_REF at $sha"
+
+      - name: Require the signing configuration
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          IOS_SIGNING_SERVICE_ACCOUNT: ${{ vars.IOS_SIGNING_SERVICE_ACCOUNT }}
+          IOS_SIGNING_SECRET: ${{ vars.IOS_SIGNING_SECRET }}
+          PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
+        run: |
+          missing=''
+          for name in GCP_WORKLOAD_IDENTITY_PROVIDER IOS_SIGNING_SERVICE_ACCOUNT IOS_SIGNING_SECRET PRODUCTION_BUNDLE_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing production-distribution variables:$missing"
+            {
+              echo "### Signing configuration missing"
+              echo "Not set in the \`production-distribution\` environment:$missing"
+              echo ''
+              echo 'These variables are managed by the infrastructure configuration (private). See its "iOS signing" runbook.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           # 10000 + run number: disjoint from the devnet lane's build numbers in the shared record.
           BUILD_NUMBER=$((10000 + GITHUB_RUN_NUMBER))
@@ -356,27 +404,44 @@ jobs:
           echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
           echo "build number: $BUILD_NUMBER"
 
-      - uses: actions/checkout@v4
+      # Exactly the commit the guard resolved; a tag moved since cannot swap it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ steps.trusted.outputs.sha }}
+          persist-credentials: false
 
+      # The helper that holds the GCP token and the key runs from the dispatched commit only.
+      - name: Check out the signing helper (dispatched commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: _trusted
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # Everything that needs no key runs first, so no third-party action or dependency
+      # resolution runs while the key is on disk.
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
-      # Same resolution as the build job.
+      # production-distribution only: no fallback to the repo-level devnet plist.
       - name: Provide GoogleService-Info.plist (production Firebase app)
         env:
           GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
-          GS_APP_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
+          PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
-          if [ -n "$GS_PROD_B64" ]; then
-            echo "$GS_PROD_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
-          elif [ -n "$GS_APP_B64" ]; then
-            echo "$GS_APP_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
-          else
-            echo "::error::no Firebase plist; refusing to ship a TestFlight build that cannot reach Remote Config"
+          set -euo pipefail
+          if [ -z "$GS_PROD_B64" ]; then
+            echo "::error::GOOGLESERVICE_INFO_PLIST_PROD_BASE64 not set in the production-distribution environment"
+            exit 1
+          fi
+          echo "$GS_PROD_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' polkadot-app/GoogleService-Info.plist 2>/dev/null || true)
+          echo "Firebase plist BUNDLE_ID: ${bundle:-<none>}"
+          if [ "$bundle" != "$PRODUCTION_BUNDLE_ID" ]; then
+            echo "::error::Firebase plist BUNDLE_ID '${bundle:-<none>}' != PRODUCTION_BUNDLE_ID '$PRODUCTION_BUNDLE_ID'"
             exit 1
           fi
 
@@ -385,36 +450,41 @@ jobs:
           MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
         run: ./Runscripts/generate_secrets.sh
 
-      - name: Install App Store Connect API key
-        id: asc
-        env:
-          KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/asc"
-          echo "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8"
-          mkdir -p ~/.appstoreconnect/private_keys
-          cp "$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
-          echo "key_path=$RUNNER_TEMP/asc/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
+      - name: Resolve SwiftPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
       # Isolated venv: the runner's Homebrew python refuses a global pip install.
+      # Hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
       - name: Install App Store Connect tooling
         run: |
           python3 -m venv "$RUNNER_TEMP/ascenv"
-          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet pyjwt cryptography requests
+          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet --require-hashes --no-deps --only-binary :all: \
+            -r _trusted/.github/scripts/requirements-asc.txt
+
+      - name: Authenticate as the iOS signing identity
+        id: signer-auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.IOS_SIGNING_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+
+      # Masks the ids, writes $RUNNER_TEMP/asc/AuthKey_<id>.p8 (0600) and exports
+      # ASC_KEY_ID, ASC_ISSUER_ID, TEAM_ID and ASC_KEY_PATH to later steps.
+      - name: Load the App Store Connect key
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.signer-auth.outputs.access_token }}
+          IOS_SIGNING_SECRET: ${{ vars.IOS_SIGNING_SECRET }}
+        run: |
+          "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py load-signing-material
 
       # Fails in seconds, before the archive: key accepted, app record visible, group internal.
       - name: Preflight App Store Connect
         env:
-          ASC_KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          ASC_KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
-          BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID || 'io.pcf.polkadotapp' }}
+          BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
-          echo "team ${TEAM_ID:0:4}…"
-          "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py preflight
-
-      - name: Resolve SwiftPM dependencies
-        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+          "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py preflight
 
       - name: Write ExportOptions.plist
         run: |
@@ -438,9 +508,9 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath build/polkadot-app.xcarchive \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
@@ -453,11 +523,13 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath build/ \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.asc.outputs.key_path }}" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
       - name: Verify the signed .ipa identity
+        env:
+          EXPECTED_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
           set -euo pipefail
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
@@ -477,25 +549,28 @@ jobs:
             echo "aps-environment $aps"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          expected='${{ vars.PRODUCTION_BUNDLE_ID }}'
-          if [ -n "$expected" ] && [ "$id" != "$expected" ]; then
-            echo "::error::signed bundle id '$id' != PRODUCTION_BUNDLE_ID '$expected'"
-            exit 1
-          fi
+          [ -n "$EXPECTED_BUNDLE_ID" ] || { echo "::error::PRODUCTION_BUNDLE_ID is not set in production-distribution"; exit 1; }
+          [ "$id" = "$EXPECTED_BUNDLE_ID" ] || { echo "::error::signed bundle id '$id' != PRODUCTION_BUNDLE_ID '$EXPECTED_BUNDLE_ID'"; exit 1; }
           [ "$num" = "$BUILD_NUMBER" ] || { echo "::error::CFBundleVersion $num != $BUILD_NUMBER"; exit 1; }
           echo "IPA=$IPA" >> "$GITHUB_ENV"
 
       # Internal group only: no --distribute_external, so no Beta App Review and no public link.
+      # The API key JSON embeds the private key, so it lives beside it and goes with it.
       - name: Upload to TestFlight (internal group only)
         run: |
-          jq -n \
-            --arg key_id "$KEY_ID" \
-            --arg issuer_id "$ISSUER_ID" \
-            --rawfile key "${{ steps.asc.outputs.key_path }}" \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
-            > "$RUNNER_TEMP/asc_api_key.json"
+          set -euo pipefail
+          api_key="$RUNNER_TEMP/asc/api_key.json"
+          (
+            umask 077
+            jq -n \
+              --arg key_id "$ASC_KEY_ID" \
+              --arg issuer_id "$ASC_ISSUER_ID" \
+              --rawfile key "$ASC_KEY_PATH" \
+              '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+              > "$api_key"
+          )
           fastlane pilot upload \
-            --api_key_path "$RUNNER_TEMP/asc_api_key.json" \
+            --api_key_path "$api_key" \
             --ipa "$IPA" \
             --distribute_external false \
             --groups "$TESTFLIGHT_GROUP" \
@@ -509,10 +584,14 @@ jobs:
       # this runner created so the team account never fills up. Runs even when signing failed.
       - name: Revoke certificates created by this runner
         if: always()
-        env:
-          ASC_KEY_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_ID || secrets.APP_STORE_CONNECT_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_ISSUER_ID || secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          ASC_KEY_B64: ${{ secrets.PRODUCTION_APP_STORE_CONNECT_KEY_CONTENT || secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        timeout-minutes: 10
         run: |
-          [ -x "$RUNNER_TEMP/ascenv/bin/python" ] || { echo "tooling was never installed; nothing to revoke"; exit 0; }
-          "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py revoke-runner-certs
+          if [ ! -x "$RUNNER_TEMP/ascenv/bin/python" ] || [ ! -f "${ASC_KEY_PATH:-}" ] || [ -z "${SIGN_STARTED:-}" ]; then
+            echo "signing material was never loaded; nothing to revoke"
+            exit 0
+          fi
+          "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py revoke-runner-certs
+
+      - name: Remove the signing material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"

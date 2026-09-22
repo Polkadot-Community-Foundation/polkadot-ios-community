@@ -1,0 +1,6 @@
+# Input for requirements-asc.txt (the hashed lock the signing jobs install). After editing:
+#   uv pip compile --universal --generate-hashes --python-version 3.10 requirements-asc.in -o requirements-asc.txt
+cryptography>=44,<51
+pyjwt>=2.8,<3
+pyyaml>=6.0.1,<7
+requests>=2.31,<3
