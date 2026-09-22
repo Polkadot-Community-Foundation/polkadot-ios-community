@@ -74,11 +74,6 @@ final class TransferAmountViewController: UIViewController, ViewHolder {
             presenter?.onBalance()
         }
         rootView.balanceView.addAction(maxAction, for: .touchUpInside)
-
-        let infoAction = UIAction { [weak presenter] _ in
-            presenter?.onBalanceInfo()
-        }
-        rootView.infoButton.addAction(infoAction, for: .touchUpInside)
     }
 
     func lockScreenNavigation() {
@@ -197,10 +192,6 @@ extension TransferAmountViewController: TransferAmountViewProtocol {
 
     func didReceive(availableBalance: String) {
         rootView.balanceView.bind(amount: availableBalance)
-    }
-
-    func didReceive(privacyHint: String?) {
-        rootView.bind(privacyHint: privacyHint)
     }
 
     func didReceive(amountViewModel: AmountInputViewModelProtocol) {

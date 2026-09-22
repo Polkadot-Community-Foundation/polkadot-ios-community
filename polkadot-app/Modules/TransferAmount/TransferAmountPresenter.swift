@@ -26,7 +26,6 @@ final class TransferAmountPresenter {
     private var fee: ExtrinsicFeeProtocol? = ExtrinsicFee(amount: 0, payer: nil, weight: .zero)
 
     private var spendableBreakdown: TransferSpendableBreakdown?
-    private var lockedBalance: Balance?
 
     private var transferTask: Task<Void, Never>?
     private var statusTask: Task<Void, Never>?
@@ -96,12 +95,6 @@ extension TransferAmountPresenter: TransferAmountPresenterProtocol {
         #endif
     }
 
-    func onBalanceInfo() {
-        guard let breakdown = spendableBreakdown else { return }
-        let model = buildBalanceInfoModel(breakdown: breakdown)
-        wireframe.showBalanceInfo(model: model, from: view)
-    }
-
     func changeAmount(_ newValue: Decimal?) {
         guard !config.isAmountLocked else { return }
 
@@ -129,10 +122,6 @@ extension TransferAmountPresenter: TransferAmountInteractorOutputProtocol {
         #endif
     }
 
-    func didReceive(lockedBalance: Balance) {
-        self.lockedBalance = lockedBalance
-    }
-
     func didReceive(error: TransferAmountInteractorError) {
         switch error {
         case .transactionFailed,
@@ -155,19 +144,8 @@ private extension TransferAmountPresenter {
             return
         }
 
-        // `Max:` shows what costs no privacy to spend; the gaining-privacy extra is surfaced as a hint.
         let amount = balanceViewModelFactory.plainAmountFromValue(breakdown.availablePrivate).value(for: .current)
         view?.didReceive(availableBalance: amount)
-        providePrivacyHint(breakdown: breakdown)
-    }
-
-    func providePrivacyHint(breakdown: TransferSpendableBreakdown) {
-        guard breakdown.gainingPrivacy > 0 else {
-            view?.didReceive(privacyHint: nil)
-            return
-        }
-        let formatted = balanceViewModelFactory.plainAmountFromValue(breakdown.gainingPrivacy).value(for: .current)
-        view?.didReceive(privacyHint: String(localized: .Transfer.privacyCostHint(formatted)))
     }
 
     func calculateMax() -> BigUInt? {
@@ -390,28 +368,6 @@ private extension TransferAmountPresenter {
     func formattedAmount(_ amount: BigUInt) -> String {
         balanceViewModelFactory.amountFromValue(amount)
             .value(for: .current)
-    }
-
-    func buildBalanceInfoModel(breakdown: TransferSpendableBreakdown) -> BalanceInfoModel {
-        let total = breakdown.availablePrivate + breakdown.gainingPrivacy + (lockedBalance ?? 0)
-        let totalStr = formattedAmount(total)
-        let availableNowDecimal = breakdown.availablePrivate + breakdown.gainingPrivacy
-        let availableNowStr = formattedAmount(availableNowDecimal)
-        let availablePrivateStr = formattedAmount(breakdown.availablePrivate)
-        let gainingPrivacyStr = formattedAmount(breakdown.gainingPrivacy)
-
-        var availableSoonStr: String?
-        if let locked = lockedBalance, locked > 0 {
-            availableSoonStr = formattedAmount(locked)
-        }
-
-        return BalanceInfoModel(
-            totalBalance: totalStr,
-            availableNow: availableNowStr,
-            availablePrivate: availablePrivateStr,
-            gainingPrivacy: gainingPrivacyStr,
-            availableSoon: availableSoonStr
-        )
     }
 
     func applyConfig() {
