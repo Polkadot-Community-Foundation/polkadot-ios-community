@@ -81,6 +81,9 @@ jobs:
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
       IS_WEEKLY: ${{ github.event_name == 'schedule' }}
     steps:
+      - name: Record the signing start
+        run: echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - name: Select Xcode
@@ -114,6 +117,12 @@ jobs:
           echo "$KEY_B64" | base64 --decode > "./private_keys/AuthKey_${KEY_ID}.p8"
           cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
           echo "key_path=$PWD/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
+
+      # Isolated venv: the runner's Homebrew python refuses a global pip install.
+      - name: Install App Store Connect tooling
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ascenv"
+          "$RUNNER_TEMP/ascenv/bin/pip" install --quiet pyjwt cryptography requests
 
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
@@ -194,6 +203,18 @@ jobs:
           name: polkadot-ios-dev
           path: build/*.ipa
           if-no-files-found: warn
+
+      # Automatic signing on a fresh runner creates a certificate every run; revoke the ones
+      # this runner created so the team account never fills up. Runs even when signing failed.
+      - name: Revoke certificates created by this runner
+        if: always()
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_B64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          [ -x "$RUNNER_TEMP/ascenv/bin/python" ] || { echo "tooling was never installed; nothing to revoke"; exit 0; }
+          "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py revoke-runner-certs
 
       # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
       # (ExportOptions method=ad-hoc) and run
