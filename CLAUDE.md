@@ -12,6 +12,7 @@ Polkadot iOS — a production-grade iOS wallet and social app for the Polkadot b
 - **VIPER** — Architecture pattern for all feature modules
 - **Swift Package Manager** — local packages under `Packages/`
 - **substrate-sdk-ios** — Substrate/Polkadot blockchain interaction
+- **Operation-iOS** (3.0.0) — Core Data service (writer/observer/reader modes), repositories, operations
 - **CoreData** — Local persistence (SubstrateDataModel + UserDataModel)
 - **WebRTC** — Peer-to-peer voice/video calls and DIM2 game
 - **Firebase** — Remote Config
