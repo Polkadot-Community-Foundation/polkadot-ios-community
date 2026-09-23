@@ -124,7 +124,8 @@ def get_all(s: requests.Session, url: str, params: dict | None = None) -> list:
             body = r.json()
         except ValueError:
             die(f"GET {url} -> 200 with a non-JSON body")
-        out.extend(body.get("data", []))
+        data = body.get("data")
+        out.extend(data if isinstance(data, list) else [data] if data else [])
         url = (body.get("links") or {}).get("next")
     return out
 
@@ -396,17 +397,18 @@ def check_distribution() -> None:
     if not builds:
         die(f"build {number} is not on the app record after the upload")
     build = builds[0]
-    detail = get_all(s, f"{API}/v1/builds/{build['id']}/buildBetaDetail") or []
-    attrs = detail[0]["attributes"] if isinstance(detail, list) and detail else {}
-    if not attrs:
-        one = s.get(f"{API}/v1/builds/{build['id']}/buildBetaDetail", timeout=HTTP_TIMEOUT)
-        attrs = one.json().get("data", {}).get("attributes", {}) if one.status_code == 200 else {}
+    detail = get_all(s, f"{API}/v1/builds/{build['id']}/buildBetaDetail")
+    attrs = detail[0].get("attributes", {}) if detail else {}
     external = attrs.get("externalBuildState")
     print(f"build {number} ({version or '?'}) is {build['attributes'].get('processingState')}, "
           f"internal: {attrs.get('internalBuildState')}, external: {external}")
-    if external in ("WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW", "READY_FOR_BETA_SUBMISSION"):
-        die(f"build {number} entered Beta App Review ({external}); this lane must never submit for review")
-    print("upload confirmed: internal distribution only, no beta review")
+    # READY_FOR_BETA_SUBMISSION means "could be submitted", which is the expected resting state:
+    # only an actual submission is a defect here.
+    if external in ("WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW"):
+        die(f"build {number} is in Beta App Review ({external}); this lane must never submit for review")
+    if attrs.get("internalBuildState") != "IN_BETA_TESTING":
+        die(f"build {number} is not in internal testing ({attrs.get('internalBuildState')})")
+    print("upload confirmed: in internal testing, not submitted for beta review")
 
 
 def runner_serials() -> set[int]:
