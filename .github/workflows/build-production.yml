@@ -453,8 +453,20 @@ jobs:
           MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
         run: ./Runscripts/generate_secrets.sh
 
+      # Only the archive needs packages resolved; validate skips it. Upstream's binary targets are
+      # downloaded from GitHub releases, which fails often enough to be worth retrying.
       - name: Resolve SwiftPM dependencies
-        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+        if: inputs.signing == 'production'
+        run: |
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app; then
+              exit 0
+            fi
+            echo "::warning::package resolution failed (attempt ${attempt}/3)"
+            sleep $((attempt * 20))
+          done
+          echo "::error::could not resolve Swift package dependencies"
+          exit 1
 
       # Isolated venv: the runner's Homebrew python refuses a global pip install.
       # Hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
@@ -535,7 +547,9 @@ jobs:
         run: |
           set -euo pipefail
           BUILD_SETTINGS=$(xcodebuild -project polkadot-app.xcodeproj -scheme polkadot-app \
-            -configuration Release -showBuildSettings 2>/dev/null | sed -e 's/^[[:space:]]*//')
+            -configuration Release -showBuildSettings -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile 2>/dev/null | sed -e 's/^[[:space:]]*//')
+          [ -n "$BUILD_SETTINGS" ] || { echo "::error::could not read the Release build settings"; exit 1; }
           export BUILD_SETTINGS
           "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py verify-signing
 
