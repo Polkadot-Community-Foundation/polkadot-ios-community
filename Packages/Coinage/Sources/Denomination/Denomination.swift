@@ -10,6 +10,21 @@ public enum DenominationError: Error, Equatable {
     /// The amount cannot be reconstituted from denominations: `remainder` planks are left over below
     /// the smallest one.
     case inexpressible(amountInPlanks: BigUInt, remainder: BigUInt)
+    /// The chain's constants do not describe a ladder the breakdown can work with. Raised where the
+    /// context is loaded, so a bad configuration stops the instance rather than surfacing later as a
+    /// payment that cannot be planned.
+    case unusableLadder(UnusableLadder)
+
+    public enum UnusableLadder: Equatable {
+        case zeroUnit
+        case invertedBounds(minExponent: Int16, maxExponent: Int16)
+        /// `unit` is not divisible by `2^|minExponent|`, so ``DenominationBreakdownContext/
+        /// valueInPlanks(for:)`` truncates on the way down and the steps stop being exact doublings.
+        /// The greedy breakdown is only complete on a ladder that does double, so on one that does
+        /// not it refuses amounts the denominations can in fact carry: unit 5 with minExponent -1
+        /// gives 5 and 2, where 6 is 2 + 2 + 2 but greedy takes the 5 and strands a remainder of 1.
+        case truncatingSteps(unit: BigUInt, minExponent: Int16)
+    }
 }
 
 public struct DenominationBreakdownContext: Equatable {
@@ -63,11 +78,10 @@ public struct DenominationBreakdownContext: Equatable {
     /// Whether `amount` can be reconstituted from denominations *exactly*, asked without the `do`
     /// block a caller would otherwise need just to branch.
     ///
-    /// Answered by running the breakdown rather than testing divisibility by the smallest
-    /// denomination: ``valueInPlanks(for:)`` shifts integers, so a unit that does not divide evenly
-    /// by `2^|minExponent|` yields a ladder whose steps are not all multiples of the smallest one —
-    /// with unit 10 and minExponent -2 the denominations are 10, 5, 2, and 7 is expressible as 5 + 2
-    /// while failing a divisibility test. The breakdown is the definition.
+    /// Answered by running the breakdown rather than by testing divisibility by the smallest
+    /// denomination. On a ladder ``validateLadder()`` accepts the two agree, but this type's
+    /// initializer is public and takes the bounds on trust, so the breakdown stays the definition
+    /// for contexts that never went through the loader.
     public func isExpressible(amountInPlanks amount: BigUInt) -> Bool {
         (try? breakdown(amountInPlanks: amount)) != nil
     }
@@ -79,6 +93,35 @@ public struct DenominationBreakdownContext: Equatable {
     /// call site rather than something the breakdown does silently on everyone's behalf.
     public func roundedDown(amountInPlanks amount: BigUInt) -> BigUInt {
         amount - remainderAfterBreakdown(of: amount)
+    }
+
+    /// Checks the constants describe a ladder whose every step is exactly twice the one below.
+    ///
+    /// ``valueInPlanks(for:)`` reaches the steps below `unit` by shifting right, which truncates.
+    /// While `2^|minExponent|` divides `unit` no shift loses anything, every step is an exact
+    /// doubling of the one under it, and the greedy breakdown accepts precisely the amounts the
+    /// denominations can carry — greedy is a decision procedure there, not a heuristic. Let a shift
+    /// truncate and that stops being true, and since ``breakdown(amountInPlanks:)`` now throws, an
+    /// amount the wallet could pay becomes a payment that cannot be planned.
+    ///
+    /// Called once, where the constants are read from chain, so the failure names the configuration
+    /// rather than arriving mid-payment.
+    func validateLadder() throws {
+        guard unit > 0 else {
+            throw DenominationError.unusableLadder(.zeroUnit)
+        }
+
+        guard maxExponent >= minExponent else {
+            throw DenominationError.unusableLadder(
+                .invertedBounds(minExponent: minExponent, maxExponent: maxExponent)
+            )
+        }
+
+        guard minExponent >= 0 || unit % (BigUInt(1) << Int(-minExponent)) == 0 else {
+            throw DenominationError.unusableLadder(
+                .truncatingSteps(unit: unit, minExponent: minExponent)
+            )
+        }
     }
 
     /// Breaks a plank amount directly into denominations, skipping the Decimal conversion.

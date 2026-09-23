@@ -100,6 +100,52 @@ struct DenominationTests {
         #expect(try context.breakdown(amount: 0).isEmpty)
     }
 
+    @Test("a ladder whose steps are exact doublings is accepted")
+    func canonicalLadderIsAccepted() throws {
+        // 10^16 is 2^16 * 5^16, so every step down to minExponent -16 is reached without truncating.
+        try DenominationBreakdownContext(
+            unit: BigUInt(10).power(16),
+            precision: 18,
+            maxExponent: 7,
+            minExponent: -16
+        ).validateLadder()
+
+        try DenominationBreakdownContext(unit: 1, precision: 0, maxExponent: 3, minExponent: 0)
+            .validateLadder()
+    }
+
+    /// The case the validation exists for. On this ladder the greedy breakdown is incomplete, so
+    /// with a throwing breakdown an amount the denominations *can* carry becomes an operation that
+    /// fails — which is why the configuration is refused where it is read instead.
+    @Test("a ladder whose steps truncate is refused, because greedy cannot decide it")
+    func truncatingLadderIsRefused() {
+        // unit 5 with minExponent -1: 5 >> 1 is 2, so the steps are 5 and 2 rather than 5 and 2.5.
+        let truncating = DenominationBreakdownContext(unit: 5, precision: 0, maxExponent: 0, minExponent: -1)
+
+        #expect(throws: DenominationError.unusableLadder(.truncatingSteps(unit: 5, minExponent: -1))) {
+            try truncating.validateLadder()
+        }
+
+        // 6 is 2 + 2 + 2, yet greedy takes the 5 and strands 1. Pinned so the reason the ladder is
+        // refused cannot quietly stop being true.
+        #expect(throws: DenominationError.inexpressible(amountInPlanks: 6, remainder: 1)) {
+            try truncating.breakdown(amountInPlanks: 6)
+        }
+    }
+
+    @Test("a ladder with no steps at all is refused")
+    func degenerateLadderIsRefused() {
+        #expect(throws: DenominationError.unusableLadder(.zeroUnit)) {
+            try DenominationBreakdownContext(unit: 0, precision: 0, maxExponent: 3, minExponent: 0)
+                .validateLadder()
+        }
+
+        #expect(throws: DenominationError.unusableLadder(.invertedBounds(minExponent: 3, maxExponent: 1))) {
+            try DenominationBreakdownContext(unit: 1, precision: 0, maxExponent: 1, minExponent: 3)
+                .validateLadder()
+        }
+    }
+
     @Test("the reported remainder is what the greedy pass could not place")
     func remainderIsReported() {
         let coarse = DenominationBreakdownContext(unit: 1, precision: 0, maxExponent: 3, minExponent: 1)

@@ -1,4 +1,5 @@
 import DurableTransactions
+import DurableTransactionsTestSupport
 import Foundation
 import SubstrateSdk
 import Testing
@@ -30,7 +31,7 @@ struct CoinageTxServiceHandoffTests {
         let coin = try makeCoin(item: 2)
 
         let handle = try await service.preCommitHandoff([coin])
-        try handle.commit(in: CoreDataFreeScope())
+        try handle.commit(in: InMemoryRegistrationScope())
 
         await #expect(throws: CoinageTxError.self) {
             _ = try await service.preCommitHandoff([coin])
@@ -66,7 +67,3 @@ private extension CoinageTxServiceHandoffTests {
         )
     }
 }
-
-/// A registration scope the in-memory ledger accepts: its `commitHandoffs` ignores the scope entirely,
-/// so the commit path can be exercised without a Core Data context.
-private final class CoreDataFreeScope: DurableTxRegistrationScope {}

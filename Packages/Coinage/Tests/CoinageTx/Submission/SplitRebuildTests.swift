@@ -152,7 +152,7 @@ struct SplitRebuildTests {
     /// indistinguishable and terminally failed a leg whose memo the recipient already held.
     @Test("a store that cannot be read propagates instead of resolving to nothing")
     func unreadableStorePropagates() async throws {
-        let rebuild = makeRebuild(coinService: FailingCoinService())
+        let rebuild = makeRebuild(coinService: StubCoinService(fetchError: StubCoinService.Failure.unavailable))
         let transaction = try scheduled()
         let assets = [transaction.id: RebuildFixtures.entry(
             id: transaction.id,
@@ -160,20 +160,10 @@ struct SplitRebuildTests {
             outputs: [.coin(2, RebuildFixtures.coin(2).publicKey)]
         )]
 
-        await #expect(throws: FailingCoinService.Failure.self) {
+        await #expect(throws: StubCoinService.Failure.self) {
             _ = try await rebuild.resolve([transaction], assets: assets)
         }
     }
-}
-
-/// A store that is simply unavailable — the transport is down, the context is gone. It knows nothing
-/// about any particular coin, which is exactly why its failure must not be read as a verdict.
-private struct FailingCoinService: CoinServiceProtocol {
-    enum Failure: Error { case unavailable }
-
-    func fetchAllTrackedCoins() async throws -> [TrackedCoin] { throw Failure.unavailable }
-    func fetchCoins(publicKeys _: Set<PublicKey>) async throws -> Set<Coin> { throw Failure.unavailable }
-    func save(coins _: [Coin]) async throws { throw Failure.unavailable }
 }
 
 private extension SplitRebuildTests {
