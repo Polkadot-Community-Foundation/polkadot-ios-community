@@ -479,6 +479,42 @@ jobs:
         run: |
           "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py load-signing-material
 
+      # Apple's codesign signs only from a keychain, so import the stored certificate into a throwaway one.
+      # Nothing here touches the runner's default keychain, and both are discarded at the end.
+      - name: Import the distribution certificate
+        run: |
+          set -euo pipefail
+          [ -n "${P12_PATH:-}" ] || { echo "::error::no distribution certificate in the signing material"; exit 1; }
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$P12_PATH" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          identity=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Apple Distribution' | head -1)
+          [ -n "$identity" ] || { echo "::error::no Apple Distribution identity in the imported certificate"; exit 1; }
+          echo "signing identity: ${identity#*\"}"
+
+      # Manual signing per target, the way upstream does it: xcodebuild then never contacts Apple's portal,
+      # so it can neither create a certificate nor fail on the portal's flaky authentication.
+      - name: Pin manual signing
+        run: |
+          set -euo pipefail
+          for target_profile in "polkadot-app=$PROFILE_APP_NAME" "NotificationServiceExtension=$PROFILE_EXTENSION_NAME"; do
+            fastlane run update_code_signing_settings \
+              path:polkadot-app.xcodeproj \
+              use_automatic_signing:false \
+              team_id:"$TEAM_ID" \
+              code_sign_identity:"Apple Distribution" \
+              targets:"${target_profile%%=*}" \
+              profile_name:"${target_profile#*=}" \
+              build_configurations:Release
+          done
+
       # Fails in seconds, before the archive: key accepted, app record visible, group internal.
       - name: Preflight App Store Connect
         env:
@@ -493,10 +529,17 @@ jobs:
           <plist version="1.0"><dict>
             <key>method</key><string>app-store</string>
             <key>teamID</key><string>${TEAM_ID}</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict>
+              <key>${PRODUCTION_BUNDLE_ID}</key><string>${PROFILE_APP_NAME}</string>
+              <key>${PRODUCTION_BUNDLE_ID}.NotificationServiceExtension</key><string>${PROFILE_EXTENSION_NAME}</string>
+            </dict>
             <key>uploadSymbols</key><true/>
           </dict></plist>
           EOF
+        env:
+          PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
 
       - name: Archive (Release)
         run: |
@@ -507,11 +550,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/polkadot-app.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             archive 2>&1 | tail -n 200
@@ -521,11 +560,7 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath build/polkadot-app.xcarchive \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath build/ \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -exportPath build/
 
       - name: Verify the signed .ipa identity
         env:
@@ -594,4 +629,8 @@ jobs:
 
       - name: Remove the signing material
         if: always()
-        run: rm -rf "$RUNNER_TEMP/asc"
+        run: |
+          rm -rf "$RUNNER_TEMP/asc"
+          [ -n "${KEYCHAIN:-}" ] && security delete-keychain "$KEYCHAIN" 2>/dev/null
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision
+          exit 0

@@ -31,6 +31,7 @@ Env:
 import base64
 import binascii
 import os
+import plistlib
 import re
 import subprocess
 import sys
@@ -56,6 +57,8 @@ IDS = {
     "team-id": re.compile(r"[A-Z0-9]{10}"),
 }
 SIGNING_KEYS = {*IDS, "private-key"}
+# Distribution material: all four together or none. Without them the lane cannot sign.
+DISTRIBUTION_KEYS = {"distribution-p12", "distribution-p12-password", "profile-app", "profile-extension"}
 
 
 def die(msg: str) -> NoReturn:
@@ -154,19 +157,28 @@ def parse_signing_material(raw: bytes) -> dict[str, str]:
         die("signing material is not valid UTF-8 YAML")
     if not isinstance(material, dict):
         die("signing material is not a YAML map")
-    if set(material) != SIGNING_KEYS:
+    extra = set(material) - SIGNING_KEYS
+    if set(material) & SIGNING_KEYS != SIGNING_KEYS or extra - DISTRIBUTION_KEYS:
         keys = ", ".join(sorted(map(str, material)))
-        die(f"signing material keys are [{keys}]; expected [{', '.join(sorted(SIGNING_KEYS))}]")
+        die(f"signing material keys are [{keys}]; expected [{', '.join(sorted(SIGNING_KEYS))}]"
+            f" plus optionally [{', '.join(sorted(DISTRIBUTION_KEYS))}]")
+    if extra and extra != DISTRIBUTION_KEYS:
+        die(f"distribution material is incomplete: missing [{', '.join(sorted(DISTRIBUTION_KEYS - extra))}]")
     if not all(isinstance(v, str) for v in material.values()):
         die("every signing material value must be a string")
 
     # Mask before anything else can print them; line by line, so a stray newline cannot unmask.
-    for k in (*IDS, "private-key"):
+    for k in (*IDS, "private-key", *(DISTRIBUTION_KEYS & set(material))):
         for line in material[k].splitlines():
             line = line.strip()
             if line and not line.startswith("-----"):
                 print(f"::add-mask::{line}")
 
+    for k in sorted(set(material) & DISTRIBUTION_KEYS):
+        try:
+            base64.b64decode(material[k], validate=True) if k != "distribution-p12-password" else None
+        except binascii.Error:
+            die(f"{k} is not base64")
     for k, pattern in IDS.items():
         if not pattern.fullmatch(material[k]):
             die(f"{k} is malformed")
@@ -179,7 +191,34 @@ def parse_signing_material(raw: bytes) -> dict[str, str]:
         die("private-key does not load as an unencrypted private key")
     if not isinstance(key, ec.EllipticCurvePrivateKey) or not isinstance(key.curve, ec.SECP256R1):
         die("private-key is not an EC P-256 key")
-    return {**{k: material[k] for k in IDS}, "private-key": pem}
+    return {**material, "private-key": pem}
+
+
+def write_private(directory: str, name: str, content: bytes) -> str:
+    """Write 0600, refusing to follow a symlink, and return the path."""
+    path = os.path.join(directory, name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        os.fchmod(f.fileno(), 0o600)
+        f.write(content)
+    return path
+
+
+def profile_identity(field: str, raw: bytes) -> tuple[str, str]:
+    """(Name, UUID) of a .mobileprovision, and reject anything but an App Store profile."""
+    start, end = raw.find(b"<?xml"), raw.find(b"</plist>")
+    if start < 0 or end < 0:
+        die(f"{field}: no plist payload in the provisioning profile")
+    try:
+        profile = plistlib.loads(raw[start:end + len(b"</plist>")])
+    except (plistlib.InvalidFileException, ValueError):
+        die(f"{field}: the provisioning profile payload does not parse")
+    if "ProvisionedDevices" in profile:
+        die(f"{field}: has a device list, so it is not an App Store profile")
+    name, uuid = profile.get("Name"), profile.get("UUID")
+    if not isinstance(name, str) or not isinstance(uuid, str):
+        die(f"{field}: the provisioning profile has no Name/UUID")
+    return name, uuid
 
 
 def load_signing_material() -> None:
@@ -193,11 +232,7 @@ def load_signing_material() -> None:
     key_dir = os.path.join(os.environ["RUNNER_TEMP"], "asc")
     os.makedirs(key_dir, mode=0o700, exist_ok=True)
     os.chmod(key_dir, 0o700)
-    key_path = os.path.join(key_dir, f"AuthKey_{material['key-id']}.p8")
-    fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as f:
-        os.fchmod(f.fileno(), 0o600)
-        f.write(material["private-key"])
+    key_path = write_private(key_dir, f"AuthKey_{material['key-id']}.p8", material["private-key"].encode("ascii"))
 
     exports = {
         "ASC_KEY_ID": material["key-id"],
@@ -205,10 +240,23 @@ def load_signing_material() -> None:
         "TEAM_ID": material["team-id"],
         "ASC_KEY_PATH": key_path,
     }
-    if any(c in v for v in exports.values() for c in "\r\n"):
-        die("refusing to export a multi-line value to GITHUB_ENV")
-    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-        f.writelines(f"{k}={v}\n" for k, v in exports.items())
+
+    # Distribution material, when present: the lane signs manually from it, so xcodebuild never asks Apple's
+    # portal for a certificate or a profile. Profiles go where Xcode looks for them as well as beside the key.
+    if DISTRIBUTION_KEYS <= set(material):
+        exports["P12_PATH"] = write_private(key_dir, "distribution.p12",
+                                            base64.b64decode(material["distribution-p12"]))
+        exports["P12_PASSWORD"] = material["distribution-p12-password"]
+        installed = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
+        os.makedirs(installed, exist_ok=True)
+        for field, var in (("profile-app", "PROFILE_APP"), ("profile-extension", "PROFILE_EXTENSION")):
+            raw_profile = base64.b64decode(material[field])
+            name, uuid = profile_identity(field, raw_profile)
+            write_private(key_dir, f"{uuid}.mobileprovision", raw_profile)
+            write_private(installed, f"{uuid}.mobileprovision", raw_profile)
+            exports[f"{var}_NAME"] = name
+            print(f"installed profile {name!r} ({uuid})")
+
     print(f"signing material loaded from {version}")
 
 
