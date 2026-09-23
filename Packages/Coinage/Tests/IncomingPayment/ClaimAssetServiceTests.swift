@@ -54,8 +54,9 @@ struct ClaimAssetServiceTests {
         let detections = await rig.run(amount: 11, retryUntil: .distantFuture, context: Self.coarseDenomination)
 
         #expect(detections.last == .claimedPartially(claimed: 10))
-        // The 1-plank remainder is not attempted again: nothing could ever load it.
-        #expect(rig.loader.loads() == [11])
+        // The 1-plank remainder is not attempted again: nothing could ever load it. The loader is
+        // asked for the 10 the denominations can carry, rather than for 11 and quietly given 10.
+        #expect(rig.loader.loads() == [10])
     }
 
     @Test(.timeLimit(.minutes(1)))

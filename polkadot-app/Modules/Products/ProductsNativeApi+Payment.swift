@@ -31,7 +31,6 @@ extension ProductsNativeApi {
     func requestPayment(amount: Balance, destination: AccountId, id: PaymentRequestId) async throws {
         let coinageService = try requirePaymentsSupport().coinageService
 
-        try await checkAmountExpressible(amount: amount)
         try await checkSufficientBalance(amount: amount)
         try await awaitUserApproval(amount: amount, destination: destination)
         try await awaitPrivacyConsentIfNeeded(amount: amount)
@@ -138,21 +137,6 @@ private extension ProductsNativeApi {
         }
 
         return paymentsSupport
-    }
-
-    /// Refuses an amount the instance's denominations cannot express exactly.
-    ///
-    /// Checked here rather than left to the planner because the failure downstream is late and
-    /// expensive: the user has approved, change vouchers have been minted and a free-unload token
-    /// charged before the mismatch surfaces — and where the leftover falls below the smallest
-    /// denomination it does not surface at all, it is paid to the destination.
-    func checkAmountExpressible(amount: Balance) async throws {
-        let coinageService = try requirePaymentsSupport().coinageService
-        let context = try await coinageService.denominationContext()
-
-        guard context.isExpressible(amountInPlanks: amount) else {
-            throw HostPaymentRequestError.amountNotExpressible
-        }
     }
 
     /// Checks the amount against what is spendable on-chain right now (private plus gaining-privacy

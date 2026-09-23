@@ -6,6 +6,12 @@ public struct Denomination: Equatable {
     public let exponent: Int16
 }
 
+public enum DenominationError: Error, Equatable {
+    /// The amount cannot be reconstituted from denominations: `remainder` planks are left over below
+    /// the smallest one.
+    case inexpressible(amountInPlanks: BigUInt, remainder: BigUInt)
+}
+
 public struct DenominationBreakdownContext: Equatable {
     // Base amount which is basically unit*2^0
     // when precision is 18 and unit is 10^16 - unit value is 0.01
@@ -24,11 +30,11 @@ public struct DenominationBreakdownContext: Equatable {
         self.minExponent = minExponent
     }
 
-    func breakdown(amount: Decimal) -> [Denomination] {
+    func breakdown(amount: Decimal) throws -> [Denomination] {
         guard let planks = amount.toSubstrateAmount(precision: precision) else {
             return []
         }
-        return breakdown(amountInPlanks: planks)
+        return try breakdown(amountInPlanks: planks)
     }
 
     /// Converts a denomination back into its decimal currency amount.
@@ -54,23 +60,36 @@ public struct DenominationBreakdownContext: Equatable {
         )
     }
 
-    /// Whether `amount` can be reconstituted from denominations *exactly*.
+    /// Whether `amount` can be reconstituted from denominations *exactly*, asked without the `do`
+    /// block a caller would otherwise need just to branch.
     ///
-    /// ``breakdown(amountInPlanks:)`` is greedy and silently drops whatever is left below the smallest
-    /// denomination. Most callers can live with that — a balance rendered a plank short is a rounding
-    /// artefact. A caller minting change that has to sum back to a surplus cannot: the unload variant
-    /// carrying no `externalAssetAmount` moves a group's whole input value, so a surplus that cannot be
-    /// expressed is paid to the destination instead of kept. Such callers ask this first.
+    /// Answered by running the breakdown rather than testing divisibility by the smallest
+    /// denomination: ``valueInPlanks(for:)`` shifts integers, so a unit that does not divide evenly
+    /// by `2^|minExponent|` yields a ladder whose steps are not all multiples of the smallest one —
+    /// with unit 10 and minExponent -2 the denominations are 10, 5, 2, and 7 is expressible as 5 + 2
+    /// while failing a divisibility test. The breakdown is the definition.
     public func isExpressible(amountInPlanks amount: BigUInt) -> Bool {
-        let expressed = breakdown(amountInPlanks: amount)
-            .reduce(BigUInt(0)) { $0 + valueInPlanks(for: $1.exponent) }
+        (try? breakdown(amountInPlanks: amount)) != nil
+    }
 
-        return expressed == amount
+    /// The largest amount not exceeding `amount` that ``breakdown(amountInPlanks:)`` accepts.
+    ///
+    /// For callers that mean to drop the dust — a claim taking what it can of a remainder it will
+    /// never fully cover. Pairing this with the strict breakdown keeps the rounding a decision at the
+    /// call site rather than something the breakdown does silently on everyone's behalf.
+    public func roundedDown(amountInPlanks amount: BigUInt) -> BigUInt {
+        amount - remainderAfterBreakdown(of: amount)
     }
 
     /// Breaks a plank amount directly into denominations, skipping the Decimal conversion.
-    func breakdown(amountInPlanks remaining: BigUInt) -> [Denomination] {
-        var remaining = remaining
+    ///
+    /// Throws rather than returning a short list. The greedy pass cannot always reach zero, and an
+    /// amount that lands a few planks short is not a rounding artefact to whoever is holding the
+    /// difference: the caller minting change has to sum back to the surplus exactly, and the caller
+    /// minting vouchers has to deliver what it was asked for. Callers that do mean to drop the dust
+    /// say so with ``roundedDown(amountInPlanks:)``.
+    func breakdown(amountInPlanks amount: BigUInt) throws -> [Denomination] {
+        var remaining = amount
         var results: [Denomination] = []
 
         for exponent in stride(from: maxExponent, through: minExponent, by: -1) {
@@ -82,7 +101,25 @@ public struct DenominationBreakdownContext: Equatable {
             }
         }
 
+        guard remaining == 0 else {
+            throw DenominationError.inexpressible(amountInPlanks: amount, remainder: remaining)
+        }
+
         return results
+    }
+
+    /// What the greedy pass would leave behind, without building the list.
+    func remainderAfterBreakdown(of amount: BigUInt) -> BigUInt {
+        var remaining = amount
+
+        for exponent in stride(from: maxExponent, through: minExponent, by: -1) {
+            let value = valueInPlanks(for: exponent)
+            guard value > 0 else { continue }
+            remaining %= value
+            if remaining == 0 { return 0 }
+        }
+
+        return remaining
     }
 
     /// Converts a plank amount into its decimal currency amount using the asset precision. Public so

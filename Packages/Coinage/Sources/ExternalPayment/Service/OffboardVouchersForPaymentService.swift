@@ -290,14 +290,6 @@ private extension OffboardVouchersForPaymentService {
             throw OffboardVouchersForPaymentError.noSurplusHost(surplus)
         }
 
-        // The change vouchers have to reconstitute the surplus exactly. When the breakdown cannot
-        // express it they come back short — and an empty result would take the no-surplus branch,
-        // whose call carries no amount and unloads the group's whole input value to the destination,
-        // silently paying more than was asked. Refuse before anything is minted or registered.
-        guard denominationContext.isExpressible(amountInPlanks: surplus) else {
-            throw OffboardVouchersForPaymentError.surplusNotExpressible(surplus)
-        }
-
         let surplusVouchers = try await allocateSurplusVouchers(surplus: surplus)
         return SurplusHost(hostIndex: hostIndex, surplusVouchers: surplusVouchers)
     }
@@ -326,14 +318,10 @@ private extension OffboardVouchersForPaymentService {
     func allocateSurplusVouchers(surplus: Balance) async throws -> [Voucher] {
         guard surplus > 0 else { return [] }
 
-        guard let surplusDecimal = Decimal.fromSubstrateAmount(
-            surplus,
-            precision: denominationContext.precision
-        ) else {
-            return []
-        }
-
-        let denominations = denominationContext.breakdown(amount: surplusDecimal)
+        // Broken down in planks: the surplus is already one, and the round trip through `Decimal`
+        // does not survive `toSubstrateAmount` intact — $0.07 at precision 18 comes back ten planks
+        // heavy, which the breakdown then cannot place.
+        let denominations = try denominationContext.breakdown(amountInPlanks: surplus)
         return try await voucherMinter.mintVouchers(denominations.map(\.exponent))
     }
 }

@@ -164,7 +164,9 @@ private extension ClaimAssetService {
 
             lastSeen = await awaitBalance(looks, lastSeen: lastSeen, target: remaining)
             hasLooked = true
-            let loadable = Swift.min(lastSeen, remaining)
+            // Deliberate rounding: a claim takes what the denominations can express and leaves the
+            // dust, which no later look can make loadable either.
+            let loadable = run.context.roundedDown(amountInPlanks: Swift.min(lastSeen, remaining))
 
             guard loadable > 0 else { continue }
 
@@ -192,7 +194,7 @@ private extension ClaimAssetService {
 
         if remaining == 0 { return nil }
 
-        if run.context.breakdown(amountInPlanks: remaining).isEmpty {
+        if run.context.roundedDown(amountInPlanks: remaining) == 0 {
             logger?.debug("Claim asset: remainder \(remaining) is unloadable group=\(run.groupId)")
             return nil
         }
