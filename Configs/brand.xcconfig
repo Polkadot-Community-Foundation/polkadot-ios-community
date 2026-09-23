@@ -3,6 +3,10 @@
 
 BRAND_DISPLAY_NAME = Polkadot
 BRAND_BUNDLE_ROOT = io.pcf.polkadotapp
+
+// The registered PCF App Group is group.pcf.polkadotapp, NOT group.$(APP_MAIN_BUNDLE): the app id gained the
+// io. prefix after the group was created. Entitlements and Info.plist read $(APP_GROUP), so this pins both.
+APP_GROUP = group.pcf.polkadotapp
 BRAND_DEEPLINK = polkadotapp
 BRAND_SHARE_ROOT = dot.li
 BRAND_SHARE_ROOT_TEST = paseo.li

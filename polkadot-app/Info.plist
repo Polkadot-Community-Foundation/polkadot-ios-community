@@ -9,7 +9,7 @@
 		<string>io.novatech.person.self_include.submit</string>
 	</array>
 	<key>BrandAppGroup</key>
-	<string>group.$(APP_MAIN_BUNDLE)</string>
+	<string>$(APP_GROUP)</string>
 	<key>BrandBundleRoot</key>
 	<string>$(APP_MAIN_BUNDLE)</string>
 	<key>BrandCashSymbol</key>
