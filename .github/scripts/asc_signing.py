@@ -257,6 +257,11 @@ def load_signing_material() -> None:
             exports[f"{var}_NAME"] = name
             print(f"installed profile {name!r} ({uuid})")
 
+    if any(c in v for v in exports.values() for c in "\r\n"):
+        die("refusing to export a multi-line value to GITHUB_ENV")
+    with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+        f.writelines(f"{k}={v}\n" for k, v in exports.items())
+    print(f"exported {', '.join(sorted(exports))} to later steps")
     print(f"signing material loaded from {version}")
 
 
