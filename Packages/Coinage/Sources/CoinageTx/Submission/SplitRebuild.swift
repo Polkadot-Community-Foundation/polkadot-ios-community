@@ -32,8 +32,6 @@ struct SplitRebuild: CoinageRebuild {
             keys.formUnion(entry.outputs.map(\.publicKey))
         }
 
-        // Propagate: the executor backs off and asks again. Swallowing this made an unreadable store
-        // indistinguishable from an unbuildable transaction, and terminally failed the leg.
         let coins = try await coinService.fetchCoins(publicKeys: keys)
 
         let byKey = coins.reduce(into: [PublicKey: Coin]()) { $0[$1.publicKey] = $1 }

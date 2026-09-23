@@ -41,8 +41,6 @@ struct UnloadRebuild: CoinageRebuild {
             $0.formUnion($1.inputs.map(\.publicKey))
         }
 
-        // Propagate: the executor backs off and asks again. Swallowing these made an unreadable store
-        // indistinguishable from an unbuildable transaction, and terminally failed the leg.
         let coins = try await coinService.fetchCoins(publicKeys: outputKeys)
         let vouchers = try await voucherService.fetchVouchers(publicKeys: inputKeys)
 

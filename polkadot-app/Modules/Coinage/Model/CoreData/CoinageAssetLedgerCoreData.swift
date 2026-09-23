@@ -213,15 +213,12 @@ private extension CoinageAssetLedgerCoreData {
 
 private extension CoinageAssetLedgerCoreData {
     func markHandoffPending(_ asset: OwnAsset, in context: NSManagedObjectContext) throws {
-        // Handoff marks are a coin concept — the column lives on `CDCoin`, and only coins are ever
-        // handed off. A voucher reaching here has nothing to mark.
         guard case .coin = asset else { return }
 
         guard let coin = try coinForAsset(asset, in: context) else {
             throw CoinageTxError.handoffOfUnknownAsset(asset.publicKey.toHex())
         }
-        // Insert-only and monotonic: a coin already reserved or handed off is not available again.
-        // Returning quietly here would report a reservation that never happened.
+
         guard coin.handoffMark == CoinHandoffMark.none.rawValue else {
             throw CoinageTxError.handoffOfHandedOffAsset(asset.publicKey.toHex())
         }
