@@ -345,6 +345,8 @@ jobs:
     env:
       RUN_IN_CI: 'true'
       TESTFLIGHT_GROUP: Release Internal
+      # The version testers see. Upstream's own MARKETING_VERSION is used when this is unset.
+      MARKETING_VERSION: ${{ vars.PRODUCTION_MARKETING_VERSION }}
     steps:
       # Before any checkout or credential. INPUT_REF comes through env, never into the script text,
       # and is echoed only once it has matched the tag pattern.
@@ -627,6 +629,7 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            ${MARKETING_VERSION:+MARKETING_VERSION="$MARKETING_VERSION"} \
             archive 2>&1 | tail -n 200
 
       - name: Export signed .ipa
@@ -663,6 +666,10 @@ jobs:
           [ -n "$EXPECTED_BUNDLE_ID" ] || { echo "::error::PRODUCTION_BUNDLE_ID is not set in production-distribution"; exit 1; }
           [ "$id" = "$EXPECTED_BUNDLE_ID" ] || { echo "::error::signed bundle id '$id' != PRODUCTION_BUNDLE_ID '$EXPECTED_BUNDLE_ID'"; exit 1; }
           [ "$num" = "$BUILD_NUMBER" ] || { echo "::error::CFBundleVersion $num != $BUILD_NUMBER"; exit 1; }
+          if [ -n "${MARKETING_VERSION:-}" ] && [ "$ver" != "$MARKETING_VERSION" ]; then
+            echo "::error::CFBundleShortVersionString $ver != PRODUCTION_MARKETING_VERSION $MARKETING_VERSION"
+            exit 1
+          fi
           echo "IPA=$IPA" >> "$GITHUB_ENV"
 
       # Keep the signed .ipa in the private bucket so a failed upload can be retried with
@@ -696,17 +703,23 @@ jobs:
           )
           # --app_identifier is required: fastlane otherwise reads fastlane/Appfile, which is upstream's
           # and names Parity's bundle id.
+          #
+          # No --groups: Apple refuses to assign an INTERNAL group to a build ("Cannot add internal
+          # group to a build"), because internal groups receive every processed build automatically.
+          # Passing it made run 35816156803 fail after the build had already arrived and processed.
+          # The preflight is what guards the destination: it asserts the group exists and is internal.
           fastlane pilot upload \
             --api_key_path "$api_key" \
             --app_identifier "$PRODUCTION_BUNDLE_ID" \
             --app_platform ios \
             --ipa "$IPA" \
             --distribute_external false \
-            --groups "$TESTFLIGHT_GROUP" \
             --changelog "Production (Release) build ${BUILD_NUMBER} (${GITHUB_SHA:0:7}). Internal testing only."
+          BUNDLE_ID="$PRODUCTION_BUNDLE_ID" "$RUNNER_TEMP/ascenv/bin/python" \
+            _trusted/.github/scripts/asc_signing.py check-distribution
           {
             echo "### TestFlight"
-            echo "Uploaded build ${BUILD_NUMBER} to internal group **${TESTFLIGHT_GROUP}**."
+            echo "Uploaded build ${BUILD_NUMBER}. Internal groups, including **${TESTFLIGHT_GROUP}**, receive it automatically once processed."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Automatic signing on a fresh runner creates a certificate every run; revoke the ones
