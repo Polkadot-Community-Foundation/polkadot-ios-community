@@ -381,6 +381,34 @@ def verify_signing() -> None:
     print("signing material verified: certificate live, profiles match it, entitlements granted")
 
 
+def check_distribution() -> None:
+    """After an upload: the build is there, internal testers have it, and nothing is in beta review."""
+    bundle = os.environ.get("BUNDLE_ID") or "io.pcf.polkadotapp"
+    number, version = os.environ["BUILD_NUMBER"], os.environ.get("MARKETING_VERSION")
+    s = session()
+    apps = [a for a in get_all(s, f"{API}/v1/apps", {"filter[bundleId]": bundle, "limit": 200})
+            if a["attributes"].get("bundleId") == bundle]
+    if not apps:
+        die(f"no app record for {bundle}")
+    builds = [b for b in get_all(s, f"{API}/v1/builds", {"filter[app]": apps[0]["id"], "limit": 20,
+                                                         "sort": "-uploadedDate"})
+              if b["attributes"].get("version") == number]
+    if not builds:
+        die(f"build {number} is not on the app record after the upload")
+    build = builds[0]
+    detail = get_all(s, f"{API}/v1/builds/{build['id']}/buildBetaDetail") or []
+    attrs = detail[0]["attributes"] if isinstance(detail, list) and detail else {}
+    if not attrs:
+        one = s.get(f"{API}/v1/builds/{build['id']}/buildBetaDetail", timeout=HTTP_TIMEOUT)
+        attrs = one.json().get("data", {}).get("attributes", {}) if one.status_code == 200 else {}
+    external = attrs.get("externalBuildState")
+    print(f"build {number} ({version or '?'}) is {build['attributes'].get('processingState')}, "
+          f"internal: {attrs.get('internalBuildState')}, external: {external}")
+    if external in ("WAITING_FOR_BETA_REVIEW", "IN_BETA_REVIEW", "READY_FOR_BETA_SUBMISSION"):
+        die(f"build {number} entered Beta App Review ({external}); this lane must never submit for review")
+    print("upload confirmed: internal distribution only, no beta review")
+
+
 def runner_serials() -> set[int]:
     pem = subprocess.run(["security", "find-certificate", "-a", "-p"],
                          capture_output=True, text=True).stdout
@@ -436,6 +464,7 @@ if __name__ == "__main__":
         "load-signing-material": load_signing_material,
         "preflight": preflight,
         "verify-signing": verify_signing,
+        "check-distribution": check_distribution,
         "revoke-runner-certs": revoke_runner_certs,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
