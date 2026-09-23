@@ -341,6 +341,9 @@ def verify_signing() -> None:
 
     settings = dict(line.split(" = ", 1) for line in
                     os.environ.get("BUILD_SETTINGS", "").splitlines() if " = " in line)
+    # Xcode injects these at signing time from the profile's team prefix; they are not build settings.
+    for key in ("AppIdentifierPrefix", "TeamIdentifierPrefix"):
+        settings.setdefault(key, f"{os.environ['TEAM_ID']}.")
     fail = False
     for var, entitlements_path in (("PROFILE_APP", os.environ["APP_ENTITLEMENTS"]),
                                    ("PROFILE_EXTENSION", os.environ["EXTENSION_ENTITLEMENTS"])):
