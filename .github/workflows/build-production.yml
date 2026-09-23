@@ -333,7 +333,8 @@ jobs:
   sign:
     name: Sign + TestFlight (Release Internal)
     needs: build
-    if: inputs.signing == 'validate' || (inputs.signing == 'production' && needs.build.result == 'success')
+    # !cancelled() is required: without a status function, a skipped `build` (validate mode) skips this job too.
+    if: ${{ !cancelled() && (inputs.signing == 'validate' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
     runs-on: macos-15
     timeout-minutes: 120
     environment: production-distribution
