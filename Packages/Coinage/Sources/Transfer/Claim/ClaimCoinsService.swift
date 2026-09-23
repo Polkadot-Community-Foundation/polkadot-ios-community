@@ -154,7 +154,7 @@ private extension ClaimCoinsService {
             // given up reads as registered and is not re-registered here. That is deliberate — see the
             // note on `CoinageClaimSubmitting` — and it means no layer retries such a coin: the policy
             // is dead and this loop treats it as handled. It stays on chain, claimable by nobody, until
-            // the sender-side reclaim UI exists (audit finding C1).
+            // the sender-side reclaim UI exists.
             let unregistered = coins.subtracting(settled.receivedPublicKeys())
             if unregistered.isEmpty {
                 logger?.debug("Every coin has a claim group=\(groupId)")

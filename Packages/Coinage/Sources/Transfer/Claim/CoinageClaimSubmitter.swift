@@ -33,8 +33,6 @@ struct ClaimableCoin {
 /// excludes failed entries for exactly that reason), but nothing issues one: the claim loop counts a
 /// failed entry as a coin already registered. So a coin whose policy has given up is not recoverable
 /// in-app, and its secret stays in the chat row.
-/// TODO: delete the previous paragraph when the sender-side "claim tokens back" UI ships — that is the
-/// remedy this gap waits on (audit finding C1).
 protocol CoinageClaimSubmitting: Sendable {
     /// Registers one claim per coin and returns once registration commits — not settlement. Status is
     /// observed via ``CoinageTxServicing/subscribeOperationGroupStatuses(_:)`` for `groupId`.
