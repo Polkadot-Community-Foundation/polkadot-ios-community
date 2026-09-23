@@ -47,10 +47,11 @@ on:
   workflow_dispatch:
     inputs:
       signing:
-        description: 'none = unsigned build only. production = also archive, sign and upload to the internal TestFlight group "Release Internal" (waits for production-distribution approval).'
+        description: 'none = unsigned build only. validate = check the signing material in ~3 minutes without building. production = also archive, sign and upload to the internal TestFlight group "Release Internal" (waits for production-distribution approval).'
         type: choice
         options:
           - none
+          - validate
           - production
         default: none
       ref:
@@ -79,6 +80,7 @@ env:
 jobs:
   build:
     name: Build Release (unsigned)
+    if: inputs.signing != 'validate'
     runs-on: macos-15
     timeout-minutes: 90
     # Public production CONFIGURATION only. Deliberately ungated, so a production build can run
@@ -331,7 +333,7 @@ jobs:
   sign:
     name: Sign + TestFlight (Release Internal)
     needs: build
-    if: inputs.signing == 'production'
+    if: inputs.signing == 'validate' || (inputs.signing == 'production' && needs.build.result == 'success')
     runs-on: macos-15
     timeout-minutes: 120
     environment: production-distribution
@@ -522,7 +524,31 @@ jobs:
         run: |
           "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py preflight
 
+      # Everything that must hold before an archive is worth 25 minutes: the certificate is live at
+      # Apple (not revoked), each profile embeds THAT certificate, and every entitlement the targets
+      # ask for is granted. `signing: validate` stops here.
+      - name: Verify the signing material
+        env:
+          APP_ENTITLEMENTS: polkadot-app/polkadotAppRelease.entitlements
+          EXTENSION_ENTITLEMENTS: NotificationServiceExtension/NotificationServiceExtension.entitlements
+        run: |
+          set -euo pipefail
+          BUILD_SETTINGS=$(xcodebuild -project polkadot-app.xcodeproj -scheme polkadot-app \
+            -configuration Release -showBuildSettings 2>/dev/null | sed -e 's/^[[:space:]]*//')
+          export BUILD_SETTINGS
+          "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py verify-signing
+
+      - name: Signing material is ready
+        if: inputs.signing == 'validate'
+        run: |
+          {
+            echo "### Signing material verified"
+            echo "Certificate live at Apple, profiles embed it, entitlements granted."
+            echo "Re-run with \`signing: production\` to build, sign and upload."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Write ExportOptions.plist
+        if: inputs.signing == 'production'
         run: |
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -542,6 +568,7 @@ jobs:
           PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
 
       - name: Archive (Release)
+        if: inputs.signing == 'production'
         run: |
           set -o pipefail
           xcodebuild \
@@ -556,6 +583,7 @@ jobs:
             archive 2>&1 | tail -n 200
 
       - name: Export signed .ipa
+        if: inputs.signing == 'production'
         run: |
           xcodebuild -exportArchive \
             -archivePath build/polkadot-app.xcarchive \
@@ -563,6 +591,7 @@ jobs:
             -exportPath build/
 
       - name: Verify the signed .ipa identity
+        if: inputs.signing == 'production'
         env:
           EXPECTED_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
@@ -592,6 +621,7 @@ jobs:
       # Internal group only: no --distribute_external, so no Beta App Review and no public link.
       # The API key JSON embeds the private key, so it lives beside it and goes with it.
       - name: Upload to TestFlight (internal group only)
+        if: inputs.signing == 'production'
         run: |
           set -euo pipefail
           api_key="$RUNNER_TEMP/asc/api_key.json"
