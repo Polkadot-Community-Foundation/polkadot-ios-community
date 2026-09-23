@@ -2,11 +2,12 @@
 // polkadot-app/Configs/polkadot-app.dev.xcconfig — same APP_MAIN_BUNDLE, same APP_GROUP —
 // or the extension cannot read the shared container the app writes.
 //
-// OTHER_SWIFT_FLAGS carries no feature flags, matching the pre-sync fork behaviour.
+// OTHER_SWIFT_FLAGS carries no feature flag; -DNOTIFICATION_SERVICE_EXTENSION identifies the target,
+// and selects the extension's serial Core Data topology (CoreDataConcurrencyPolicy).
 
 #include "../../Configs/base.release.xcconfig"
 
-OTHER_SWIFT_FLAGS = $(inherited)
+OTHER_SWIFT_FLAGS = $(inherited) "-DNOTIFICATION_SERVICE_EXTENSION"
 
 APP_NAME        = $(BRAND_DISPLAY_NAME)
 APP_MAIN_BUNDLE = io.pcf.polkadotapp

@@ -82,6 +82,39 @@ struct ReviveDotNsContractApiTests {
         #expect(contracts.calls(to: Self.registry).count == 2)
     }
 
+    /// A registry entry can name a contract that is not a resolver at all; Solidity answers an
+    /// unknown selector with a bare `revert()`, which is a revert carrying no data.
+    @Test("a resolver that reverts without a reason is treated as having no record and falls back")
+    func emptyRevertFallsBack() async throws {
+        let contracts = StubReviveContractApi(answers: [
+            Self.registry: { _ in AbiOutput.address(Self.ownResolver) },
+            Self.ownResolver: { _ in throw ReviveContractRevertedError(data: Data()) },
+            Self.fixedResolver: Self.contentHashAnswer()
+        ])
+        let api = ReviveDotNsContractApi(contractApi: contracts) { Self.config() }
+
+        let content = try await api.resolveContentHash(dotNsName: Self.name)
+        _ = try await api.resolveContentHash(dotNsName: Self.name)
+
+        #expect(content == Data(repeating: 0xCD, count: 34))
+        #expect(contracts.calls(to: Self.fixedResolver).count == 2)
+        #expect(contracts.calls(to: Self.registry).count == 2)
+    }
+
+    @Test("a resolver that reverts without a reason has no text record")
+    func emptyRevertMeansNoMetadata() async throws {
+        let contracts = StubReviveContractApi(answers: [
+            Self.registry: { _ in AbiOutput.address(Self.ownResolver) },
+            Self.ownResolver: { _ in throw ReviveContractRevertedError(data: Data()) }
+        ])
+        let api = ReviveDotNsContractApi(contractApi: contracts) { Self.config() }
+
+        let url = try await api.getMetadata(dotNsName: Self.name, key: "url")
+
+        #expect(url == nil)
+        #expect(contracts.calls(to: Self.fixedResolver).isEmpty)
+    }
+
     @Test("without a registry configured every name resolves through the fixed resolver")
     func noRegistry() async throws {
         let contracts = StubReviveContractApi(answers: [Self.fixedResolver: Self.contentHashAnswer()])

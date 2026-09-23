@@ -24,9 +24,14 @@ public final class ReviveDotNsContractApi: Sendable {
 }
 
 private extension ReviveDotNsContractApi {
+    /// A record read. A revert with no reason is a resolver that does not implement the function
+    /// (Solidity's bare `revert()` on an unknown selector) and reads as no record; a revert with a
+    /// reason is the contract refusing and stays an error.
     func callReviveContract(contract: EvmAddress, inputData: Data) async throws -> Data {
         do {
             return try await contractApi.callReadOnly(contract: contract, input: inputData, at: nil)
+        } catch let revert as ReviveContractRevertedError where revert.data.isEmpty {
+            return Data()
         } catch {
             throw DotNsContractError.contractCallFailed(error)
         }
