@@ -46,6 +46,8 @@ from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.x509.oid import NameOID
 
 API = "https://api.appstoreconnect.apple.com"
 SECRET_MANAGER = "https://secretmanager.googleapis.com/v1"
@@ -244,17 +246,23 @@ def load_signing_material() -> None:
     # Distribution material, when present: the lane signs manually from it, so xcodebuild never asks Apple's
     # portal for a certificate or a profile. Profiles go where Xcode looks for them as well as beside the key.
     if DISTRIBUTION_KEYS <= set(material):
-        exports["P12_PATH"] = write_private(key_dir, "distribution.p12",
-                                            base64.b64decode(material["distribution-p12"]))
+        p12 = base64.b64decode(material["distribution-p12"])
+        exports["P12_PATH"] = write_private(key_dir, "distribution.p12", p12)
         exports["P12_PASSWORD"] = material["distribution-p12-password"]
+        _, certificate, _ = pkcs12.load_key_and_certificates(p12, material["distribution-p12-password"].encode())
+        if certificate is None:
+            die("distribution-p12 carries no certificate")
+        exports["IMPORTED_CERT_SERIAL"] = f"{certificate.serial_number:X}"
+        exports["SIGNING_IDENTITY"] = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
         installed = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
         os.makedirs(installed, exist_ok=True)
         for field, var in (("profile-app", "PROFILE_APP"), ("profile-extension", "PROFILE_EXTENSION")):
             raw_profile = base64.b64decode(material[field])
             name, uuid = profile_identity(field, raw_profile)
-            write_private(key_dir, f"{uuid}.mobileprovision", raw_profile)
+            path = write_private(key_dir, f"{uuid}.mobileprovision", raw_profile)
             write_private(installed, f"{uuid}.mobileprovision", raw_profile)
             exports[f"{var}_NAME"] = name
+            exports[f"{var}_PATH"] = path
             print(f"installed profile {name!r} ({uuid})")
 
     if any(c in v for v in exports.values() for c in "\r\n"):
@@ -293,6 +301,83 @@ def preflight() -> None:
         print(f"::warning::{want!r} receives ALL builds automatically, other lanes' builds included")
 
 
+def expand(value, settings: dict[str, str]):
+    """Expand $(SETTING) the way xcodebuild does, recursively, in strings and lists."""
+    if isinstance(value, list):
+        return [expand(v, settings) for v in value]
+    if not isinstance(value, str):
+        return value
+    for _ in range(5):
+        expanded = re.sub(r"\$[({](\w+)[)}]", lambda m: settings.get(m.group(1), ""), value)
+        if expanded == value:
+            return value
+        value = expanded
+    return value
+
+
+def covers(granted, wanted) -> bool:
+    """Does a profile's grant cover what a target asks for? Apple grants wildcards (7SUDX74VMC.*)."""
+    if isinstance(granted, list):
+        return any(covers(g, wanted) for g in granted)
+    if isinstance(granted, bool) or isinstance(wanted, bool):
+        return granted == wanted
+    granted, wanted = str(granted), str(wanted)
+    if granted.endswith("*"):
+        return wanted.startswith(granted[:-1])
+    return granted == wanted
+
+
+def verify_signing() -> None:
+    """Prove this runner can sign before anything expensive: the certificate is live at Apple, the
+    profiles embed that certificate, and every entitlement the targets ask for is granted."""
+    serial = int(os.environ["IMPORTED_CERT_SERIAL"], 16)
+    s = session()
+    live = [c for c in get_all(s, f"{API}/v1/certificates", {"limit": 200})
+            if int(c["attributes"].get("serialNumber") or "0", 16) == serial]
+    if not live:
+        die(f"the imported certificate (serial {serial:X}) is not listed at Apple: revoked, or from another team")
+    a = live[0]["attributes"]
+    print(f"certificate {a['certificateType']} {a.get('displayName')!r} is live, expires {a['expirationDate'][:10]}")
+
+    settings = dict(line.split(" = ", 1) for line in
+                    os.environ.get("BUILD_SETTINGS", "").splitlines() if " = " in line)
+    fail = False
+    for var, entitlements_path in (("PROFILE_APP", os.environ["APP_ENTITLEMENTS"]),
+                                   ("PROFILE_EXTENSION", os.environ["EXTENSION_ENTITLEMENTS"])):
+        with open(os.environ[f"{var}_PATH"], "rb") as f:
+            raw = f.read()
+        start, end = raw.find(b"<?xml"), raw.find(b"</plist>")
+        profile = plistlib.loads(raw[start:end + len(b"</plist>")])
+        granted = profile["Entitlements"]
+        name = profile["Name"]
+        if serial not in {x509.load_der_x509_certificate(d).serial_number
+                          for d in profile.get("DeveloperCertificates", [])}:
+            die(f"profile {name!r} does not embed the certificate this job signs with; regenerate it")
+        expires = datetime.fromisoformat(profile["ExpirationDate"].isoformat()) \
+            if hasattr(profile["ExpirationDate"], "isoformat") else None
+        print(f"profile {name!r} embeds the signing certificate" + (f", expires {expires:%Y-%m-%d}" if expires else ""))
+
+        with open(entitlements_path, "rb") as f:
+            wanted = plistlib.load(f)
+        for key, value in wanted.items():
+            if key.startswith(("com.apple.security.app-sandbox", "com.apple.security.files")):
+                continue  # macOS keys: inert on iOS and never present in a profile
+            want = expand(value, settings)
+            have = granted.get(key)
+            if have is None:
+                print(f"::error::{name}: entitlement {key} is not granted by the profile (wants {want!r})")
+                fail = True
+                continue
+            missing = [v for v in (want if isinstance(want, list) else [want]) if not covers(have, v)]
+            if missing:
+                print(f"::error::{name}: {key} wants {missing}, profile grants {have!r}")
+                fail = True
+
+    if fail:
+        die("the signing material does not satisfy the targets' entitlements")
+    print("signing material verified: certificate live, profiles match it, entitlements granted")
+
+
 def runner_serials() -> set[int]:
     pem = subprocess.run(["security", "find-certificate", "-a", "-p"],
                          capture_output=True, text=True).stdout
@@ -309,9 +394,16 @@ def runner_serials() -> set[int]:
 
 
 def revoke_runner_certs() -> None:
+    """Revoke the DEVELOPMENT certificates automatic signing created on this runner.
+
+    Only development types, and never the certificate this job imported: a stored distribution
+    certificate is in the keychain too, and a freshly issued one expires a year out like a
+    created-this-run one, so the date guard alone would revoke the material we sign with.
+    """
     started = datetime.fromtimestamp(int(os.environ["SIGN_STARTED"]), timezone.utc)
     earliest, latest = started + timedelta(days=364), datetime.now(timezone.utc) + timedelta(days=366)
-    local = runner_serials()
+    imported = {int(v, 16) for v in (os.environ.get("IMPORTED_CERT_SERIAL"),) if v}
+    local = runner_serials() - imported
     s = session()
     revoked = 0
     for c in get_all(s, f"{API}/v1/certificates", {"limit": 200}):
@@ -320,6 +412,8 @@ def revoke_runner_certs() -> None:
             serial = int(a.get("serialNumber") or "", 16)
             expires = datetime.fromisoformat(a["expirationDate"].replace("Z", "+00:00"))
         except (ValueError, KeyError, AttributeError):
+            continue
+        if "DEVELOPMENT" not in (a.get("certificateType") or ""):
             continue
         if serial not in local or not (earliest <= expires <= latest):
             continue
@@ -338,6 +432,7 @@ if __name__ == "__main__":
     commands = {
         "load-signing-material": load_signing_material,
         "preflight": preflight,
+        "verify-signing": verify_signing,
         "revoke-runner-certs": revoke_runner_certs,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
