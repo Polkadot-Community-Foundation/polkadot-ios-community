@@ -47,11 +47,12 @@ on:
   workflow_dispatch:
     inputs:
       signing:
-        description: 'none = unsigned build only. validate = check the signing material in ~3 minutes without building. production = also archive, sign and upload to the internal TestFlight group "Release Internal" (waits for production-distribution approval).'
+        description: 'none = unsigned build only. validate = check the signing material in ~3 minutes without building. upload = send the last signed .ipa from the private bucket to TestFlight, no rebuild. production = build, sign and upload (waits for production-distribution approval).'
         type: choice
         options:
           - none
           - validate
+          - upload
           - production
         default: none
       ref:
@@ -80,7 +81,7 @@ env:
 jobs:
   build:
     name: Build Release (unsigned)
-    if: inputs.signing != 'validate'
+    if: inputs.signing == 'none' || inputs.signing == 'production'
     runs-on: macos-15
     timeout-minutes: 90
     # Public production CONFIGURATION only. Deliberately ungated, so a production build can run
@@ -334,7 +335,7 @@ jobs:
     name: Sign + TestFlight (Release Internal)
     needs: build
     # !cancelled() is required: without a status function, a skipped `build` (validate mode) skips this job too.
-    if: ${{ !cancelled() && (inputs.signing == 'validate' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
+    if: ${{ !cancelled() && (inputs.signing == 'validate' || inputs.signing == 'upload' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
     runs-on: macos-15
     timeout-minutes: 120
     environment: production-distribution
@@ -497,6 +498,7 @@ jobs:
       # Apple's codesign signs only from a keychain, so import the stored certificate into a throwaway one.
       # Nothing here touches the runner's default keychain, and both are discarded at the end.
       - name: Import the distribution certificate
+        if: inputs.signing != 'upload'
         run: |
           set -euo pipefail
           [ -n "${P12_PATH:-}" ] || { echo "::error::no distribution certificate in the signing material"; exit 1; }
@@ -517,6 +519,7 @@ jobs:
       # Manual signing per target, the way upstream does it: xcodebuild then never contacts Apple's portal,
       # so it can neither create a certificate nor fail on the portal's flaky authentication.
       - name: Pin manual signing
+        if: inputs.signing != 'upload'
         run: |
           set -euo pipefail
           for target_profile in "polkadot-app=$PROFILE_APP_NAME" "NotificationServiceExtension=$PROFILE_EXTENSION_NAME"; do
@@ -541,6 +544,7 @@ jobs:
       # Apple (not revoked), each profile embeds THAT certificate, and every entitlement the targets
       # ask for is granted. `signing: validate` stops here.
       - name: Verify the signing material
+        if: inputs.signing != 'upload'
         env:
           APP_ENTITLEMENTS: polkadot-app/polkadotAppRelease.entitlements
           EXTENSION_ENTITLEMENTS: NotificationServiceExtension/NotificationServiceExtension.entitlements
@@ -561,6 +565,34 @@ jobs:
             echo "Certificate live at Apple, profiles embed it, entitlements granted."
             echo "Re-run with \`signing: production\` to build, sign and upload."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # A second identity: the build publisher, which may write under ios/ in the private bucket.
+      # The signer identity may only read the secret. Acquired after the key is loaded, so the
+      # credentials it writes cannot shadow the signer token.
+      - name: Authenticate as the build publisher
+        if: inputs.signing == 'production' || inputs.signing == 'upload'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        if: inputs.signing == 'production' || inputs.signing == 'upload'
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      # Retrying an upload must not cost a rebuild: fetch the .ipa the last signed run stored.
+      - name: Fetch the last signed build
+        if: inputs.signing == 'upload'
+        env:
+          BUILD_BUCKET: ${{ vars.BUILD_BUCKET }}
+        run: |
+          set -euo pipefail
+          latest=$(gcloud storage ls "gs://${BUILD_BUCKET}/ios/signed/**/*.ipa" | sort | tail -1)
+          [ -n "$latest" ] || { echo "::error::no signed .ipa in gs://${BUILD_BUCKET}/ios/signed/"; exit 1; }
+          mkdir -p build
+          gcloud storage cp "$latest" build/
+          echo "IPA=build/$(basename "$latest")" >> "$GITHUB_ENV"
+          echo "fetched $latest"
 
       - name: Write ExportOptions.plist
         if: inputs.signing == 'production'
@@ -633,10 +665,21 @@ jobs:
           [ "$num" = "$BUILD_NUMBER" ] || { echo "::error::CFBundleVersion $num != $BUILD_NUMBER"; exit 1; }
           echo "IPA=$IPA" >> "$GITHUB_ENV"
 
+      # Keep the signed .ipa in the private bucket so a failed upload can be retried with
+      # `signing: upload`, and so a human can inspect exactly what was signed.
+      - name: Store the signed build
+        if: inputs.signing == 'production'
+        env:
+          BUILD_BUCKET: ${{ vars.BUILD_BUCKET }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp --if-generation-match=0 "$IPA" \
+            "gs://${BUILD_BUCKET}/ios/signed/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/polkadot-app-${BUILD_NUMBER}.ipa"
+
       # Internal group only: no --distribute_external, so no Beta App Review and no public link.
       # The API key JSON embeds the private key, so it lives beside it and goes with it.
       - name: Upload to TestFlight (internal group only)
-        if: inputs.signing == 'production'
+        if: inputs.signing == 'production' || inputs.signing == 'upload'
         env:
           PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
