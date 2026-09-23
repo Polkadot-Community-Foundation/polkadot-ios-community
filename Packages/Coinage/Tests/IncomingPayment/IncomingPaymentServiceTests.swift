@@ -307,14 +307,31 @@ struct IncomingPaymentServiceTests {
         #expect(rig.store.payment(for: "top up:prod:p")?.outcome == .claimedPartially(actualClaimed: 40))
     }
 
+    /// Reversed deliberately (audit finding H5). This previously asserted the secret is wiped on any
+    /// terminal verdict. `notClaimed` means the funds were never collected — and for a `.coins` source
+    /// the stored secrets *are* the money, so wiping them is what turns an uncollected top-up into an
+    /// unrecoverable one. A readable secret now survives that verdict.
     @Test(.timeLimit(.minutes(1)))
-    func settleWipesSourceSecret() async throws {
+    func notClaimedKeepsAReadableSourceSecret() async throws {
         let rig = makeDrivingService(detections: [.notClaimed])
 
         #expect(rig.secretStore.hasDescriptor(for: "top up:prod:p"))
 
         rig.service.setup(with: Self.denomination)
         try await waitUntil { rig.store.payment(for: "top up:prod:p")?.outcome == .notClaimed }
+        rig.service.throttle()
+
+        #expect(rig.secretStore.hasDescriptor(for: "top up:prod:p"))
+        #expect(rig.secretStore.removedGroupIds().isEmpty)
+    }
+
+    /// The other half of the same rule: a verdict that says where the funds went does retire the key.
+    @Test(.timeLimit(.minutes(1)))
+    func settleWipesSourceSecretOnceClaimed() async throws {
+        let rig = makeDrivingService(detections: [.claimed(amount: 100, finalized: true)])
+
+        rig.service.setup(with: Self.denomination)
+        try await waitUntil { rig.store.payment(for: "top up:prod:p")?.outcome == .claimed }
         rig.service.throttle()
 
         #expect(!rig.secretStore.hasDescriptor(for: "top up:prod:p"))

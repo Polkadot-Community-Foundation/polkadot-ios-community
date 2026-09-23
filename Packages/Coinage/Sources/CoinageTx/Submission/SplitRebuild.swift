@@ -26,13 +26,15 @@ struct SplitRebuild: CoinageRebuild {
     func resolve(
         _ transactions: [ScheduledDurableTx],
         assets: [CoinageTxId: CoinageTxEntry]
-    ) async -> [CoinageTxId: Split] {
+    ) async throws -> [CoinageTxId: Split] {
         let keys = assets.values.reduce(into: Set<PublicKey>()) { keys, entry in
             keys.formUnion(entry.inputs.map(\.publicKey))
             keys.formUnion(entry.outputs.map(\.publicKey))
         }
 
-        guard let coins = try? await coinService.fetchCoins(publicKeys: keys) else { return [:] }
+        // Propagate: the executor backs off and asks again. Swallowing this made an unreadable store
+        // indistinguishable from an unbuildable transaction, and terminally failed the leg.
+        let coins = try await coinService.fetchCoins(publicKeys: keys)
 
         let byKey = coins.reduce(into: [PublicKey: Coin]()) { $0[$1.publicKey] = $1 }
 

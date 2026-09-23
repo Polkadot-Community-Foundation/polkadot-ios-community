@@ -162,6 +162,13 @@ public final class CoinageTxService: CoinageTxServicing {
             if let key = claimed.first {
                 throw CoinageTxError.handoffOfClaimedAsset(key.toHex())
             }
+            // The mark is the only guard on an exact-match handoff, whose coins carry no entry for
+            // `filterClaimed` to match. Without this a second send reserves the same coin and both
+            // memos ship its key, leaving whichever peer claims second unable to.
+            let handedOff = try context.filterHandedOff(keys)
+            if let key = handedOff.first {
+                throw CoinageTxError.handoffOfHandedOffAsset(key.toHex())
+            }
         }
         return StoreHandoffCommit(assets: assets, ledger: ledger)
     }

@@ -12,6 +12,28 @@ struct DenominationTests {
         minExponent: 0
     )
 
+    /// `breakdown` is greedy and silently drops whatever is left below the smallest denomination. Most
+    /// callers can live with that; one cannot. Change vouchers have to sum back to the surplus exactly,
+    /// because the call that carries no amount unloads a group's whole input value — so an
+    /// inexpressible surplus is paid to the destination rather than kept.
+    @Test("an amount the denominations cannot express exactly is reported as such")
+    func inexpressibleAmountIsRejected() {
+        // Smallest denomination is 2 planks, so 1 plank of the 7 cannot be expressed.
+        let coarse = DenominationBreakdownContext(unit: 1, precision: 0, maxExponent: 3, minExponent: 1)
+
+        #expect(!coarse.isExpressible(amountInPlanks: 7))
+        #expect(coarse.isExpressible(amountInPlanks: 6))
+    }
+
+    @Test("zero is expressible, and every exact multiple of the smallest denomination is")
+    func expressibleAmountsAreAccepted() {
+        let fine = DenominationBreakdownContext(unit: 1, precision: 0, maxExponent: 3, minExponent: 0)
+
+        #expect(fine.isExpressible(amountInPlanks: 0))
+        #expect(fine.isExpressible(amountInPlanks: 7))
+        #expect(fine.isExpressible(amountInPlanks: 15))
+    }
+
     @Test("Amount property calculates the correct power of 2 for valid exponents")
     func amountProperty() {
         // unit * 2^7 = 0.01 * 128 = 1.28

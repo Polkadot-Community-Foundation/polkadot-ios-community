@@ -290,6 +290,14 @@ private extension OffboardVouchersForPaymentService {
             throw OffboardVouchersForPaymentError.noSurplusHost(surplus)
         }
 
+        // The change vouchers have to reconstitute the surplus exactly. When the breakdown cannot
+        // express it they come back short — and an empty result would take the no-surplus branch,
+        // whose call carries no amount and unloads the group's whole input value to the destination,
+        // silently paying more than was asked. Refuse before anything is minted or registered.
+        guard denominationContext.isExpressible(amountInPlanks: surplus) else {
+            throw OffboardVouchersForPaymentError.surplusNotExpressible(surplus)
+        }
+
         let surplusVouchers = try await allocateSurplusVouchers(surplus: surplus)
         return SurplusHost(hostIndex: hostIndex, surplusVouchers: surplusVouchers)
     }

@@ -64,12 +64,16 @@ public final class StallBoard {
 }
 
 private extension StallBoard {
+    /// A delivered element says *something changed*, not *what the state is*: the subject replays the
+    /// value it read before registering this consumer, so a publish landing in that window is absent
+    /// from both the replay and the fan-out. Taking the state from the source instead of the element
+    /// keeps that window from stranding the board on a value that is already stale on arrival.
     func subscribeToSources() {
         for (index, source) in sources.enumerated() {
             Task {
                 do {
-                    for try await activities in source.activities {
-                        await self.updateSourceActivities(index: index, activities: activities)
+                    for try await _ in source.activities {
+                        await self.updateSourceActivities(index: index, activities: source.currentActivities)
                     }
                 } catch {
                     // Sources never fail; the throwing form comes from `AnyAsyncSequence`.

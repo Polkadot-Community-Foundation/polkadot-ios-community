@@ -3,6 +3,11 @@ import Foundation
 
 public protocol StallActivitySource: Sendable {
     var activities: AnyAsyncSequence<[StallActivity]> { get }
+    /// The authoritative current value. `activities` replays on subscribe, and that replay reads the
+    /// value before it registers the consumer, so a publish landing in that window reaches neither
+    /// the replay nor the new consumer. Readers treat a delivered element as "something changed" and
+    /// take the state from here.
+    var currentActivities: [StallActivity] { get }
     /// After this returns the source MUST stop publishing `id` until the underlying work ends.
     func dismiss(id: UUID) async
 }
@@ -53,6 +58,10 @@ public final class StalenessReport: StalenessReportCollecting, StallActivitySour
 
     public var activities: AnyAsyncSequence<[StallActivity]> {
         subject.eraseToAnyAsyncSequence()
+    }
+
+    public var currentActivities: [StallActivity] {
+        subject.value
     }
 
     public func startRegion(_: StallableRegion) -> any StalenessRegionHandling {

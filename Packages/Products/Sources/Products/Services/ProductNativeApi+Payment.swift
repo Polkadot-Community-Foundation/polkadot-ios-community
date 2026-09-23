@@ -26,12 +26,17 @@ public enum HostPaymentRequestError: Error, Hashable {
     case rejected
     case insufficientBalance
     case alreadyExists
+    /// The amount cannot be expressed in the instance's denominations. Reported at the call boundary,
+    /// before the user is asked: the alternative is a payment approved, planned and part-executed
+    /// before the mismatch surfaces.
+    case amountNotExpressible
 
     public var code: String {
         switch self {
         case .rejected: "Rejected"
         case .insufficientBalance: "InsufficientBalance"
         case .alreadyExists: "AlreadyExists"
+        case .amountNotExpressible: "AmountNotExpressible"
         }
     }
 
@@ -40,6 +45,7 @@ public enum HostPaymentRequestError: Error, Hashable {
         case .rejected: "payment rejected"
         case .insufficientBalance: "insufficient balance"
         case .alreadyExists: "A payment for the given id already exists"
+        case .amountNotExpressible: "The amount cannot be expressed in the available denominations"
         }
     }
 }

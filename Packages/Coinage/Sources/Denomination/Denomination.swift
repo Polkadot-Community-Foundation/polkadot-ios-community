@@ -54,6 +54,20 @@ public struct DenominationBreakdownContext: Equatable {
         )
     }
 
+    /// Whether `amount` can be reconstituted from denominations *exactly*.
+    ///
+    /// ``breakdown(amountInPlanks:)`` is greedy and silently drops whatever is left below the smallest
+    /// denomination. Most callers can live with that — a balance rendered a plank short is a rounding
+    /// artefact. A caller minting change that has to sum back to a surplus cannot: the unload variant
+    /// carrying no `externalAssetAmount` moves a group's whole input value, so a surplus that cannot be
+    /// expressed is paid to the destination instead of kept. Such callers ask this first.
+    public func isExpressible(amountInPlanks amount: BigUInt) -> Bool {
+        let expressed = breakdown(amountInPlanks: amount)
+            .reduce(BigUInt(0)) { $0 + valueInPlanks(for: $1.exponent) }
+
+        return expressed == amount
+    }
+
     /// Breaks a plank amount directly into denominations, skipping the Decimal conversion.
     func breakdown(amountInPlanks remaining: BigUInt) -> [Denomination] {
         var remaining = remaining

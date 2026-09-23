@@ -745,6 +745,47 @@ struct StallBoardTests {
         let isTicking2 = await MainActor.run { board.isTicking }
         #expect(isTicking2 == false)
     }
+
+    @Test("a stale replayed element still ingests the source's current activities")
+    func staleReplayStillIngestsCurrentActivities() async throws {
+        let date: @Sendable () -> Date = { Date(timeIntervalSince1970: 0) }
+        let activity = StallActivity(
+            id: UUID(),
+            title: "test",
+            subtitle: nil,
+            startedAt: date(),
+            visibility: .whenStale,
+            steps: []
+        )
+
+        let source = StaleReplaySource(replayed: [], current: [activity])
+        let board = await MainActor.run {
+            StallBoard(sources: [source], revealAfter: 5, currentDate: date)
+        }
+
+        try await awaitBoard(board) { $0.ingestedActivities.count == 1 }
+    }
+}
+
+/// Delivers an element that is already out of date by the time the consumer sees it. This is the
+/// interleaving `AsyncCurrentValueSubject` permits: its replay reads the current value before it
+/// registers the consumer, so a publish landing in between reaches neither.
+private struct StaleReplaySource: StallActivitySource {
+    let replayed: [StallActivity]
+    let current: [StallActivity]
+
+    var activities: AnyAsyncSequence<[StallActivity]> {
+        let replayed = replayed
+        return AsyncStream<[StallActivity]> { continuation in
+            continuation.yield(replayed)
+        }.eraseToAnyAsyncSequence()
+    }
+
+    var currentActivities: [StallActivity] {
+        current
+    }
+
+    func dismiss(id _: UUID) async {}
 }
 
 final class TestActivitySource: StallActivitySource {
@@ -758,6 +799,10 @@ final class TestActivitySource: StallActivitySource {
 
     var activities: AnyAsyncSequence<[StallActivity]> {
         activitiesSubject.eraseToAnyAsyncSequence()
+    }
+
+    var currentActivities: [StallActivity] {
+        activitiesSubject.value
     }
 
     func push(_ activities: [StallActivity]) async {
@@ -783,31 +828,23 @@ private class Ref<T> {
     }
 }
 
+/// Polls inline rather than racing two unstructured tasks: `cancelAll()` only cancelled the group's
+/// children, leaving the underlying tasks to keep polling the main actor long after the caller
+/// returned, so every successful wait left a straggler behind for the tests that followed.
 private func awaitBoard(
     _ board: StallBoard,
     condition: @escaping @MainActor (StallBoard) -> Bool
 ) async throws {
-    let boardCheck = Task<Void, Error> {
-        for _ in 0 ..< 1_000 {
-            if await MainActor.run(body: { condition(board) }) {
-                return
-            }
-            try await Task.sleep(for: .milliseconds(10))
+    let deadline = ContinuousClock.now + .seconds(10)
+
+    while ContinuousClock.now < deadline {
+        if await MainActor.run(body: { condition(board) }) {
+            return
         }
-        throw AwaitBoardTimeout()
+        try await Task.sleep(for: .milliseconds(10))
     }
 
-    let timeoutTask = Task<Void, Error> {
-        try await Task.sleep(for: .seconds(10))
-        throw AwaitBoardTimeout()
-    }
-
-    try await withThrowingTaskGroup(of: Void.self) { group in
-        group.addTask { try await boardCheck.value }
-        group.addTask { try await timeoutTask.value }
-        _ = try await group.next()!
-        group.cancelAll()
-    }
+    throw AwaitBoardTimeout()
 }
 
 private struct AwaitBoardTimeout: Error {}
