@@ -56,7 +56,7 @@ private extension RestoreFromCloudInteractor {
                     continueRestoreWallets()
                 } else {
                     authState = .notAuthorized
-                    presenter?.didReceiveInProgress(false)
+                    presenter?.didFailAuthorization()
                 }
             }
         }
