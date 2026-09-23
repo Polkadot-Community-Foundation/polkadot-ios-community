@@ -637,6 +637,8 @@ jobs:
       # The API key JSON embeds the private key, so it lives beside it and goes with it.
       - name: Upload to TestFlight (internal group only)
         if: inputs.signing == 'production'
+        env:
+          PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
         run: |
           set -euo pipefail
           api_key="$RUNNER_TEMP/asc/api_key.json"
@@ -649,8 +651,12 @@ jobs:
               '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
               > "$api_key"
           )
+          # --app_identifier is required: fastlane otherwise reads fastlane/Appfile, which is upstream's
+          # and names Parity's bundle id.
           fastlane pilot upload \
             --api_key_path "$api_key" \
+            --app_identifier "$PRODUCTION_BUNDLE_ID" \
+            --app_platform ios \
             --ipa "$IPA" \
             --distribute_external false \
             --groups "$TESTFLIGHT_GROUP" \
