@@ -206,7 +206,7 @@ jobs:
           # An empty expansion is the failure mode that builds green and breaks at launch:
           # PRODUCT_BUNDLE_IDENTIFIER, APP_MAIN_BUNDLE and DEEPLINK all flow from brand.xcconfig
           # through Info.plist and AppConfig.Brand, which traps at startup on an empty key.
-          for key in PRODUCT_BUNDLE_IDENTIFIER APP_MAIN_BUNDLE DEEPLINK APP_NAME; do
+          for key in PRODUCT_BUNDLE_IDENTIFIER APP_MAIN_BUNDLE APP_GROUP DEEPLINK APP_NAME; do
             if grep -qE "^${key} = .+" build-settings.txt; then
               echo "ok: $(grep -m1 -E "^${key} = .+" build-settings.txt)"
             else
@@ -214,9 +214,9 @@ jobs:
               fail=1
             fi
           done
-          # The app group has no build setting of its own: Info.plist (BrandAppGroup) and the
-          # entitlements use group.$(APP_MAIN_BUNDLE) directly.
-          echo "app group: group.$(grep -m1 -E '^APP_MAIN_BUNDLE = ' build-settings.txt | sed 's/^APP_MAIN_BUNDLE = //')"
+          # Info.plist (BrandAppGroup) and the entitlements read $(APP_GROUP); it must be the group the
+          # provisioning profile grants, or signing fails at the archive.
+          echo "app group: $(grep -m1 -E '^APP_GROUP = ' build-settings.txt | sed 's/^APP_GROUP = //')"
 
           # --- identity OWNERSHIP -------------------------------------------------------
           # Today Release resolves to Parity's identity, by design of the inherited
