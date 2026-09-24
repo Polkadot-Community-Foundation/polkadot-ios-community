@@ -19,9 +19,7 @@ protocol InstallationAssetScanning: Sendable {
     ) async throws -> [Voucher]
 }
 
-/// Reads at the finalized head, never the best one. A recovered row names an asset no local entry
-/// minted, and its durability overlay claims a finalized mint on the strength of this read alone; a
-/// coin read at the best head can be reorged away, leaving a row nothing can ever settle.
+/// Reads at the finalized head: a recovered row is treated as finalized-minted on this read alone.
 final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Sendable {
     private let coinKeypairFactory: any CoinKeyDeriving
     private let coinOnChainQuery: any CoinOnChainQuerying
@@ -104,7 +102,6 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
 }
 
 private extension InstallationAssetScanner {
-    /// A pin that fails throws: the batch fails and the launch reports it, like any other read failure.
     func finalizedHead() async throws -> Data {
         try await chainViewFactory.pin(chainId: chainId).finalizedHead.hash
     }

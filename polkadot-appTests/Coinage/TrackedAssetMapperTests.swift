@@ -5,12 +5,6 @@ import Testing
 @testable import Coinage
 @testable import polkadot_app
 
-/// What the tracked mappers say minted an asset the ledger holds no entry for.
-///
-/// Recovery from a previous installation saves rows the finalized chain already held, under keys this
-/// installation never allocated, so no entry of ours points at them. Left `nil`, the minter status reads
-/// as "still in flight", and a payment made of such a coin never reaches a terminal status. The
-/// substitution is decided once, where a row becomes a ``TrackedCoin`` / ``TrackedVoucher``.
 @Suite("Tracked asset mappers: recovered assets carry a finalized minter")
 struct TrackedAssetMapperTests {
     private let facade = UserDataStorageTestFacade()
@@ -34,7 +28,6 @@ struct TrackedAssetMapperTests {
         #expect(tracked.state.minterStatus == nil)
     }
 
-    /// The substitution only ever fills a gap: a recorded mint is reported as it stands, whatever the key.
     @Test("a recorded minter of a previous installation is reported as it stands")
     func recordedMinterWins() async throws {
         try await seedCurrentInstallation()
@@ -55,8 +48,6 @@ struct TrackedAssetMapperTests {
         #expect(tracked.state.minterStatus == .pending)
     }
 
-    /// Before the first allocation or recovery there is no current row, and nothing can have been
-    /// recovered either: every row reads as it did before.
     @Test("without a current installation row nothing counts as recovered")
     func noCurrentRow() async throws {
         try await save(coin(installation: .other, key: Self.key(4)))
@@ -83,8 +74,7 @@ struct TrackedAssetMapperTests {
         #expect(tracked.state.minterStatus == nil)
     }
 
-    /// The hang itself: an exact recovered coin, handed off and then taken by the peer. On develop the
-    /// same row yields `.detecting` and the chat message never leaves "Sending".
+    /// The reported hang: yields `.detecting` without the derived minter.
     @Test("a handed-off recovered coin that vanished at finality is a finalized claim")
     func handedOffRecoveredCoinIsClaimed() async throws {
         try await seedCurrentInstallation()

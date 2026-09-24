@@ -9,11 +9,8 @@ public struct CoinageAssetState: Equatable, Sendable {
     /// The status of the non-failure entry consuming this asset, or nil if none does.
     public let consumerStatus: CoinageTxStatus?
     /// The status of the minting entry, or nil if no local entry minted this asset.
-    /// Distinguishes absence before minting from absence after revert.
-    ///
-    /// Also `.finalizedSuccess` for an asset recovered from a previous installation: no local entry
-    /// minted it, but recovery only saves what the finalized chain already held, so the mint is as
-    /// settled as a recorded one (the app-side mapper decides this by comparing installations).
+    /// Distinguishes absence before minting from absence after revert. An asset recovered from a
+    /// previous installation reads `.finalizedSuccess`: recovery only saves what the finalized chain holds.
     public let minterStatus: CoinageTxStatus?
 
     public init(handedOff: Bool, consumerStatus: CoinageTxStatus?, minterStatus: CoinageTxStatus?) {

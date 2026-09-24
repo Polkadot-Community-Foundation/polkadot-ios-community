@@ -3,10 +3,8 @@ import Foundation
 import Operation_iOS
 @testable import Coinage
 
-/// A database factory for suites that only consume the tracked-coin snapshot stream: the stream is a
-/// subject the test drives, every other repository is a loud failure rather than a silent empty one.
+/// Serves only the tracked-coin snapshot streams; anything else is a loud failure.
 final class StubDatabaseDependencyFactory: DatabaseDependencyFactoring, @unchecked Sendable {
-    /// Every snapshot pushed here reaches the streams handed out by `makeTrackedCoinSnapshotStream`.
     let trackedCoins = AsyncCurrentValueSubject<[TrackedCoin]?>(nil)
 
     func makeTrackedCoinSnapshotStream(publicKeys: [PublicKey]) -> AnyAsyncSequence<[TrackedCoin]> {

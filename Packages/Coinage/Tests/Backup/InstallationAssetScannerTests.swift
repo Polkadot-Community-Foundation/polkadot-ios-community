@@ -5,11 +5,6 @@ import SubstrateSdk
 import Testing
 @testable import Coinage
 
-/// What a recovery scan is allowed to believe about the chain.
-///
-/// A coin it saves becomes spendable balance with no local record of its mint, so the read behind it has
-/// to be one that cannot be taken back. The best head is not: a coin read there can be reorged away,
-/// leaving a row for a coin that never existed and a payment made of it that no later read can settle.
 @Suite("Installation asset scanner reads the finalized head")
 struct InstallationAssetScannerTests {
     private let chain = CoinageFakeChain(initialState: .empty)
@@ -20,8 +15,7 @@ struct InstallationAssetScannerTests {
     private let scanner: InstallationAssetScanner
 
     init() {
-        // Two blocks past genesis, only the first finalized: the two heads differ, so a read at the
-        // wrong one is visible.
+        // Finalized and best heads differ, so a read at the wrong one is visible.
         chain.produceBlock()
         chain.produceBlock()
         chain.finalize(upTo: 1)
@@ -76,8 +70,6 @@ struct InstallationAssetScannerTests {
         #expect(vouchers.first?.remoteState == .onboarding)
     }
 
-    /// No view, no read that can be trusted: the batch fails and the installation is left for the next
-    /// launch, the same as any other read failure.
     @Test("a scan that cannot pin a view throws instead of reading the best head")
     func pinFailureThrows() async throws {
         chainFactory.faults.pinFails = true

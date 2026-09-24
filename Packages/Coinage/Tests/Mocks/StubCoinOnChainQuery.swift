@@ -3,9 +3,7 @@ import Foundation
 import os
 @testable import Coinage
 
-/// A coin query answering from a per-block presence table and recording the block hash each read asked for.
-///
-/// `nil` as a block key stands for "best head" (a read with `atBlockHash: nil`).
+/// Answers from a per-block presence table (`nil` block = best head) and records every read.
 final class StubCoinOnChainQuery: CoinOnChainQuerying, @unchecked Sendable {
     struct Read: Equatable {
         let keys: [PublicKey]
@@ -17,10 +15,8 @@ final class StubCoinOnChainQuery: CoinOnChainQuerying, @unchecked Sendable {
         reads: [Read]
     )>(initialState: ([:], []))
 
-    /// The block hashes (nil = best head) every `fetchCoins` asked for, in call order.
     var reads: [Read] { state.withLock { $0.reads } }
 
-    /// Makes `coin` present for `key` when read at `blockHash`.
     func setPresent(_ key: PublicKey, atBlockHash blockHash: Data?, value: Int8 = 1, age: Int16 = 0) {
         state.withLock {
             $0.presence[blockHash, default: [:]][key] = CoinSyncResult.OnChainCoin(

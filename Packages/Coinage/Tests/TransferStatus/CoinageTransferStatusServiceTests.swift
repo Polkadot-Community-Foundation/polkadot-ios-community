@@ -5,9 +5,6 @@ import SubstrateSdk
 import Testing
 @testable import Coinage
 
-/// When the Appendix-A ladder is re-run. A peer's claim is not our transaction, so nothing local changes
-/// when it finalizes; the only cue that can turn a best-head claim into a finalized one is a new finalized
-/// head, which the service therefore listens to alongside the coin snapshots.
 @Suite("Transfer status re-evaluates on finalized heads", .timeLimit(.minutes(1)))
 struct CoinageTransferStatusServiceTests {
     private let chain = CoinageFakeChain(initialState: .empty)
@@ -19,7 +16,6 @@ struct CoinageTransferStatusServiceTests {
     private let publicKey: PublicKey
 
     init() throws {
-        // Block 1 finalized, block 2 only best: the claim lands in block 2 and finalizes later.
         chain.produceBlock()
         chain.produceBlock()
         chain.finalize(upTo: 1)
@@ -39,8 +35,6 @@ struct CoinageTransferStatusServiceTests {
         )
     }
 
-    /// The hang's last mile: the coin left the best head (one snapshot), but its claim is not yet
-    /// finalized. Only a later finalized head can prove it, and no snapshot will ever arrive for it.
     @Test("a new finalized head turns a best-head claim into a finalized one without a new snapshot")
     func finalizedHeadCompletesTheClaim() async throws {
         coinQuery.setPresent(publicKey, atBlockHash: chain.finalizedHead.hash)
@@ -65,7 +59,6 @@ struct CoinageTransferStatusServiceTests {
         var iterator = service.subscribeStatuses(coinKeys: [secret]).makeAsyncIterator()
         _ = try await iterator.next()
 
-        // Still finalized at block 1: the same verdict, which must not be emitted again.
         chainFactory.emitFinalizedHead(1)
         chain.finalize(upTo: 2)
         chainFactory.emitFinalizedHead(2)
@@ -85,7 +78,6 @@ struct CoinageTransferStatusServiceTests {
 }
 
 private extension CoinageTransferStatusServiceTests {
-    /// Handed off, seen on chain, now gone from the best head; minted beyond recall.
     func claimedOnBestHead() -> TrackedCoin {
         TrackedCoin(
             coin: Coin(

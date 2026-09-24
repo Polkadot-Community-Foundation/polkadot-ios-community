@@ -2,9 +2,7 @@ import Foundation
 import os
 @testable import Coinage
 
-/// A voucher query answering from a per-block table and recording the block hash each read asked for.
-///
-/// `nil` as a block key stands for "best head" (a read with `atBlockHash: nil`).
+/// Answers from a per-block table (`nil` block = best head) and records every read.
 final class StubVoucherOnChainQuery: VoucherOnChainQuerying, @unchecked Sendable {
     struct Read: Equatable {
         let indices: [CoinageKeyIndex]
