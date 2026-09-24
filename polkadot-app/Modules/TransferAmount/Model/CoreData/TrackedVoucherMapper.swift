@@ -14,7 +14,11 @@ final class TrackedVoucherMapper {
     typealias CoreDataEntity = CDVoucher
 
     private let voucherMapper = VoucherMapper()
-    private let currentInstallation = CoinageCurrentInstallationContextReader()
+    private let currentInstallation: CoinageCurrentInstallationContextReader
+
+    init(currentInstallation: CoinageCurrentInstallationContextReader = .init()) {
+        self.currentInstallation = currentInstallation
+    }
 }
 
 extension TrackedVoucherMapper: CoreDataMapperProtocol {
