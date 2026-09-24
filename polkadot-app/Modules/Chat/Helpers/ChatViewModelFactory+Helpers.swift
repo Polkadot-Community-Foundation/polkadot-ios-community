@@ -32,8 +32,6 @@ extension ChatMetadata {
     }
 }
 
-/// What the bubble shows for a transfer: the claimed amount once known, and the message total
-/// struck through when the claim came up short.
 struct TransferBubbleProjection {
     let displayedValue: Balance
     let originalValue: Balance?
@@ -56,7 +54,7 @@ extension Chat.LocalMessage.Content.Transfer {
         return TransferBubbleProjection(displayedValue: actualValue, originalValue: totalValue)
     }
 
-    /// `nil` state is the initial state: the monitor has not written a row yet.
+    /// `nil` is the initial state: the monitor has not written a row yet.
     var incomingViewState: ChatTransferMessageConfiguration.IncomingState {
         guard case let .incoming(incoming) = state else { return .detecting }
         return incoming.status.viewState

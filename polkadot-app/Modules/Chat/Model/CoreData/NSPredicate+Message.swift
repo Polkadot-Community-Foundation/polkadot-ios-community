@@ -188,8 +188,7 @@ extension NSPredicate {
         )
     }
 
-    /// Messages whose transfer state row is absent or still live, so a claimed or failed transfer
-    /// never re-enters the monitor.
+    /// A claimed or failed transfer never re-enters the monitor.
     static func withoutTerminalTransferState(_ relationship: String) -> NSPredicate {
         NSPredicate(
             format: "%K == nil OR %K < %d",

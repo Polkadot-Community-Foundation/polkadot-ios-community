@@ -31,8 +31,6 @@ public extension ChatTransferMessageConfiguration {
         case outgoing(OutgoingState)
     }
 
-    /// Mirrors the persisted incoming transfer status. A partial claim is `claimed` rendered with
-    /// `originalAmountText`, not a state of its own.
     enum IncomingState: Hashable {
         case detecting
         case claiming
@@ -40,8 +38,6 @@ public extension ChatTransferMessageConfiguration {
         case failed
     }
 
-    /// Mirrors the persisted outgoing transfer status; partial claims render as `claimed` with
-    /// `originalAmountText`.
     enum OutgoingState: Hashable {
         case sending
         case sent
@@ -60,7 +56,10 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
         $0.textAlignment = .left
     }
 
-    private let amountContainerView: GenericBackgroundView<GenericPairValueView<UIImageView, TopBottomLabelView>> =
+    private typealias AmountRowView = GenericPairValueView<UIImageView, Label>
+
+    /// The original amount sits above the icon + amount row, so the icon centres on the amount alone.
+    private let amountContainerView: GenericBackgroundView<GenericPairValueView<Label, AmountRowView>> =
         create { container in
             container.insets = UIEdgeInsets(
                 top: DSSpacings.mediumIncreased,
@@ -69,7 +68,18 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
                 right: DSSpacings.mediumIncreased
             )
 
-            let amountRow = container.wrappedView
+            let amounts = container.wrappedView
+            amounts.makeVertical()
+            amounts.spacing = 0
+            amounts.stackView.alignment = .fill
+
+            let originalAmount = amounts.fView
+            originalAmount.typography = .bodyMedium
+            originalAmount.numberOfLines = 1
+            originalAmount.textAlignment = .left
+            originalAmount.isHidden = true
+
+            let amountRow = amounts.sView
             amountRow.makeHorizontal()
             amountRow.spacing = Constants.assetIconSpacing
             amountRow.stackView.alignment = .center
@@ -78,30 +88,22 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
             icon.contentMode = .scaleAspectFit
             icon.snp.makeConstraints { $0.size.equalTo(Constants.assetIconSize) }
 
-            let amounts = amountRow.sView
-            amounts.stackView.spacing = 0
-            amounts.stackView.alignment = .fill
-
-            amounts.topLabel.typography = .bodyMedium
-            amounts.topLabel.numberOfLines = 1
-            amounts.topLabel.textAlignment = .left
-            amounts.topLabel.isHidden = true
-
-            amounts.bottomLabel.typography = .headlineLarge
-            amounts.bottomLabel.numberOfLines = 1
-            amounts.bottomLabel.textAlignment = .left
+            let amount = amountRow.sView
+            amount.typography = .headlineLarge
+            amount.numberOfLines = 1
+            amount.textAlignment = .left
         }
 
     private var receivedAmountLabel: Label {
-        amountContainerView.wrappedView.sView.bottomLabel
+        amountContainerView.wrappedView.sView.sView
     }
 
     var originalAmountLabel: Label {
-        amountContainerView.wrappedView.sView.topLabel
+        amountContainerView.wrappedView.fView
     }
 
     var assetIconView: UIImageView {
-        amountContainerView.wrappedView.fView
+        amountContainerView.wrappedView.sView.fView
     }
 
     let subtitleIconView: UIImageView = create {
@@ -216,7 +218,7 @@ final class ChatTransferMessageView: UIView, UIContentView, ReactableContentView
                 font: .app(typography),
                 lineHeight: spec.lineHeight,
                 tracking: spec.tracking
-            ).attributes(for: .center)
+            ).attributes(for: .left)
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             originalAmountLabel.attributedText = NSAttributedString(
                 string: originalAmount,

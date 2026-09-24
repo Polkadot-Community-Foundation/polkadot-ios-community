@@ -730,8 +730,7 @@ extension Chat.LocalMessage.Content {
     }
 
     struct Transfer: Equatable {
-        /// Local lifecycle of the transfer, read from the state row related to the message.
-        /// Never part of the wire or persisted content; `nil` until the monitor writes the first status.
+        /// Read from the state row related to the message; never encoded, `nil` until the monitor writes.
         enum State: Equatable {
             case incoming(IncomingTransferState)
             case outgoing(OutgoingTransferState)

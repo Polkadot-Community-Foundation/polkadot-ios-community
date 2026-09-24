@@ -63,20 +63,21 @@ struct CoinageTransferMonitorTests {
         #expect(claims.calls.isEmpty)
     }
 
+    /// The failure log is the last statement of the monitor's catch, so once it has been written the
+    /// task can no longer touch the row: what the row holds then is what it will hold.
     @Test("a runtime failure leaves the last durability-reported state in place")
     func runtimeFailureDoesNotWriteStatus() async throws {
         let world = TransferStateTestWorld()
         try await world.setup()
         let message = try await world.saveTransfer(.incoming)
         let claims = MockClaimCoinsService(detections: [.claiming], failure: MonitorTestError.chainUnavailable)
-        let states = world.stateStream(of: message.messageId)
+        let logger = MockLogger()
 
-        let monitor = makeMonitor(world: world, claims: claims)
+        let monitor = makeMonitor(world: world, claims: claims, logger: logger)
         await monitor.setup()
         defer { Task { await monitor.throttle() } }
 
-        _ = try await states.collect { $0 == .incoming(.init(status: .claiming)) }
-        try await Task.sleep(for: .milliseconds(200))
+        try await logger.waitForError(containing: "Failed to claim coinage for \(message.messageId)")
 
         let transfer = try #require(try await world.transfer(message.messageId))
         #expect(transfer.state == .incoming(.init(status: .claiming)))
@@ -119,7 +120,8 @@ private extension CoinageTransferMonitorTests {
     func makeMonitor(
         world: TransferStateTestWorld,
         claims: MockClaimCoinsService = MockClaimCoinsService(detections: []),
-        statuses: MockCoinageTransferStatusService = MockCoinageTransferStatusService(snapshots: [])
+        statuses: MockCoinageTransferStatusService = MockCoinageTransferStatusService(snapshots: []),
+        logger: MockLogger = MockLogger()
     ) -> CoinageTransferMonitor {
         CoinageTransferMonitor(
             claimCoinsService: claims,
@@ -127,7 +129,8 @@ private extension CoinageTransferMonitorTests {
             denominationContext: { [context] in context },
             transferStateStore: world.store,
             storageFacade: world.facade,
-            operationQueue: OperationQueue()
+            operationQueue: OperationQueue(),
+            logger: logger
         )
     }
 

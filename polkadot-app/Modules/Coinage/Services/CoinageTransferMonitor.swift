@@ -6,12 +6,9 @@ import Foundation
 import Operation_iOS
 import SubstrateSdk
 
-/// Monitors coinage transfer lifecycle for both directions and persists it as the transfer state row
-/// related to each message (``TransferStateStoring``), so the chat bubble renders from the message
-/// snapshot alone. The status comes only from the durability-derived streams: a thrown runtime error
-/// is logged and never written, and a message whose row is terminal never enters the subscriptions.
-/// - Incoming: claims transferred coins (with retry) via ``ClaimCoinsServicing``.
-/// - Outgoing: derives the peer's claim progress via ``CoinageTransferStatusServicing``.
+/// Persists each chat transfer's lifecycle as its state row (``TransferStateStoring``). The status
+/// comes only from the durability-derived streams: a thrown runtime error is never written, and a
+/// message whose row is terminal never enters the subscriptions.
 protocol CoinageTransferMonitoring: AsyncApplicationServicing {}
 
 final class CoinageTransferMonitor {
@@ -107,8 +104,7 @@ private extension CoinageTransferMonitor {
             do {
                 let context = try await denominationContext()
 
-                // Anchored to this device's first attempt, written once and reused, so two devices'
-                // clocks never decide the window and a message first seen late still gets a full one.
+                // Anchored to this device's first attempt so two devices' clocks never decide the window.
                 let retryUntil = try await transferStateStore
                     .beginIncoming(messageId: messageId)
                     .addingTimeInterval(CoinageConstants.claimRetryWindow)
@@ -128,8 +124,7 @@ private extension CoinageTransferMonitor {
                     try await transferStateStore.updateIncoming(messageId: messageId, state: state)
                 }
             } catch {
-                // Runtime errors never decide the status: the row keeps what the durability layer
-                // last reported, and the message is retried on the next snapshot or launch.
+                // Not a status: the message is retried on the next snapshot or launch.
                 logger.error("Failed to claim coinage for \(messageId): \(error)")
             }
         }

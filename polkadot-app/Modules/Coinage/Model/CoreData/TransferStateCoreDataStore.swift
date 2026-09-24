@@ -1,28 +1,25 @@
 import CoreData
 import Foundation
+import FoundationExt
 import Operation_iOS
 
 enum TransferStateStoreError: Error {
     case messageNotFound(Chat.MessageId)
 }
 
-/// CoreData-backed ``TransferStateStoring``: one `CDIncomingTransferState` or `CDOutgoingTransferState`
-/// row per message, reached through the message's to-one relationship.
-///
-/// A changed state also touches the message row, so the chat snapshot subscriber (which re-maps only
-/// rows the fetched results controller reports) re-emits the message with its new state — the same
-/// trick `CoinageTxRowObserver` uses for coin and voucher rows.
+/// A changed state also touches the message row: the chat snapshot re-maps only rows the fetched
+/// results controller reports, the same trick `CoinageTxRowObserver` uses for coin and voucher rows.
 final class TransferStateCoreDataStore: TransferStateStoring, @unchecked Sendable {
     private let databaseService: CoreDataServiceProtocol
-    private let dateProvider: @Sendable () -> Date
+    private let dateProvider: any DateProviding
 
-    init(storageFacade: StorageFacadeProtocol, dateProvider: @escaping @Sendable () -> Date = { Date() }) {
+    init(storageFacade: StorageFacadeProtocol, dateProvider: any DateProviding = NowDateProvider()) {
         databaseService = storageFacade.databaseService
         self.dateProvider = dateProvider
     }
 
     func beginIncoming(messageId: Chat.MessageId) async throws -> Date {
-        let now = dateProvider()
+        let now = await dateProvider.read()
 
         return try await databaseService.performWrite { context in
             let message = try Self.message(messageId, in: context)
@@ -38,7 +35,7 @@ final class TransferStateCoreDataStore: TransferStateStoring, @unchecked Sendabl
     }
 
     func updateIncoming(messageId: Chat.MessageId, state: IncomingTransferState) async throws {
-        let now = dateProvider()
+        let now = await dateProvider.read()
 
         try await databaseService.performWrite { context in
             let message = try Self.message(messageId, in: context)
@@ -101,8 +98,7 @@ private extension TransferStateCoreDataStore {
         return firstAttemptAt
     }
 
-    /// Marks the message as updated without changing it, so the save's updated set carries it to the
-    /// observer context and the snapshot subscriber re-maps it.
+    /// Marks the object updated without changing it, so the save carries it to the observer context.
     static func touch(_ object: NSManagedObject, key: String) {
         object.willChangeValue(forKey: key)
         object.didChangeValue(forKey: key)

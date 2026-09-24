@@ -2,13 +2,11 @@ import BigInt
 import Foundation
 import SubstrateSdk
 
-/// Raw status values shared by both transfer state rows: `claimed` and `failed` are terminal in each.
 enum TransferStateStatus {
     static let firstTerminalRawValue: Int16 = 2
 }
 
-/// Lifecycle of a coinage transfer received in chat, as the durability layer reports it.
-/// A partial claim is `claimed` with `actualValue` short of the message total.
+/// A partial claim is `claimed` with `actualValue` short of the message total; there is no partial status.
 struct IncomingTransferState: Equatable, Sendable {
     enum Status: Int16, Sendable {
         case detecting = 0
@@ -30,8 +28,7 @@ struct IncomingTransferState: Equatable, Sendable {
     var isTerminal: Bool { status.isTerminal }
 }
 
-/// Lifecycle of a coinage transfer sent from this device, as the chain reports the peer's claims.
-/// A partial claim is `claimed` with `actualValue` short of the message total.
+/// A partial claim is `claimed` with `actualValue` short of the message total; there is no partial status.
 struct OutgoingTransferState: Equatable, Sendable {
     enum Status: Int16, Sendable {
         case sending = 0

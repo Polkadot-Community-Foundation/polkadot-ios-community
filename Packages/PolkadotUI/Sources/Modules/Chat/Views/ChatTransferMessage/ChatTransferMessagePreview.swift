@@ -1,8 +1,6 @@
 #if DEBUG
     import UIKit
 
-    /// Every state a transfer bubble can be in: incoming and outgoing, plus the partial-claim
-    /// rendering of `claimed` for each. Kept apart from the view so the file stays readable.
     @MainActor
     private enum ChatTransferMessagePreview {
         static func makeView() -> UIView {

@@ -23,36 +23,40 @@ struct TransferStateStoreTests {
 
     @Test("a later call does not move the anchor even as the clock advances")
     func anchorDoesNotFollowTheClock() async throws {
-        let clock = AdvancingClock(start: Date(timeIntervalSince1970: 1_700_000_000))
-        let world = TransferStateTestWorld(dateProvider: { clock.next() })
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let dateProvider = MockDateProvider(now: start)
+        let world = TransferStateTestWorld(dateProvider: dateProvider)
         try await world.setup()
         let message = try await world.saveTransfer(.incoming)
 
         let first = try await world.store.beginIncoming(messageId: message.messageId)
+        await dateProvider.advance(by: 60)
         let second = try await world.store.beginIncoming(messageId: message.messageId)
 
-        #expect(first == second)
-        #expect(second == Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(first == start)
+        #expect(second == start)
     }
 
     @Test("each message gets its own anchor")
     func anchorsArePerMessage() async throws {
-        let clock = AdvancingClock(start: Date(timeIntervalSince1970: 1_700_000_000))
-        let world = TransferStateTestWorld(dateProvider: { clock.next() })
+        let dateProvider = MockDateProvider()
+        let world = TransferStateTestWorld(dateProvider: dateProvider)
         try await world.setup()
         let first = try await world.saveTransfer(.incoming)
         let other = try await world.saveTransfer(.incoming)
 
         let firstAnchor = try await world.store.beginIncoming(messageId: first.messageId)
+        await dateProvider.advance(by: 60)
         let otherAnchor = try await world.store.beginIncoming(messageId: other.messageId)
 
-        #expect(firstAnchor != otherAnchor)
+        #expect(otherAnchor == firstAnchor.addingTimeInterval(60))
     }
 
+    /// Two launches asking at once must not split the anchor: the read and the insert are one
+    /// transaction, so whichever runs second sees the row the first wrote and no second row appears.
     @Test("concurrent first callers agree on one anchor")
     func concurrentCallersAgree() async throws {
-        let clock = AdvancingClock(start: Date(timeIntervalSince1970: 1_700_000_000))
-        let world = TransferStateTestWorld(dateProvider: { clock.next() })
+        let world = TransferStateTestWorld(dateProvider: MockDateProvider())
         try await world.setup()
         let message = try await world.saveTransfer(.incoming)
 
@@ -61,6 +65,7 @@ struct TransferStateStoreTests {
 
         let anchors = try await [first, second]
         #expect(anchors[0] == anchors[1])
+        #expect(try await world.incomingRowCount() == 1)
     }
 
     @Test("beginning a claim leaves the message in the detecting state")
@@ -171,25 +176,5 @@ struct TransferStateStoreTests {
         try await world.deleteMessage(message.messageId)
 
         #expect(try await world.incomingRowCount() == 0)
-    }
-}
-
-/// Hands out a distinct, increasing Date on each call, so a second write would be visibly different
-/// from the first rather than accidentally equal.
-private final class AdvancingClock: @unchecked Sendable {
-    private let lock = NSLock()
-    private var current: Date
-
-    init(start: Date) {
-        current = start
-    }
-
-    func next() -> Date {
-        lock.lock()
-        defer { lock.unlock() }
-
-        let value = current
-        current = current.addingTimeInterval(60)
-        return value
     }
 }

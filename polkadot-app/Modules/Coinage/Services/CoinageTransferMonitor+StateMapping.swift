@@ -4,9 +4,7 @@ import Foundation
 import SubstrateSdk
 
 extension CoinageTransferDetection {
-    /// Projects the receiver's claim detection onto the persisted state. A partial claim is `claimed`
-    /// with the shortfall visible against the message total; coins still being retried are plain
-    /// `claiming` — the claimed-so-far amount is not persisted.
+    /// `claimingRest` is plain `claiming`: the claimed-so-far amount is deliberately not persisted.
     var incomingState: IncomingTransferState {
         switch self {
         case .detecting:
@@ -25,9 +23,8 @@ extension CoinageTransferDetection {
 }
 
 extension [PublicKey: CoinageTransferState] {
-    /// Aggregates per-coin statuses into one message-level state. Mirrors Android's
-    /// `toPaymentStatus`: any coin still to be taken keeps the message at `sending`/`sent`; once
-    /// nothing is outstanding, the claimed value is final.
+    /// Mirrors Android's `toPaymentStatus`: any coin still to be taken keeps the message at
+    /// `sending`/`sent`; once nothing is outstanding, the claimed value is final.
     func outgoingState(context: DenominationBreakdownContext) -> OutgoingTransferState {
         let states = Array(values)
         guard !states.isEmpty else { return OutgoingTransferState(status: .sending) }
@@ -45,7 +42,6 @@ extension [PublicKey: CoinageTransferState] {
         return OutgoingTransferState(status: .claimed, actualValue: amount)
     }
 
-    /// Every coin has reached a terminal status, so the subscription has nothing more to report.
     var isSettled: Bool {
         !isEmpty && values.allSatisfy(\.status.isTerminal)
     }

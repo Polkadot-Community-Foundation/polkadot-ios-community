@@ -2,6 +2,7 @@ import AsyncExtensions
 import BigInt
 import CoreData
 import Foundation
+import FoundationExt
 import Operation_iOS
 import SubstrateSdk
 
@@ -21,7 +22,7 @@ final class TransferStateTestWorld {
     let messageProviderFactory: ChatMessageDataProviderFactory
     private let messageRepository: AnyDataProviderRepository<Chat.LocalMessage>
 
-    init(dateProvider: @escaping @Sendable () -> Date = { Date() }) {
+    init(dateProvider: any DateProviding = NowDateProvider()) {
         chatManager = TestChatManager(peer: MockChatPeer.person(), facade: facade)
         store = TransferStateCoreDataStore(storageFacade: facade, dateProvider: dateProvider)
         messageRepository = ChatMessageRepositoryFactory(storageFacade: facade).createRepository(forFilter: nil)

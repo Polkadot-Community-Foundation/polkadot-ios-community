@@ -9,8 +9,7 @@ enum TransferStateRowError: Error {
     case invalidActualValue(String)
 }
 
-/// The one place that knows how transfer state rows are laid out: the message mapper reads through
-/// it, `TransferStateCoreDataStore` writes through it.
+/// Row layout shared by the message mapper (read) and `TransferStateCoreDataStore` (write).
 enum TransferStateRows {
     static func state(of entity: CDChatMessage) throws -> Chat.LocalMessage.Content.Transfer.State? {
         guard let status = Chat.LocalMessage.Status(rawValue: entity.status) else {
@@ -68,7 +67,6 @@ private extension TransferStateRows {
 }
 
 extension Chat.LocalMessage.Content {
-    /// Coinage transfers carry the lifecycle of their state row; every other content is returned as is.
     func attachingTransferState(of entity: CDChatMessage) throws -> Self {
         guard case let .coinageSend(transfer) = self else { return self }
         return try .coinageSend(transfer.withState(TransferStateRows.state(of: entity)))
