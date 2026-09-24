@@ -1,4 +1,5 @@
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
 
 let dependencyConfigs: [DependencyConfig] = [
@@ -150,6 +151,19 @@ let dependencyConfigs: [DependencyConfig] = [
 
 // MARK: - Config main
 
+// Packages this build leaves out entirely, named as in DependencyConfig.name and passed as a
+// comma-separated EXCLUDED_PACKAGES. Filtering here drops the package AND the umbrella target's
+// dependency on it, so nothing is linked, embedded or privacy-manifested. Unset means every
+// dependency, which is what every configuration but production wants.
+let excludedPackages = Set(
+    (ProcessInfo.processInfo.environment["EXCLUDED_PACKAGES"] ?? "")
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+)
+
+let activeDependencyConfigs = dependencyConfigs.filter { !excludedPackages.contains($0.name) }
+
 let package = Package(
     name: "AppDependencies",
     platforms: [
@@ -161,11 +175,11 @@ let package = Package(
             targets: ["AppDependencies"]
         )
     ],
-    dependencies: dependencyConfigs.map(\.packageDependency),
+    dependencies: activeDependencyConfigs.map(\.packageDependency),
     targets: [
         .target(
             name: "AppDependencies",
-            dependencies: dependencyConfigs.flatMap(\.targetDependency),
+            dependencies: activeDependencyConfigs.flatMap(\.targetDependency),
             path: ""
         )
     ]

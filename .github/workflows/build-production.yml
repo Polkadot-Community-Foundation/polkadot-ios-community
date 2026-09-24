@@ -74,6 +74,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Release calls no Sentry API (IssueMonitoringService is TESTNET_FEATURE-only), so the package is
+  # left out of the graph entirely: nothing linked, embedded or privacy-manifested. Every other
+  # configuration keeps it. assert-no-sentry.sh proves it on the built product.
+  EXCLUDED_PACKAGES: sentry-cocoa
   # Uploads to the private bucket must not use parallel composite uploads: their temporary parts live outside
   # this repository's prefix and need delete to clean up, which the build identity deliberately lacks.
   CLOUDSDK_STORAGE_PARALLEL_COMPOSITE_UPLOAD_ENABLED: "False"
@@ -270,6 +274,14 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee xcodebuild-production.log
+
+      - name: Assert Sentry is absent
+        run: |
+          set -euo pipefail
+          app=$(find ~/Library/Developer/Xcode/DerivedData \
+            -path '*/Build/Products/Release-iphoneos/polkadot-app.app' -type d 2>/dev/null | head -1)
+          [ -n "$app" ] || { echo "::error::no Release-iphoneos build to check"; exit 1; }
+          .github/scripts/assert-no-sentry.sh "$app"
 
       # The artifact is the evidence, not a deliverable: an unsigned .app cannot be installed
       # on a device and is not an .ipa. It exists so a human can inspect what the production
@@ -671,6 +683,7 @@ jobs:
             exit 1
           fi
           echo "IPA=$IPA" >> "$GITHUB_ENV"
+          _trusted/.github/scripts/assert-no-sentry.sh "$app"
 
       # Keep the signed .ipa in the private bucket so a failed upload can be retried with
       # `signing: upload`, and so a human can inspect exactly what was signed.
