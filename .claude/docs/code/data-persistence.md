@@ -86,13 +86,17 @@ observer. Raw-context code goes through the async `performWrite` / `performRead`
 or deleted (mapped models are cached by object ID), so mapper cost is per change, not per subscriber × rows.
 A row whose *related* objects change without the row itself changing is not re-mapped; derived-state
 subscribers (coin and voucher state from `CDDurableTx`) get their refresh because the durable-tx repository
-touches the parent rows (`CoinageTxRowObserver`). Do the same for any new relationship-derived mapper.
+touches the parent rows (`CoinageTxRowObserver`); `TransferStateCoreDataStore` does the same for the
+chat message when its transfer state row changes. Do the same for any new relationship-derived mapper.
 
 ### Migration
 
 - `Common/Storage/Migration/` — migration strategies
 - UserDataModel is versioned — always add a new version for schema changes
 - Test migrations thoroughly
+
+A version that has not left the branch it was born on may be edited in place instead (v51 on
+`fix/claim-retry` gained the transfer state entities this way); once it is on `develop`, bump.
 
 #### Adding a UserDataModel version (all four steps, same PR)
 

@@ -1,3 +1,4 @@
+import AsyncAlgorithms
 import BigInt
 import Coinage
 import CommonService
@@ -5,17 +6,22 @@ import Foundation
 import Operation_iOS
 import SubstrateSdk
 
-/// Monitors coinage transfer lifecycle for both directions, driven entirely off the durability layer
-/// keyed by `groupId = messageId` — no bespoke claim-status persistence:
+/// Monitors coinage transfer lifecycle for both directions and persists it as the transfer state row
+/// related to each message (``TransferStateStoring``), so the chat bubble renders from the message
+/// snapshot alone. The status comes only from the durability-derived streams: a thrown runtime error
+/// is logged and never written, and a message whose row is terminal never enters the subscriptions.
 /// - Incoming: claims transferred coins (with retry) via ``ClaimCoinsServicing``.
-/// - Outgoing: derives Appendix-A payment status via ``CoinageTransferStatusServicing``.
+/// - Outgoing: derives the peer's claim progress via ``CoinageTransferStatusServicing``.
 protocol CoinageTransferMonitoring: AsyncApplicationServicing {}
 
 final class CoinageTransferMonitor {
-    private let coinageService: any CoinageServicing
+    typealias DenominationContextProvider = @Sendable () async throws -> DenominationBreakdownContext
+
+    private let claimCoinsService: any ClaimCoinsServicing
+    private let transferStatusService: any CoinageTransferStatusServicing
+    private let denominationContext: DenominationContextProvider
+    private let transferStateStore: any TransferStateStoring
     private let messageProviderFactory: ChatMessageDataProviderMaking
-    private let claimStatusStore: ClaimStatusStore
-    private let claimTransferStore: any ClaimTransferStoring
     private let logger: LoggerProtocol
 
     /// Top-level tasks that listen to the CoreData message streams.
@@ -27,17 +33,18 @@ final class CoinageTransferMonitor {
     private let taskRegistry = ActiveTaskRegistry()
 
     init(
-        coinageService: any CoinageServicing,
+        claimCoinsService: any ClaimCoinsServicing,
+        transferStatusService: any CoinageTransferStatusServicing,
+        denominationContext: @escaping DenominationContextProvider,
+        transferStateStore: any TransferStateStoring,
         storageFacade: StorageFacadeProtocol,
-        claimStatusStore: ClaimStatusStore,
-        claimTransferStore: (any ClaimTransferStoring)? = nil,
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
         logger: LoggerProtocol = Logger.shared
     ) {
-        self.coinageService = coinageService
-        self.claimStatusStore = claimStatusStore
-        self.claimTransferStore = claimTransferStore
-            ?? ClaimTransferCoreDataStore(storageFacade: storageFacade)
+        self.claimCoinsService = claimCoinsService
+        self.transferStatusService = transferStatusService
+        self.denominationContext = denominationContext
+        self.transferStateStore = transferStateStore
         self.logger = logger
 
         let repositoryFactory = ChatMessageRepositoryFactory(storageFacade: storageFacade)
@@ -95,81 +102,38 @@ private extension CoinageTransferMonitor {
 
         let memo = content.transferMemo
 
-        // Asked of the ledger, not of the status last published: that status is written by this
-        // method's own catch, so a transient chain read failing would otherwise record a permanence
-        // the system never reached. The ledger only ever records work that actually happened.
-        //
-        // Checked before the task is registered so a settled message costs nothing at all, and an
-        // unreadable ledger leaves the message for the next launch rather than deciding it.
-        do {
-            guard try await !isClaimTerminal(messageId: messageId, memoCoins: Set(memo.entries)) else {
-                logger.debug("Skipping settled incoming coinage message=\(messageId)")
-                return
-            }
-        } catch {
-            logger.error("Cannot read claim group for \(messageId); left for next launch: \(error)")
-            return
-        }
-
-        let task = Task { [coinageService, claimStatusStore, claimTransferStore, taskRegistry, logger] in
+        let task = Task { [claimCoinsService, denominationContext, transferStateStore, taskRegistry, logger] in
             defer { Task { await taskRegistry.remove(forMessageId: messageId) } }
             do {
-                let context = try await coinageService.denominationContext()
+                let context = try await denominationContext()
 
-                // Anchored to this device's first attempt, written once and reused. It used to be
-                // `message.timestamp` — the *sender's* wall clock, compared against the receiver's — so
-                // two devices' clocks decided the window, and a message first seen after it had already
-                // elapsed registered a claim whose deadline was already past. The submission policy
-                // reads that as "proven absent" on its first look and gives up terminally.
-                let retryUntil = try await claimTransferStore
-                    .firstAttempt(for: messageId)
+                // Anchored to this device's first attempt, written once and reused, so two devices'
+                // clocks never decide the window and a message first seen late still gets a full one.
+                let retryUntil = try await transferStateStore
+                    .beginIncoming(messageId: messageId)
                     .addingTimeInterval(CoinageConstants.claimRetryWindow)
 
                 logger.debug("Starting processing incoming coinage message=\(messageId)")
 
-                let detections = coinageService.claimCoinsService.claim(
+                let states = claimCoinsService.claim(
                     coinKeys: memo.entries,
                     groupId: messageId,
                     retryUntil: retryUntil,
                     context: context
                 )
-                for try await detection in detections {
-                    await claimStatusStore.updateStatus(detection.incomingStatus, forMessageId: messageId)
+                .map(\.incomingState)
+                .removeDuplicates()
+
+                for try await state in states {
+                    try await transferStateStore.updateIncoming(messageId: messageId, state: state)
                 }
             } catch {
+                // Runtime errors never decide the status: the row keeps what the durability layer
+                // last reported, and the message is retried on the next snapshot or launch.
                 logger.error("Failed to claim coinage for \(messageId): \(error)")
-                await claimStatusStore.updateStatus(.error, forMessageId: messageId)
             }
         }
         await taskRegistry.register(task, forMessageId: messageId)
-    }
-
-    func isClaimTerminal(messageId: String, memoCoins: Set<PublicKey>) async throws -> Bool {
-        let entries = try await coinageService.txService.getOperationGroupStatuses(messageId)
-
-        return Self.isClaimTerminal(entries: entries, memoCoins: memoCoins)
-    }
-}
-
-extension CoinageTransferMonitor {
-    /// Whether this claim is finished for good, decided from what the ledger holds — the layer that
-    /// actually knows. Deliberately not derived from the published ``ClaimStatus``, which this monitor's
-    /// own catch writes: a transient chain read failing would otherwise record a permanence the system
-    /// never reached.
-    ///
-    /// Pure, so the three states it distinguishes can be exercised without a chain or a store.
-    static func isClaimTerminal(entries: [CoinageTxEntry], memoCoins: Set<PublicKey>) -> Bool {
-        // Nothing was ever registered — the coins were not yet visible when an earlier pass ran. There
-        // is nothing to be final about, and the next launch must try again. This is the ordinary
-        // late-arrival case: a sender who was offline, or a slow chain.
-        guard !entries.isEmpty else { return false }
-
-        // Something is still in flight.
-        guard entries.allSatisfy({ !$0.status.isLive }) else { return false }
-
-        // Every coin must be accounted for by a settled entry. One with no entry naming it is work the
-        // claim loop still has to do, whatever the entries that do exist have settled on.
-        return memoCoins.isSubset(of: entries.receivedPublicKeys())
     }
 }
 
@@ -202,78 +166,29 @@ private extension CoinageTransferMonitor {
         guard await taskRegistry.contains(messageId) == false else { return }
 
         let memo = content.transferMemo
-        let task = Task { [coinageService, claimStatusStore, taskRegistry, logger] in
+        let task = Task { [transferStatusService, denominationContext, transferStateStore, taskRegistry, logger] in
             defer { Task { await taskRegistry.remove(forMessageId: messageId) } }
             do {
-                let context = try await coinageService.denominationContext()
-                let statuses = coinageService.transferStatusService.subscribeStatuses(coinKeys: memo.entries)
+                let context = try await denominationContext()
 
                 logger.debug("Processing transfer for message: \(messageId) entries=\(memo.entries.count)")
 
-                for try await states in statuses {
-                    logger.debug("Got statuses for messageId=\(messageId) states=\(states.count)")
-
-                    let proposedStatus = states.outgoingStatus(context: context)
-
-                    logger.debug("Status=\(proposedStatus) message=\(messageId)")
-
-                    await claimStatusStore.updateStatus(
-                        proposedStatus,
-                        forMessageId: messageId
-                    )
-                    if !states.isEmpty, states.values.allSatisfy(\.status.isTerminal) { break }
+                // Deduplicated by hand: the context is not Sendable, so it cannot ride a `map`.
+                var lastState: OutgoingTransferState?
+                for try await coinStates in transferStatusService.subscribeStatuses(coinKeys: memo.entries) {
+                    let state = coinStates.outgoingState(context: context)
+                    if state != lastState {
+                        lastState = state
+                        logger.debug("Status=\(state) message=\(messageId)")
+                        try await transferStateStore.updateOutgoing(messageId: messageId, state: state)
+                    }
+                    if coinStates.isSettled { break }
                 }
             } catch {
                 logger.error("Send status monitoring failed for \(messageId): \(error)")
-                await claimStatusStore.updateStatus(.error, forMessageId: messageId)
             }
         }
         await taskRegistry.register(task, forMessageId: messageId)
-    }
-}
-
-// MARK: - Status mapping
-
-private extension CoinageTransferDetection {
-    /// Maps the received-claim detection onto the chat status. Partial claims surface via
-    /// `finished(claimedAmount:)` — the extension renders the shortfall against the message total.
-    var incomingStatus: ClaimStatus {
-        switch self {
-        case .detecting:
-            .detecting
-        case .claiming:
-            .claiming
-        case let .claimingRest(claimed):
-            .partiallyClaimed(claimed: claimed)
-        case let .claimed(amount, _):
-            .finished(claimedAmount: amount)
-        case let .claimedPartially(claimed):
-            .finished(claimedAmount: claimed)
-        case .notClaimed:
-            .error
-        }
-    }
-}
-
-private extension [PublicKey: CoinageTransferState] {
-    /// Aggregates per-coin Appendix-A statuses into one message-level status. Mirrors Android's
-    /// `toPaymentStatus`: any coin still to be taken keeps the message at `sent`/`detecting`; once
-    /// nothing is outstanding, the claimed value is final.
-    func outgoingStatus(context: DenominationBreakdownContext) -> ClaimStatus {
-        let states = Array(values)
-        guard !states.isEmpty else { return .detecting }
-
-        let claimed = states.filter { if case .claimed = $0.status { true } else { false } }
-        let awaiting = states.filter { $0.status == .awaitingClaim }
-        let outstanding = states.filter { $0.status == .awaitingClaim || $0.status == .detecting }
-
-        if !outstanding.isEmpty {
-            return awaiting.isEmpty && claimed.isEmpty ? .detecting : .sent
-        }
-        guard !claimed.isEmpty else { return .error }
-
-        let amount = claimed.reduce(Balance(0)) { $0 + context.valueInPlanks(for: $1.coin.exponent) }
-        return .finished(claimedAmount: amount)
     }
 }
 
