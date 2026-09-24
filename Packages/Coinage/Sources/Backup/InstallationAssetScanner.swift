@@ -1,5 +1,7 @@
+import DurableTransactions
 import Foundation
 import SDKLogger
+import SubstrateSdk
 
 /// Reads one batch of a previous installation's subtree from chain: the coins and vouchers that exist
 /// there, keyed to the indices they were derived from.
@@ -17,21 +19,30 @@ protocol InstallationAssetScanning: Sendable {
     ) async throws -> [Voucher]
 }
 
+/// Reads at the finalized head, never the best one. A recovered row names an asset no local entry
+/// minted, and its durability overlay claims a finalized mint on the strength of this read alone; a
+/// coin read at the best head can be reorged away, leaving a row nothing can ever settle.
 final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Sendable {
     private let coinKeypairFactory: any CoinKeyDeriving
     private let coinOnChainQuery: any CoinOnChainQuerying
     private let voucherOnChainQuery: any VoucherOnChainQuerying
+    private let chainViewFactory: any PinnedChainViewFactoryProtocol
+    private let chainId: ChainId
     private let logger: (any SDKLoggerProtocol)?
 
     init(
         coinKeypairFactory: any CoinKeyDeriving,
         coinOnChainQuery: any CoinOnChainQuerying,
         voucherOnChainQuery: any VoucherOnChainQuerying,
+        chainViewFactory: any PinnedChainViewFactoryProtocol,
+        chainId: ChainId,
         logger: (any SDKLoggerProtocol)?
     ) {
         self.coinKeypairFactory = coinKeypairFactory
         self.coinOnChainQuery = coinOnChainQuery
         self.voucherOnChainQuery = voucherOnChainQuery
+        self.chainViewFactory = chainViewFactory
+        self.chainId = chainId
         self.logger = logger
     }
 
@@ -45,7 +56,11 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
         }
         guard !indexedKeys.isEmpty else { return [] }
 
-        let onChain = try await coinOnChainQuery.fetchCoins(for: indexedKeys.map(\.publicKey), atBlockHash: nil)
+        let finalizedHash = try await finalizedHead()
+        let onChain = try await coinOnChainQuery.fetchCoins(
+            for: indexedKeys.map(\.publicKey),
+            atBlockHash: finalizedHash
+        )
 
         return zip(indexedKeys, onChain).compactMap { key, info -> Coin? in
             guard let info else { return nil }
@@ -69,7 +84,8 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
         let indices = Self.indices(of: installation, from: startIndex, count: count)
         guard !indices.isEmpty else { return [] }
 
-        let onChain = try await voucherOnChainQuery.fetchVouchers(for: indices)
+        let finalizedHash = try await finalizedHead()
+        let onChain = try await voucherOnChainQuery.fetchVouchers(for: indices, atBlockHash: finalizedHash)
 
         return zip(indices, onChain).compactMap { index, info -> Voucher? in
             guard let info, let state = Self.recoverableState(of: info) else { return nil }
@@ -88,6 +104,11 @@ final class InstallationAssetScanner: InstallationAssetScanning, @unchecked Send
 }
 
 private extension InstallationAssetScanner {
+    /// A pin that fails throws: the batch fails and the launch reports it, like any other read failure.
+    func finalizedHead() async throws -> Data {
+        try await chainViewFactory.pin(chainId: chainId).finalizedHead.hash
+    }
+
     static func indices(
         of installation: CoinageInstallationId,
         from startIndex: DerivationIndex,

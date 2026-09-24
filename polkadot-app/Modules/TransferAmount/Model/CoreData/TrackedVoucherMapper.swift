@@ -14,14 +14,17 @@ final class TrackedVoucherMapper {
     typealias CoreDataEntity = CDVoucher
 
     private let voucherMapper = VoucherMapper()
+    private let currentInstallation = CoinageCurrentInstallationContextReader()
 }
 
 extension TrackedVoucherMapper: CoreDataMapperProtocol {
     func transform(entity: CoreDataEntity) throws -> DataProviderModel {
-        try TrackedVoucher(
-            voucher: voucherMapper.transform(entity: entity),
+        let voucher = try voucherMapper.transform(entity: entity)
+        return try TrackedVoucher(
+            voucher: voucher,
             state: CoinageAssetStateDeriver.state(
                 handedOff: false,
+                isRecovered: currentInstallation.isRecovered(voucher.derivationIndex, of: entity),
                 inputs: entity.coinageTxInputs,
                 output: entity.coinageTxOutput
             )

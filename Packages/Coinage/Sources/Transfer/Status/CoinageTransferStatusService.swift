@@ -1,3 +1,4 @@
+import AsyncAlgorithms
 import AsyncExtensions
 import DurableTransactions
 import Foundation
@@ -35,24 +36,43 @@ public final class CoinageTransferStatusService: CoinageTransferStatusServicing,
         self.logger = logger
     }
 
+    /// Re-evaluated on every snapshot of the requested coins and on every new finalized head. A peer's
+    /// claim is not our transaction, so nothing local changes when it finalizes: only a finalized-head
+    /// tick can turn `claimed(finalized: false)` into the terminal `claimed(finalized: true)`.
     public func subscribeStatuses(coinKeys: [Data]) -> AnyAsyncSequence<[PublicKey: CoinageTransferState]> {
         let requested = coinKeys.compactMap { try? snKeyFactory.createPublicKey(fromSecret: $0).rawData() }
+        guard !requested.isEmpty else {
+            return AsyncStream<[PublicKey: CoinageTransferState]> { $0.finish() }.eraseToAnyAsyncSequence()
+        }
+
         // A filtered subscription to exactly these coins, not the whole set
         // `coinRepository.subscribeCoinsBy(accountIds)`.
-        return databaseFactory.makeTrackedCoinSnapshotStream(publicKeys: requested)
-            .map { [self] tracked -> [PublicKey: CoinageTransferState] in
-                let atFinalized = await presenceAtFinalized(tracked)
+        let snapshots = databaseFactory.makeTrackedCoinSnapshotStream(publicKeys: requested)
+        // A leading tick so the first snapshot is evaluated at once; the head stream never ends on its own,
+        // so the combination lives as long as the snapshots do.
+        let finalizedHeads = chainViewFactory.finalizedHeads(chainId: chainId).prepend(0)
 
-                var result: [PublicKey: CoinageTransferState] = [:]
-                for trackedCoin in tracked {
-                    result[trackedCoin.coin.publicKey] = CoinageTransferState(
-                        coin: trackedCoin.coin,
-                        status: Self.transferStatus(trackedCoin, atFinalized: atFinalized)
-                    )
-                }
-                return result
-            }
+        return combineLatest(snapshots, finalizedHeads)
+            .map { [self] tracked, _ in await statuses(of: tracked) }
+            .removeDuplicates()
             .eraseToAnyAsyncSequence()
+    }
+}
+
+// MARK: - Evaluation
+
+private extension CoinageTransferStatusService {
+    func statuses(of tracked: [TrackedCoin]) async -> [PublicKey: CoinageTransferState] {
+        let atFinalized = await presenceAtFinalized(tracked)
+
+        var result: [PublicKey: CoinageTransferState] = [:]
+        for trackedCoin in tracked {
+            result[trackedCoin.coin.publicKey] = CoinageTransferState(
+                coin: trackedCoin.coin,
+                status: Self.transferStatus(trackedCoin, atFinalized: atFinalized)
+            )
+        }
+        return result
     }
 }
 

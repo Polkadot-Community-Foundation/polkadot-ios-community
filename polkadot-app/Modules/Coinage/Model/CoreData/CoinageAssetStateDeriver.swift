@@ -5,11 +5,19 @@ import Foundation
 /// Derives the durability overlay (``CoinageAssetState``) for a coin or voucher row from its
 /// input/output entry relations.
 enum CoinageAssetStateDeriver {
-    static func state(handedOff: Bool, inputs: NSSet?, output: CDCoinageTxOutput?) -> CoinageAssetState {
+    /// `isRecovered`: the row was allocated by a previous installation. Recovery found it on the
+    /// finalized chain; nothing local minted it and nothing local can ever prove that mint failed, so
+    /// it reads as a finalized mint. A recorded minting entry, if one exists, is reported as it stands.
+    static func state(
+        handedOff: Bool,
+        isRecovered: Bool,
+        inputs: NSSet?,
+        output: CDCoinageTxOutput?
+    ) -> CoinageAssetState {
         CoinageAssetState(
             handedOff: handedOff,
             consumerStatus: consumerStatus(of: inputs),
-            minterStatus: status(of: output?.entry)
+            minterStatus: status(of: output?.entry) ?? (isRecovered ? .finalizedSuccess : nil)
         )
     }
 

@@ -14,15 +14,17 @@ final class TrackedCoinMapper {
     typealias CoreDataEntity = CDCoin
 
     private let coinMapper = CoinMapper()
+    private let currentInstallation = CoinageCurrentInstallationContextReader()
 }
 
 extension TrackedCoinMapper: CoreDataMapperProtocol {
     func transform(entity: CoreDataEntity) throws -> DataProviderModel {
         let coin = try coinMapper.transform(entity: entity)
-        return TrackedCoin(
+        return try TrackedCoin(
             coin: coin,
             state: CoinageAssetStateDeriver.state(
                 handedOff: coin.handoffMark != .none,
+                isRecovered: currentInstallation.isRecovered(coin.derivationIndex, of: entity),
                 inputs: entity.coinageTxInputs,
                 output: entity.coinageTxOutput
             )
