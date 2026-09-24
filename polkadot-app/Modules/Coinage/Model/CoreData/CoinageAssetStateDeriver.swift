@@ -5,8 +5,6 @@ import Foundation
 /// Derives the durability overlay (``CoinageAssetState``) for a coin or voucher row from its
 /// input/output entry relations.
 enum CoinageAssetStateDeriver {
-    /// A recovered asset (allocated by a previous installation) was read from the finalized chain and no
-    /// local entry can ever fail it, so with no minting entry it counts as finalized.
     static func state(
         handedOff: Bool,
         isRecovered: Bool,
@@ -16,8 +14,14 @@ enum CoinageAssetStateDeriver {
         CoinageAssetState(
             handedOff: handedOff,
             consumerStatus: consumerStatus(of: inputs),
-            minterStatus: status(of: output?.entry) ?? (isRecovered ? .finalizedSuccess : nil)
+            minterStatus: status(of: output?.entry, isRecovered: isRecovered)
         )
+    }
+
+    /// A recovered asset (allocated by a previous installation) was read from the finalized chain and no
+    /// local entry can ever fail it, so with no minting entry it counts as finalized.
+    private static func status(of entry: CDDurableTx?, isRecovered: Bool) -> CoinageTxStatus? {
+        status(of: entry) ?? (isRecovered ? .finalizedSuccess : nil)
     }
 
     /// At most one non-failure entry consumes an asset (Unique consumer invariant), so its status
