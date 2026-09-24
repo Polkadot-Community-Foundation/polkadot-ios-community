@@ -1,5 +1,6 @@
 import Foundation
 import PolkadotUI
+import UIKit
 import Coinage
 import UIKitExt
 import ChainRegistry
@@ -8,9 +9,11 @@ import Products
 protocol AssetDetailsViewProtocol: ControllerBackedProtocol {
     func didSetCards(viewModels: [WalletCardCreateViewModel])
     func didReceiveData(viewModel: WalletCardDataViewModel, index: Int)
-    func didReceive(lockedAmount: BalanceViewModelProtocol?)
+    func didReceive(readyAmount: BalanceViewModelProtocol?)
+    func didReceive(paymentAsset: PaymentAssetViewModelProtocol)
     func didReceive(fundingStates: [AssetFundingStatusView.FundingState])
     func didReceive(isRecoveryInProgress: Bool)
+    func didReceive(isAccountBackupPending: Bool)
     func didShowBackupNotification()
     func didHideBackupNotification()
 
@@ -37,7 +40,6 @@ protocol AssetDetailsPresenterProtocol: AnyObject {
 
     #if TESTNET_FEATURE
         func onTestnetTopUp()
-        func onMakeAllVouchersReady()
     #endif
 }
 
@@ -52,21 +54,18 @@ protocol AssetDetailsInteractorInputProtocol: AnyObject {
 
     #if TESTNET_FEATURE
         func topUp()
-        func makeAllVouchersReady()
     #endif
 }
 
 @MainActor
 protocol AssetDetailsInteractorOutputProtocol: AnyObject {
     func didReceive(balance: Decimal)
-    func didReceive(lockedAmount: Decimal)
 
     func didReceive(price: PriceData?)
     func didReceive(fiatOnrampStatuses: Set<FiatOnrampTransactionStatusPayload>)
-    func didFail(recovery error: Error)
     func didReceive(isRecoveryInProgress: Bool)
-    func didCompleteRecovery()
-    func didClearBackupNotification()
+    func didReceive(isAccountBackupPending: Bool)
+    func didReceive(showsRecoveredBalance: Bool)
 
     func didResolveRampProduct(_ action: RampAction, result: Result<ProductPage, Error>)
 

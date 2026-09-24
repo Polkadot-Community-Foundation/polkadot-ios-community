@@ -1,6 +1,7 @@
 import BigInt
 import DurableTransactionsTestSupport
 import Foundation
+import FoundationExt
 import os
 import SubstrateSdk
 import Testing
@@ -35,7 +36,7 @@ enum ExternalPaymentTestFactory {
     }
 
     /// In a recycler with enough members and age to be usable under every preset.
-    static func voucher(index: UInt64, exponent: Int16 = 3, inRecycler: Bool = true) -> Voucher {
+    static func voucher(index: CoinageKeyIndex, exponent: Int16 = 3, inRecycler: Bool = true) -> Voucher {
         Voucher(
             exponent: exponent,
             derivationIndex: index,
@@ -44,12 +45,12 @@ enum ExternalPaymentTestFactory {
             remoteState: inRecycler
                 ? .inRecycler(Voucher.Recycler(index: 1, membersCount: 64, enteredAt: Date(timeIntervalSince1970: 0)))
                 : .unlocated,
-            publicKey: Data(repeating: UInt8(truncatingIfNeeded: index), count: 32)
+            publicKey: Data(repeating: UInt8(truncatingIfNeeded: index.item), count: 32)
         )
     }
 
     /// In a nearly empty ring it just entered: gaining privacy under `balanced` and `maxPrivacy`.
-    static func gainingVoucher(index: UInt64, exponent: Int16 = 3) -> Voucher {
+    static func gainingVoucher(index: CoinageKeyIndex, exponent: Int16 = 3) -> Voucher {
         voucher(index: index, exponent: exponent)
             .adjusting(state: .inRecycler(Voucher.Recycler(index: 1, membersCount: 1)))
     }
@@ -58,13 +59,13 @@ enum ExternalPaymentTestFactory {
         TrackedVoucher(voucher: voucher, state: state)
     }
 
-    static func coin(index: UInt64, exponent: Int16 = 3, age: Int16? = 4, isOnchain: Bool = true) -> Coin {
+    static func coin(index: CoinageKeyIndex, exponent: Int16 = 3, age: Int16? = 4, isOnchain: Bool = true) -> Coin {
         Coin(
             exponent: exponent,
             derivationIndex: index,
             age: age,
             isOnchain: isOnchain,
-            publicKey: Data(repeating: UInt8(truncatingIfNeeded: index), count: 32)
+            publicKey: Data(repeating: UInt8(truncatingIfNeeded: index.item), count: 32)
         )
     }
 
@@ -78,7 +79,7 @@ enum ExternalPaymentTestFactory {
         amount: Balance = planks(3),
         settled: Balance = 0,
         stage: ExternalPayment.Stage = .plan,
-        plannedVoucherIndices: [DerivationIndex] = [],
+        plannedVoucherIndices: [CoinageKeyIndex] = [],
         surplus: Balance = 0,
         createdAt: Date = Date()
     ) -> ExternalPayment {
@@ -130,13 +131,15 @@ enum ExternalPaymentTestFactory {
             originFactory: StubOriginFactory(),
             quotaTracker: StubUnloadQuotaTracker(),
             blockNumberProvider: StubBlockInfoProvider(),
+            dateProvider: StubDateProvider(Date()),
             logger: nil
         )
     }
 
     static func makeHarness(
         store: InMemoryExternalPaymentStore = InMemoryExternalPaymentStore(),
-        vouchers: [Voucher] = []
+        vouchers: [Voucher] = [],
+        maxConsolidation: UInt32 = 100
     ) -> ExternalPaymentHarness {
         let txService = StubGroupTxService()
         let recycler = StubCoinageRecyclingService()
@@ -151,12 +154,13 @@ enum ExternalPaymentTestFactory {
             recycler: recycler,
             voucherKeyFactory: StubVoucherKeyFactory(),
             voucherMinter: StubVoucherMinter(),
-            recyclerLoader: StubRecyclerReadinessLoader(),
+            recyclerLoader: StubRecyclerReadinessLoader(maxConsolidationValue: maxConsolidation),
             extrinsicMonitor: StubExtrinsicMonitorFactory(),
             durability: txService,
             originFactory: StubOriginFactory(),
             quotaTracker: StubUnloadQuotaTracker(),
             blockNumberProvider: StubBlockInfoProvider(),
+            dateProvider: StubDateProvider(Date()),
             logger: nil
         )
 
