@@ -74,9 +74,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Release calls no Sentry API (IssueMonitoringService is TESTNET_FEATURE-only), so the package is
-  # left out of the graph entirely: nothing linked, embedded or privacy-manifested. Every other
-  # configuration keeps it. assert-no-sentry.sh proves it on the built product.
+  # Sentry is left out of this lane's package graph; assert-no-sentry.sh proves it on the product.
   EXCLUDED_PACKAGES: sentry-cocoa
   # Uploads to the private bucket must not use parallel composite uploads: their temporary parts live outside
   # this repository's prefix and need delete to clean up, which the build identity deliberately lacks.
@@ -118,6 +116,15 @@ jobs:
         with:
           # Empty string = actions/checkout's default (the dispatched ref).
           ref: ${{ inputs.ref }}
+
+      # From the dispatched commit, so rebuilding an older baseline still runs today's guard.
+      - name: Check out the Sentry guard (dispatched commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: _trusted
+          sparse-checkout: .github/scripts
+          persist-credentials: false
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -162,7 +169,7 @@ jobs:
           fi
 
       - name: Resolve SwiftPM dependencies
-        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app -derivedDataPath build/DerivedData
 
       # The production claim this lane exists to defend is "Release is the production surface".
       # -showBuildSettings is the only thing that can prove which flags and which identity the
@@ -270,18 +277,19 @@ jobs:
             -scheme polkadot-app \
             -configuration Release \
             -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee xcodebuild-production.log
 
+      # Pinned, not searched: Xcode's index arena holds a Release-iphoneos path with no Mach-O.
       - name: Assert Sentry is absent
         run: |
           set -euo pipefail
-          app=$(find ~/Library/Developer/Xcode/DerivedData \
-            -path '*/Build/Products/Release-iphoneos/polkadot-app.app' -type d 2>/dev/null | head -1)
-          [ -n "$app" ] || { echo "::error::no Release-iphoneos build to check"; exit 1; }
-          .github/scripts/assert-no-sentry.sh "$app"
+          app=build/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app
+          [ -d "$app" ] || { echo "::error::no Release-iphoneos build to check"; exit 1; }
+          _trusted/.github/scripts/assert-no-sentry.sh "$app"
 
       # The artifact is the evidence, not a deliverable: an unsigned .app cannot be installed
       # on a device and is not an .ipa. It exists so a human can inspect what the production
@@ -294,9 +302,8 @@ jobs:
           mkdir -p production-evidence
           cp build-settings.txt xcodebuild-production.log production-evidence/ 2>/dev/null
 
-          app=$(find ~/Library/Developer/Xcode/DerivedData \
-            -path '*/Build/Products/Release-iphoneos/polkadot-app.app' -type d 2>/dev/null | head -1)
-          if [ -z "$app" ]; then
+          app=build/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app
+          if [ ! -d "$app" ]; then
             echo "no Release-iphoneos polkadot-app.app found"
             exit 0
           fi
@@ -683,6 +690,28 @@ jobs:
             exit 1
           fi
           echo "IPA=$IPA" >> "$GITHUB_ENV"
+
+      # Also covers `upload`, which ships a stored .ipa and so passes no build-time check.
+      - name: Assert Sentry is absent from the .ipa
+        if: inputs.signing == 'production' || inputs.signing == 'upload'
+        env:
+          EXPECTED_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
+          SIGNING: ${{ inputs.signing }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/verify"
+          mkdir -p "$RUNNER_TEMP/verify"
+          unzip -q "$IPA" -d "$RUNNER_TEMP/verify"
+          app=$(find "$RUNNER_TEMP/verify/Payload" -maxdepth 1 -name '*.app' -print -quit)
+          [ -n "$app" ] || { echo "::error::no .app in $IPA"; exit 1; }
+          id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          [ "$id" = "$EXPECTED_BUNDLE_ID" ] || { echo "::error::bundle id '$id' != PRODUCTION_BUNDLE_ID '$EXPECTED_BUNDLE_ID'"; exit 1; }
+          # The fetched .ipa's own build number, which the changelog and check-distribution use.
+          if [ "$SIGNING" = 'upload' ]; then
+            num=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")
+            echo "BUILD_NUMBER=$num" >> "$GITHUB_ENV"
+            echo "uploading build $num"
+          fi
           _trusted/.github/scripts/assert-no-sentry.sh "$app"
 
       # Keep the signed .ipa in the private bucket so a failed upload can be retried with
