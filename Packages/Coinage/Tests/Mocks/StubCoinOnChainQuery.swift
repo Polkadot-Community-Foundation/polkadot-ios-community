@@ -47,9 +47,17 @@ final class StubCoinOnChainQuery: CoinOnChainQuerying, @unchecked Sendable {
         throw StubCoinOnChainQueryError.unsupported("awaitAllCoinsOffChain")
     }
 
-    func subscribeCoinInfos(for _: [Data]) -> AnyAsyncSequence<[Data: ClaimableCoinInfo]> {
-        AsyncThrowingStream<[Data: ClaimableCoinInfo], Error> { continuation in
-            continuation.finish(throwing: StubCoinOnChainQueryError.unsupported("subscribeCoinInfos"))
+    /// One snapshot of the keys present at the best head, then finishes.
+    func subscribeCoinInfos(for publicKeys: [Data]) -> AnyAsyncSequence<[Data: ClaimableCoinInfo]> {
+        let present = state.withLock { $0.presence[nil] ?? [:] }
+        let infos = publicKeys.reduce(into: [Data: ClaimableCoinInfo]()) { result, key in
+            guard let coin = present[key] else { return }
+            result[key] = ClaimableCoinInfo(exponent: Int16(coin.value), age: coin.age)
+        }
+
+        return AsyncStream<[Data: ClaimableCoinInfo]> { continuation in
+            continuation.yield(infos)
+            continuation.finish()
         }
         .eraseToAnyAsyncSequence()
     }
