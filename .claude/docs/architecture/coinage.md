@@ -77,22 +77,6 @@ after a confirmation is unconfirmed by default, so it is shown again. A scan tha
 offered for acceptance, the app's recovery state is `failed`, and the next launch scans again. Recovered
 coins keep their absolute index; rows the store already holds are never overwritten. The contract address comes from remote config `account_data_store_config`.
 
-Recovery reads the **finalized** head, never the best one: `InstallationAssetScanner` pins a
-`PinnedChainViewFactoryProtocol` view per batch and passes `finalizedHead.hash` to both on-chain queries (a
-pin that fails fails the batch like any other read failure). A recovered row therefore names an asset the
-chain holds beyond recall — which is what lets its durability overlay claim a finalized mint: no local
-entry minted it, so `CoinageAssetStateDeriver` substitutes `minterStatus = .finalizedSuccess` for a row
-whose `installationId` is not the current installation and that has no `CDCoinageTxOutput` (a recorded
-entry always wins; a no-entry row of the *current* installation stays `nil`, it is an orphan of a crashed
-allocation). `TrackedCoinMapper` / `TrackedVoucherMapper` read the current row through
-`CoinageCurrentInstallationContextReader` on the same context as the row they map (cached once found,
-never cached while absent). Without it an exact transfer of a recovered coin never left "Sending": the
-Appendix-A ladder needs a minter status to turn on-chain absence into `claimed`. Android made the same two
-changes in PR #186 (`RealInstallationAssetScanner.finalizedState()`, `CoinageAssetStates.getAssetStateOf`);
-the engine's DAG rules on both platforms still read minters from ledger entries only, so an entry that
-*spends* a recovered coin loses the completed-by-consumption shortcut and is decided by output presence, a
-successor, or the body search instead.
-
 ## Key Rules
 
 1. **Use the `KeyDerivation` package** — never hand-roll coin keypair derivation. The derivation domain must be coinage-specific (never reused across features).
@@ -126,12 +110,6 @@ Transfer plans determine how coins are spent:
 - `CoinagePaymentProcessingExtension` watches on-chain events for payment confirmations
 - Integrates with chat for payment request/confirmation messages
 - See `architecture/chat-extension.md` for chat integration
-- Outgoing status (`CoinageTransferStatusService.subscribeStatuses`, the Appendix-A ladder over
-  `TrackedCoin`) re-evaluates on every snapshot of the handed-off coins **and** on every new finalized head
-  (`PinnedChainViewFactoryProtocol.finalizedHeads(chainId:)`, combined with `combineLatest` and a leading
-  tick, duplicates dropped). A peer's claim is not our transaction, so nothing local changes when it
-  finalizes; only a finalized-head tick can turn `claimed(finalized: false)` into the terminal
-  `claimed(finalized: true)`. Mirrors Android's `reevaluate(finalizedHeads())`.
 
 ## Submission Policies (retries)
 
