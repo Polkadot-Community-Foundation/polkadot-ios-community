@@ -95,9 +95,6 @@ chat message when its transfer state row changes. Do the same for any new relati
 - UserDataModel is versioned — always add a new version for schema changes
 - Test migrations thoroughly
 
-A version that has not left the branch it was born on may be edited in place instead (v51 on
-`fix/claim-retry` gained the transfer state entities this way); once it is on `develop`, bump.
-
 #### Adding a UserDataModel version (all four steps, same PR)
 
 Missing any of these compiles fine but breaks migration at runtime (step 4 has been missed more than

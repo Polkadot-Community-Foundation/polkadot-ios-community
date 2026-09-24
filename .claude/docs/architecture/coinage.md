@@ -111,28 +111,6 @@ Transfer plans determine how coins are spent:
 - Integrates with chat for payment request/confirmation messages
 - See `architecture/chat-extension.md` for chat integration
 
-### Chat transfer lifecycle (transfer state rows)
-
-A coinage transfer sent or received in chat carries its lifecycle as one row related to the message:
-`CDIncomingTransferState` (`detecting 0 / claiming 1 / claimed 2 / failed 3`, plus `firstAttemptAt`,
-the receiver's claim-window anchor) or `CDOutgoingTransferState` (`sending 0 / sent 1 / claimed 2 /
-failed 3`). Both carry `actualValue`; a partial claim is `claimed` with `actualValue` short of the
-message total — there is no partial status. The message mapper attaches the row as
-`Chat.LocalMessage.Content.Transfer.state` (`IncomingTransferState` / `OutgoingTransferState`,
-`Modules/Coinage/Model/TransferState.swift`); `nil` means no row yet and renders as the initial state.
-
-`CoinageTransferMonitor` is the only writer, through `TransferStateStoring`
-(`TransferStateCoreDataStore`, one `performWrite` per update, a no-op when the row already holds the
-state, otherwise a KVO touch on the message so the chat snapshot re-maps it). The status comes only
-from the durability-derived streams (`CoinageTransferDetection`, `CoinageTransferState`), deduplicated
-before the write; a thrown runtime error is logged and never written. Messages whose row is terminal
-are excluded from the monitor's subscriptions by predicate, so a claimed or failed transfer is never
-re-processed after relaunch. `claimed(finalized: false)` persists as `claimed` (the in-session task
-keeps running until finalization; a post-relaunch fork downgrade is not reflected in the bubble).
-
-`OutgoingTransferState` is also what the TransferAmount and W3S lifecycle reporters stream to the
-transfer screen.
-
 ## Submission Policies (retries)
 
 A coinage transaction proven unable to land is **built again** rather than failed. Each of the three
