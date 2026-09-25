@@ -156,6 +156,22 @@ let dependencyConfigs: [DependencyConfig] = [
 
 // MARK: - Config main
 
+// Packages left out of the graph, as a comma-separated EXCLUDED_PACKAGES of DependencyConfig names.
+// Set by the production build workflow; unset everywhere else.
+let excludedPackages = Set(
+    (Context.environment["EXCLUDED_PACKAGES"] ?? "")
+        .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+        .map(String.init)
+)
+
+let activeDependencyConfigs = dependencyConfigs.filter { !excludedPackages.contains($0.name) }
+
+// A name that matches nothing would silently exclude nothing.
+let unknownExclusions = excludedPackages.subtracting(dependencyConfigs.map(\.name)).sorted()
+if !unknownExclusions.isEmpty {
+    fatalError("EXCLUDED_PACKAGES names no dependency: \(unknownExclusions.joined(separator: ", "))")
+}
+
 let package = Package(
     name: "AppDependencies",
     platforms: [
@@ -167,11 +183,11 @@ let package = Package(
             targets: ["AppDependencies"]
         )
     ],
-    dependencies: dependencyConfigs.map(\.packageDependency),
+    dependencies: activeDependencyConfigs.map(\.packageDependency),
     targets: [
         .target(
             name: "AppDependencies",
-            dependencies: dependencyConfigs.flatMap(\.targetDependency),
+            dependencies: activeDependencyConfigs.flatMap(\.targetDependency),
             path: ""
         )
     ]
