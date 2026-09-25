@@ -780,7 +780,9 @@ jobs:
         run: |
           set -euo pipefail
           tag="production/${SHIPPED_VERSION}-${BUILD_NUMBER}"
+          # gh writes its error body to stdout, so a 404 would otherwise read as the current sha.
           existing=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq .object.sha 2>/dev/null || true)
+          [[ "$existing" =~ ^[0-9a-f]{40}$ ]] || existing=""
           if [ "$existing" = "$SHA" ]; then
             echo "$tag already points at $SHA"
           elif [ -n "$existing" ]; then
