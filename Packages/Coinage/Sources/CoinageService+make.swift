@@ -1,7 +1,6 @@
 import Foundation
 import ExtrinsicService
 import KeyDerivation
-import Keystore_iOS
 import NovaCrypto
 import Operation_iOS
 import SDKLogger
@@ -13,6 +12,7 @@ import FoundationExt
 import BackgroundExecution
 import Individuality
 import DurableTransactions
+import Revive
 
 public extension CoinageService {
     /// Creates a CoinageService instance.
@@ -24,13 +24,12 @@ public extension CoinageService {
     ///   - databaseFactory: Factory for creating database repositories
     ///   - originFactory: Factory for creating extrinsic origins (app-side implementation)
     ///   - extrinsicMonitorFactory: Factory for extrinsic submission monitoring
-    ///   - durableEngine: The shared durable transaction engine; coinage registers its oracle with it
+    ///   - durable: The shared durability layer; coinage registers its oracle and its policies with it
     ///   - chainViewFactory: Pinned chain views for reads outside the engine
     ///   - assetLedger: Coinage's half of the ledger (asset rows, handoff marks)
     ///   - rootEntropyManager: Manager for root entropy (key derivation)
-    ///   - keystore: Keystore for key management
     ///   - logger: Logger for diagnostic output
-    ///   - schedulerFactory: Coin recycling background task scheduler
+    ///   - installation: What registering this installation and recovering the previous ones needs
     /// - Returns: A configured CoinageServicing instance
     // swiftlint:disable:next function_body_length
     static func make(
@@ -40,11 +39,10 @@ public extension CoinageService {
         databaseFactory: DatabaseDependencyFactoring,
         originFactory: OriginCreating,
         extrinsicMonitorFactory: ExtrinsicSubmitMonitorFactoryProtocol,
-        durableEngine: any DurableTxServicing,
+        durable: DurableTxServices,
         chainViewFactory: any PinnedChainViewFactoryProtocol,
         assetLedger: any CoinageAssetLedgerProtocol,
         rootEntropyManager: RootEntropyManaging,
-        keystore: KeystoreProtocol,
         applicationStateStreamFactory: ApplicationStateStreamFactory,
         externalPaymentStore: ExternalPaymentStoring,
         incomingPaymentStore: IncomingPaymentStoring,
@@ -54,6 +52,7 @@ public extension CoinageService {
         recyclingStrategySettings: any CoinageRecyclingStrategyProviding,
         personOriginProvider: any OriginPersonProviding,
         viewFunctionFetcher: any ViewFunctionFetching,
+        installation: CoinageInstallationDependency,
         logger: SDKLoggerProtocol
     ) -> CoinageService {
         let operationQueue = OperationQueue()
@@ -69,19 +68,18 @@ public extension CoinageService {
         let trackedVoucherRepository = databaseFactory.makeTrackedVoucherRepository()
         let voucherRepository = databaseFactory.makeVoucherRepository()
 
-        let voucherIndexstore = VoucherIndexstore(storage: keystore)
-        let coinsIndexstore = CoinIndexstore(storage: keystore)
+        let installationRepository = databaseFactory.makeInstallationRepository()
+        let currentInstallationStore = installation.currentInstallationStore
         let coinKeypairFactory = CoinKeypairFactory(entropyManager: rootEntropyManager)
         let voucherKeypairFactory = VoucherKeypairFactory(entropyManager: rootEntropyManager)
-        // One allocator per Coinage instance: actor isolation serialises the index counter only
-        // within a single instance.
+        // One allocator per Coinage instance: each serialises its own reserve-then-save.
         let coinAllocator = CoinAllocator(
-            storage: coinsIndexstore,
+            installationStore: currentInstallationStore,
             coinRepository: coinRepository,
             keyFactory: coinKeypairFactory
         )
         let voucherAllocator = VoucherAllocator(
-            storage: voucherIndexstore,
+            installationStore: currentInstallationStore,
             delayProvider: VoucherDelayProvider(),
             voucherRepository: voucherRepository,
             keyFactory: voucherKeypairFactory
@@ -137,12 +135,12 @@ public extension CoinageService {
         // Coinage's oracle answers the engine's two questions from its asset rows and its own chain
         // reads; the engine owns the ledger row, the submission watch and recovery.
         let stateReader = CoinageStateReader(coinQuery: coinOnChainQuery, voucherQuery: voucherOnChainQuery)
-        durableEngine.oracles.register(
+        durable.oracles.register(
             CoinageResourceOracle(chainId: chain.chainId, ledger: assetLedger, reader: stateReader),
             for: .coinage
         )
 
-        let txService = CoinageTxService(engine: durableEngine, ledger: assetLedger, logger: logger)
+        let txService = CoinageTxService(engine: durable.txService, ledger: assetLedger, logger: logger)
 
         let voucherLoaderFactory = VoucherLoaderFactory(
             instanceId: instanceId,
@@ -165,23 +163,19 @@ public extension CoinageService {
             connection: connection,
             runtimeCodingService: runtimeService
         )
+        let dateProvider = NowDateProvider()
         let quotaTracker = UnloadQuotaTracker(
             runtimeCodingService: runtimeService,
             consumedTokenChecker: consumedTokenChecker,
             personOriginProvider: personOriginProvider,
-            viewFunctionFetcher: viewFunctionFetcher
+            viewFunctionFetcher: viewFunctionFetcher,
+            dateProvider: dateProvider
         )
 
         let planFactory = TransferPlanFactory(
-            instanceId: instanceId,
             minter: coinageMinter,
-            voucherKeyFactory: voucherKeypairFactory,
-            coinKeyFactory: coinKeypairFactory,
             durability: txService,
-            originFactory: originFactory,
-            quotaTracker: quotaTracker,
-            recyclerLoader: readinessLoader,
-            blockInfoProvider: blockNumberProvider,
+            dateProvider: dateProvider,
             logger: logger
         )
 
@@ -194,15 +188,56 @@ public extension CoinageService {
             planFactory: planFactory,
             memoBuilder: memoBuilder,
             recyclerLoader: readinessLoader,
+            txService: txService,
+            logger: logger
+        )
+
+        let dataStoreRepository = AccountDataStoreRepository(
+            accountKeys: DataStoreAccountKeys(entropyManager: rootEntropyManager),
+            reviveApi: installation.reviveApi,
+            logger: logger
+        )
+        durable.oracles.register(
+            CoinageInstallationRegistrationOracle.make(
+                chainId: installation.chainId,
+                dataStoreRepository: dataStoreRepository,
+                logger: logger
+            ),
+            for: .coinageInstallation
+        )
+        let installationRegistrar = CoinageInstallationRegistrar(
+            currentInstallationStore: currentInstallationStore,
+            configProvider: installation.configProvider,
+            engine: durable.txService,
+            submitter: InstallationRegistrationSubmitter(
+                dataStoreRepository: dataStoreRepository,
+                reviveApi: installation.reviveApi,
+                pgasProvisioner: installation.pgasProvisioner,
+                feeEstimator: installation.feeEstimator,
+                callArguments: RuntimeReviveCallArguments(runtimeService: installation.runtimeService),
+                chainId: installation.chainId,
+                originFactory: originFactory,
+                engine: durable.txService,
+                logger: logger
+            ),
+            backgroundExecutor: backgroundExecutor,
             logger: logger
         )
 
         let recoveryService = CoinageBackupRecoveryService(
-            coinIndexstore: coinsIndexstore,
-            voucherIndexstore: voucherIndexstore,
-            coinKeypairFactory: coinKeypairFactory,
-            coinOnChainQuery: coinOnChainQuery,
-            voucherOnChainQuery: voucherOnChainQuery,
+            currentInstallationStore: currentInstallationStore,
+            installationRepository: installationRepository,
+            configProvider: installation.configProvider,
+            dataStoreRepository: dataStoreRepository,
+            scanner: InstallationAssetScanner(
+                coinKeypairFactory: coinKeypairFactory,
+                coinOnChainQuery: coinOnChainQuery,
+                voucherOnChainQuery: voucherOnChainQuery,
+                chainViewFactory: chainViewFactory,
+                chainId: chain.chainId,
+                logger: logger
+            ),
+            assetStore: RecoveredAssetStore(databaseFactory: databaseFactory),
             logger: logger
         )
 
@@ -225,6 +260,45 @@ public extension CoinageService {
             snKeyFactory: SNKeyFactory(),
             coinService: coinService,
             logger: logger
+        )
+
+        // Coinage's three submission policies, registered before anything carrying one is submitted:
+        // a row naming an unregistered policy is abandoned rather than left waiting for ever.
+        CoinageSubmissionPolicies.register(
+            into: durable.policies,
+            using: CoinageSubmissionPolicies.Dependencies(
+                chainId: chain.chainId,
+                ledger: assetLedger,
+                coinService: coinService,
+                voucherService: voucherService,
+                coinQuery: coinOnChainQuery,
+                voucherSnapshots: { databaseFactory.makeTrackedVoucherSnapshotStream() },
+                splitBuilder: SplitExtrinsicBuilder(
+                    coinKeyFactory: coinKeypairFactory,
+                    originFactory: originFactory,
+                    factory: durable.factory,
+                    chainId: chain.chainId
+                ),
+                unloadBuilder: UnloadExtrinsicBuilder(
+                    instanceId: instanceId,
+                    voucherKeyFactory: voucherKeypairFactory,
+                    recyclerLoader: readinessLoader,
+                    originFactory: originFactory,
+                    blockInfoProvider: blockNumberProvider,
+                    quotaTracker: quotaTracker,
+                    factory: durable.factory,
+                    chainId: chain.chainId,
+                    logger: logger
+                ),
+                claimBuilder: ClaimExtrinsicBuilder(
+                    originFactory: originFactory,
+                    factory: durable.factory,
+                    chainId: chain.chainId
+                ),
+                snKeyFactory: SNKeyFactory(),
+                dateProvider: dateProvider,
+                logger: logger
+            )
         )
 
         let recipientService = TransferRecipientService(
@@ -297,7 +371,8 @@ public extension CoinageService {
             durability: txService,
             originFactory: originFactory,
             quotaTracker: quotaTracker,
-            blockNumberProvider: blockNumberProvider
+            blockNumberProvider: blockNumberProvider,
+            dateProvider: dateProvider
         )
 
         let externalPaymentService = ExternalPaymentService(
@@ -373,6 +448,7 @@ public extension CoinageService {
             applicationStateStreamFactory: applicationStateStreamFactory,
             databaseFactory: databaseFactory,
             recoveryService: recoveryService,
+            installationRegistrar: installationRegistrar,
             incomingPaymentService: incomingPaymentService,
             logger: logger
         )
@@ -382,7 +458,7 @@ public extension CoinageService {
 }
 
 extension VoucherKeyDeriving {
-    func alias(for index: DerivationIndex) throws -> Data {
+    func alias(for index: CoinageKeyIndex) throws -> Data {
         try createKeyManager(index: index)
             .deriveAlias(for: UnloadTokenContextBuilder.recyclerAliasContext)
     }

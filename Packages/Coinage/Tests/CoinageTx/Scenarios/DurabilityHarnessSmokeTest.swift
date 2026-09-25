@@ -1,3 +1,4 @@
+import DurableTransactionsTestSupport
 import Foundation
 import Testing
 @testable import Coinage
@@ -7,10 +8,10 @@ import Testing
 /// terminal verdict.
 @Suite("Durability Harness Smoke")
 struct DurabilityHarnessSmokeTest {
-    private let spentCoin: DerivationIndex = 1
-    private let mintedCoin: DerivationIndex = 2
-    private let voucher: DerivationIndex = 5
-    private let unknownCoin: DerivationIndex = 99
+    private let spentCoin: CoinageKeyIndex = 1
+    private let mintedCoin: CoinageKeyIndex = 2
+    private let voucher: CoinageKeyIndex = 5
+    private let unknownCoin: CoinageKeyIndex = 99
 
     @Test("registration locks its input and takes submission ownership")
     func registrationLocksInputAndTakesOwnership() async throws {
@@ -47,7 +48,7 @@ struct DurabilityHarnessSmokeTest {
         #expect(try await harness.handoffKeys().isEmpty)
 
         let commit = try await harness.preCommitHandoff([harness.coinOutput(spentCoin)])
-        try await commit.commit()
+        try commit.commit(in: InMemoryRegistrationScope())
         try await harness.relaunch()
         #expect(try await harness.handoffKeys().contains(HarnessKeys.coinKey(spentCoin)))
     }

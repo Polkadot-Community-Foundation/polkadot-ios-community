@@ -75,7 +75,7 @@ final class InMemoryVoucherService: VoucherServiceProtocol, @unchecked Sendable 
 
     func fetchAllTracked() async throws -> [TrackedVoucher] { [] }
 
-    func fetchTracked(derivationIndices _: Set<DerivationIndex>) async throws -> [TrackedVoucher] { [] }
+    func fetchTracked(derivationIndices _: Set<CoinageKeyIndex>) async throws -> [TrackedVoucher] { [] }
 
     func fetchVouchers(publicKeys: Set<PublicKey>) async throws -> [Voucher] {
         if let fetchError { throw fetchError }
@@ -92,7 +92,7 @@ final class StubVoucherLoaderFactory: VoucherLoaderFactoryProtocol, VoucherLoade
 
     private struct State {
         var loads: [Balance] = []
-        var nextIndex: DerivationIndex = 1_000
+        var nextIndex: CoinageKeyIndex = 1_000
     }
 
     private let vouchers: InMemoryVoucherService
@@ -115,12 +115,12 @@ final class StubVoucherLoaderFactory: VoucherLoaderFactoryProtocol, VoucherLoade
         state.withLock { $0.loads.append(amount) }
         if let loadError { throw loadError }
 
-        let denominations = breakdownContext.breakdown(amountInPlanks: amount)
+        let denominations = try breakdownContext.breakdown(amountInPlanks: amount)
         guard !denominations.isEmpty else { return [] }
 
         let minted = denominations.map { denomination in
             let index = state.withLock { state in
-                defer { state.nextIndex += 1 }
+                defer { state.nextIndex = state.nextIndex.next() }
                 return state.nextIndex
             }
             return Voucher(

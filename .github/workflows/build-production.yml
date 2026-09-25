@@ -359,7 +359,7 @@ jobs:
     timeout-minutes: 120
     environment: production-distribution
     permissions:
-      contents: read
+      contents: write   # the release tag for a build that reached TestFlight; the gate is the environment
       id-token: write
     env:
       RUN_IN_CI: 'true'
@@ -689,7 +689,10 @@ jobs:
             echo "::error::CFBundleShortVersionString $ver != PRODUCTION_MARKETING_VERSION $MARKETING_VERSION"
             exit 1
           fi
-          echo "IPA=$IPA" >> "$GITHUB_ENV"
+          {
+            echo "IPA=$IPA"
+            echo "SHIPPED_VERSION=$ver"
+          } >> "$GITHUB_ENV"
 
       # Also covers `upload`, which ships a stored .ipa and so passes no build-time check.
       - name: Assert Sentry is absent from the .ipa
@@ -763,6 +766,29 @@ jobs:
             echo "### TestFlight"
             echo "Uploaded build ${BUILD_NUMBER}. Internal groups, including **${TESTFLIGHT_GROUP}**, receive it automatically once processed."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # What shipped, recorded at the commit it was built from: production/<version>-<build>, which is
+      # also a ref this lane accepts, so the same build can be rebuilt verbatim. Only after Apple has
+      # the build, and only in production mode - `upload` re-sends an .ipa built by an earlier run.
+      - name: Tag the shipped commit
+        if: inputs.signing == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.trusted.outputs.sha }}
+        run: |
+          set -euo pipefail
+          tag="production/${SHIPPED_VERSION}-${BUILD_NUMBER}"
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq .object.sha 2>/dev/null || true)
+          if [ "$existing" = "$SHA" ]; then
+            echo "$tag already points at $SHA"
+          elif [ -n "$existing" ]; then
+            echo "::error::$tag already exists at $existing, not $SHA"
+            exit 1
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${tag}" -f "sha=${SHA}" --silent
+            echo "tagged $SHA as $tag"
+          fi
+          echo "- Tagged \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
 
       # Automatic signing on a fresh runner creates a certificate every run; revoke the ones
       # this runner created so the team account never fills up. Runs even when signing failed.

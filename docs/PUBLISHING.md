@@ -98,7 +98,6 @@ Required only by the distribution target you actually use:
 |--------|----------|---------|
 | `CREDENTIAL_FILE_CONTENT` | Google service-account JSON for App Distribution | `firebase_debug_distribution.yml` |
 | `FIREBASE_APP_ID` | Firebase App Distribution app ID (`1:…:ios:…`) | `firebase_debug_distribution.yml` |
-| `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | Credentials for the S3 artifact bucket | every workflow that uploads an `.ipa` |
 | `SENTRY_AUTH_TOKEN` | Uploading dSYMs to Sentry (the build phase skips when `sentry-cli` is unconfigured — see §9) | signed builds |
 
 Optional — these gate reporting steps only, and a fork can leave them unset:
@@ -172,6 +171,7 @@ Optional — an absent key disables or degrades the feature it drives:
 | `cross_chain_transfers`, `xcm_general_config` | JSON | XCM transfer routes for the deposit flow (`XcmTransfersSyncService`). Deposits via XCM stay unavailable without them. |
 | `transaction_extension_versions` | JSON object | `{"<chainId>": <uint8>}` — transaction-extension version per chain; defaults to `0`. |
 | `collectibles_enabled` | bool | Shows the collectibles entry on the wallet screen. |
+| `payment_asset_config` | JSON object | `{"symbol": "CASH", "iconSquareUrl": "https://…/square.svg", "iconWideUrl": "https://…/wide.svg"}` — the payment asset's symbol and logos: a square mark for amounts and payment messages, a wide mark-plus-wordmark for the balance card, as absolute web URLs (SVG or PNG; an SVG must not set `fill="none"` on its root element, which the iOS renderer cannot draw). Each field is optional; anything missing or failing to load falls back to the bundled brand (`BRAND_CASH_SYMBOL` and the built-in mark). Logos are fetched as soon as the config is applied and kept cached by URL, so a change shows on the next config refresh without an app update; publish a changed logo under a new URL. Test assets live in `docs/assets/payment-asset/`. |
 | `collectibles_fallback_url` | string | Web URL used when the collectibles dApp cannot be resolved through DotNS. |
 | `game_results_fallback_url` | string | Web URL used when the game-results dApp cannot be resolved through DotNS. |
 

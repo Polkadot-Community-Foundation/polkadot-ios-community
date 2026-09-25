@@ -8,6 +8,7 @@ protocol MainTabBarViewProtocol: ControllerBackedProtocol, AppWidgetManaging {
     func show(slots: [TabBarSlot], selecting tab: TabBarItem)
     func select(tab: TabBarItem)
     func setBadge(_ badge: TabBarBadge?, for tab: TabBarItem)
+    func setLabels(visible: Bool)
     func showSPATabs(_ viewModels: [SPATabChipViewModel])
     func showTabBarPanelContent(_ configuration: (any HashableContentConfiguration)?, for action: TabBarAction)
     func showScanPanel()
@@ -19,7 +20,11 @@ protocol MainTabBarPresenterProtocol: AnyObject {
     func setup()
     func configureViews()
     func didRequestContentPanel(for action: TabBarAction)
-    func didRequestContactSearch()
+    #if FEATURE_INPUT
+        func didFindChat(_ model: ChatOpenModel)
+    #else
+        func didRequestContactSearch()
+    #endif
 }
 
 protocol MainTabBarInteractorInputProtocol: AnyObject {
@@ -37,12 +42,17 @@ protocol MainTabBarInteractorOutputProtocol: AnyObject {
     func didReceivePolkadotSignInRequest(with url: URL)
     func didReceiveSPATabs(_ tabs: [SPATab])
     func didReceiveChainStatus(_ rows: [ChainConnectionStatusViewModel])
+    func didReceiveTabBarLabelsEnabled(_ isEnabled: Bool)
 }
 
 @MainActor
 protocol MainTabBarWireframeProtocol: AnyObject {
     func showPolkadotSignIn(with url: URL, view: MainTabBarViewProtocol?)
-    func showSearchContact(from view: MainTabBarViewProtocol?)
+    #if FEATURE_INPUT
+        func openChat(_ model: ChatOpenModel)
+    #else
+        func showSearchContact(from view: MainTabBarViewProtocol?)
+    #endif
 }
 
 enum TabBarItem: String, CaseIterable {
@@ -77,10 +87,10 @@ enum TabBarBadge: Equatable {
 }
 
 extension TabBarItem {
-    func makeBarItem(badge: DSTabBarItem.Badge?) -> DSTabBarItem {
+    func makeBarItem(badge: DSTabBarItem.Badge?, showsLabel: Bool) -> DSTabBarItem {
         DSTabBarItem(
             icon: image,
-            title: nil,
+            title: showsLabel ? title : nil,
             badge: badge,
             accessibilityLabel: title,
             accessibilityIdentifier: AccessibilityID.Tab.item(for: self)?.rawValue
