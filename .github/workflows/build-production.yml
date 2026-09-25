@@ -169,7 +169,7 @@ jobs:
           fi
 
       - name: Resolve SwiftPM dependencies
-        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app -derivedDataPath build/DerivedData
+        run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app -derivedDataPath "$RUNNER_TEMP/DerivedData"
 
       # The production claim this lane exists to defend is "Release is the production surface".
       # -showBuildSettings is the only thing that can prove which flags and which identity the
@@ -277,17 +277,19 @@ jobs:
             -scheme polkadot-app \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee xcodebuild-production.log
 
       # Pinned, not searched: Xcode's index arena holds a Release-iphoneos path with no Mach-O.
+      # Outside the repo: the project's SwiftLint phase lints the working tree, and would fail on
+      # the package checkouts a derived-data path inside it would put there.
       - name: Assert Sentry is absent
         run: |
           set -euo pipefail
-          app=build/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app
+          app="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app"
           [ -d "$app" ] || { echo "::error::no Release-iphoneos build to check"; exit 1; }
           _trusted/.github/scripts/assert-no-sentry.sh "$app"
 
@@ -302,7 +304,7 @@ jobs:
           mkdir -p production-evidence
           cp build-settings.txt xcodebuild-production.log production-evidence/ 2>/dev/null
 
-          app=build/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app
+          app="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/polkadot-app.app"
           if [ ! -d "$app" ]; then
             echo "no Release-iphoneos polkadot-app.app found"
             exit 0
