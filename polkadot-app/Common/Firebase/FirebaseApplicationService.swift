@@ -116,7 +116,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             fundingUrl: fundingConfigValue(.onrampUrl),
             offrampUrl: fundingConfigValue(.offrampUrl),
             accountDataStoreContract: accountDataStoreContractAddress(),
-            paymentAsset: paymentAssetConfig()
+            paymentAsset: paymentAssetConfig(),
+            appSharingUrl: url(for: .appSharingUrl)
         )
     }
 
@@ -287,4 +288,5 @@ private extension String {
     static let accountDataStoreConfig = "account_data_store_config"
     static let contractAddress = "contractAddress"
     static let paymentAssetConfig = "payment_asset_config"
+    static let appSharingUrl = "app_sharing_url"
 }
