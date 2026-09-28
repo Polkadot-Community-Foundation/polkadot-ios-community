@@ -2,7 +2,7 @@
     import Foundation
     import Sentry
 
-    final class SentryIssueMonitoringService: IssueMonitoringServicing {
+    final class SentryIssueMonitoringService: IssueMonitoringServiceProtocol {
         private let dsn: String
 
         init(dsn: String) {

@@ -6,7 +6,7 @@ import Keystore_iOS
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     let logger: LoggerProtocol = Logger.shared
-    let issueMonitoringService: IssueMonitoringServicing = IssueMonitoringFactory.createService(
+    let issueMonitoringService: IssueMonitoringServiceProtocol = IssueMonitoringFactory.createService(
         dsn: GeneratedSecrets.sentryDSN
     )
 
