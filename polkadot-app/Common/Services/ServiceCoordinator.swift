@@ -371,7 +371,6 @@ extension ServiceCoordinator {
             personDataStore: syncServiceResult.personDataStore,
             syncService: syncServiceResult.service,
             personhoodRegistrationService: personhoodServices.registrationService,
-            claimStatusStore: coinageServices.claimStatusStore,
             audioSessionManager: audioSessionManager,
             spaFlowState: spaFlowState
         )
