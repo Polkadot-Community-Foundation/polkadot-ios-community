@@ -139,14 +139,25 @@ lane :verify_no_issue_monitoring do
     app_bundle = Dir.glob(File.join(unpack_dir, "Payload", "*.app")).first
     UI.user_error!("No .app inside #{ipa_path}") if app_bundle.nil?
 
-    embedded = Dir.glob(File.join(app_bundle, "Frameworks", "Sentry*"))
-    unless embedded.empty?
-      UI.user_error!("Release bundle embeds Sentry: #{embedded.map { |p| File.basename(p) }.join(', ')}")
+    # Covers the app binary, every embedded framework and every PlugIn (the notification
+    # service extension), whatever the bundle is named.
+    candidates = Dir.glob(File.join(app_bundle, "**", "*"), File::FNM_DOTMATCH)
+      .select { |path| File.file?(path) && !File.symlink?(path) }
+
+    mach_o_files = candidates.each_slice(200).flat_map do |batch|
+      # --mime-type keeps one line per file; the plain description spans several for fat binaries.
+      types = `file -b --mime-type #{batch.map(&:shellescape).join(' ')}`.lines.map(&:strip)
+      batch.zip(types).select { |_, type| type == "application/x-mach-binary" }.map(&:first)
     end
 
-    binary = File.join(app_bundle, File.basename(app_bundle, ".app"))
-    symbols = `strings -a #{binary.shellescape} | grep -c SentrySDK`.strip.to_i
-    UI.user_error!("Release binary contains #{symbols} SentrySDK references") if symbols > 0
+    offenders = mach_o_files.reject do |binary|
+      `strings -a #{binary.shellescape} | grep -c -E 'SentrySDK|sentry\\.io'`.strip.to_i.zero?
+    end
+
+    unless offenders.empty?
+      names = offenders.map { |path| path.sub("#{unpack_dir}/", "") }.join(", ")
+      UI.user_error!("Release bundle carries Sentry symbols or a DSN in: #{names}")
+    end
   end
 
   UI.success("Release bundle contains no Sentry SDK")
