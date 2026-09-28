@@ -18,6 +18,10 @@ final class ChatCallWireframe: ChatCallWireframeProtocol, AlertPresentable, Appl
             presentAlert()
         }
     }
+
+    func presentMicrophoneAccessRequired() {
+        presentMicrophoneAccessAlert()
+    }
 }
 
 private extension ChatCallWireframe {

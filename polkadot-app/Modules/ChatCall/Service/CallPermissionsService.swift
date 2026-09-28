@@ -1,47 +1,98 @@
 import AVFoundation
 import UIKit
 
+enum CallMicrophoneAccess: Equatable {
+    case granted
+    /// The prompt was shown just now and declined.
+    case refused
+    /// Declined earlier; only Settings can change it.
+    case denied
+    /// Never asked, and the prompt policy didn't allow asking now.
+    case deferred
+}
+
+enum MicrophonePromptPolicy {
+    /// Answering must not await a prompt that can't appear while the app isn't active.
+    case whenActive
+    /// Unmuting during a live call asks whatever the app state.
+    case always
+}
+
 protocol CallPermissionsServicing: AnyObject {
-    /// Only an explicit denial. A permission that has never been asked for is not a denial:
-    /// iOS shows no Microphone switch in Settings until the app has asked at least once, so
-    /// blocking on it would leave the user with nothing to turn on.
+    var isMicrophoneGranted: Bool { get }
+
+    /// Only an explicit denial: iOS shows no Microphone switch in Settings until the app has asked once.
     var isMicrophoneDenied: Bool { get }
+
+    func resolveMicrophoneAccess(prompting policy: MicrophonePromptPolicy) async -> CallMicrophoneAccess
+
+    func requestCameraAccessIfNeeded(for callType: ChatCallType) async
 
     func ensurePermissions(for callType: ChatCallType) async -> Bool
 }
 
 final class CallPermissionsService {
     private let applicationStateProvider: @MainActor () -> UIApplication.State
+    private let recordPermissionProvider: () -> AVAudioApplication.recordPermission
+    private let recordPermissionRequester: () async -> Bool
 
     init(
         applicationStateProvider: @escaping @MainActor () -> UIApplication.State = {
             UIApplication.shared.applicationState
+        },
+        recordPermissionProvider: @escaping () -> AVAudioApplication.recordPermission = {
+            AVAudioApplication.shared.recordPermission
+        },
+        recordPermissionRequester: @escaping () async -> Bool = {
+            await AVAudioApplication.requestRecordPermission()
         }
     ) {
         self.applicationStateProvider = applicationStateProvider
+        self.recordPermissionProvider = recordPermissionProvider
+        self.recordPermissionRequester = recordPermissionRequester
     }
 }
 
 private extension CallPermissionsService {
-    // An inactive/backgrounded app (e.g. a locked-screen CallKit answer) can't
-    // present the system permission prompt. Awaiting one there stalls the call
-    // instead of surfacing a dialog, so only prompt when the app is active.
+    // Awaiting a system prompt the inactive app can't present stalls the caller instead of asking.
     @MainActor
     var canPresentPermissionPrompt: Bool {
         applicationStateProvider() == .active
     }
 
-    func requestMicrophoneAccess() async -> Bool {
-        switch AVAudioApplication.shared.recordPermission {
+    func canPrompt(with policy: MicrophonePromptPolicy) async -> Bool {
+        switch policy {
+        case .always:
+            true
+        case .whenActive:
+            await canPresentPermissionPrompt
+        }
+    }
+}
+
+extension CallPermissionsService: CallPermissionsServicing {
+    var isMicrophoneGranted: Bool {
+        recordPermissionProvider() == .granted
+    }
+
+    var isMicrophoneDenied: Bool {
+        recordPermissionProvider() == .denied
+    }
+
+    func resolveMicrophoneAccess(prompting policy: MicrophonePromptPolicy) async -> CallMicrophoneAccess {
+        switch recordPermissionProvider() {
         case .granted:
-            return true
+            return .granted
         case .denied:
-            return false
+            return .denied
         case .undetermined:
-            guard await canPresentPermissionPrompt else { return false }
-            return await AVAudioApplication.requestRecordPermission()
+            guard await canPrompt(with: policy) else {
+                return .deferred
+            }
+
+            return await recordPermissionRequester() ? .granted : .refused
         @unknown default:
-            return false
+            return .denied
         }
     }
 
@@ -56,15 +107,9 @@ private extension CallPermissionsService {
 
         _ = await AVCaptureDevice.requestAccess(for: .video)
     }
-}
-
-extension CallPermissionsService: CallPermissionsServicing {
-    var isMicrophoneDenied: Bool {
-        AVAudioApplication.shared.recordPermission == .denied
-    }
 
     func ensurePermissions(for callType: ChatCallType) async -> Bool {
-        guard await requestMicrophoneAccess() else {
+        guard await resolveMicrophoneAccess(prompting: .whenActive) == .granted else {
             return false
         }
 

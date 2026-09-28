@@ -35,6 +35,7 @@ protocol ChatCallInteractorInputProtocol: AnyObject {
 protocol ChatCallInteractorOutputProtocol: AnyObject {
     func didUpdateCallState(_ state: ChatCallState)
     func didDenyMicrophonePermission()
+    func didRequireMicrophoneAccess()
     func didUpdateConnectedAt(_ date: Date?)
     func didEndCall()
     func didReceiveRemoteRenderer(model: ChatCallRendererModel)
@@ -48,6 +49,7 @@ protocol ChatCallInteractorOutputProtocol: AnyObject {
 protocol ChatCallWireframeProtocol: AnyObject {
     func close(from view: ChatCallViewProtocol?)
     func presentMicrophoneAccessDenied(dismissing view: ChatCallViewProtocol?)
+    func presentMicrophoneAccessRequired()
 }
 
 enum ChatCallState {

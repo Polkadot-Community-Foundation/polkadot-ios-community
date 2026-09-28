@@ -3,7 +3,6 @@ import CommonService
 import SubstrateSdk
 import Operation_iOS
 import ChainRegistry
-import WebRTC
 
 protocol CallCoordinating: AnyObject {
     func handleIncomingCall(
@@ -86,11 +85,7 @@ private extension RealCallCoordinator {
             role: role,
             initialCallType: callType,
             purpose: WebRTCConnectionPurpose.call.rawValue,
-            configFactory: WebRTCConfigFactory(turnService: turnService, iceTransportPolicy: .noHost),
-            candidateFilter: CompositeCandidateFilter([
-                TcpHostCandidateFilter(),
-                PrivateHostCandidateFilter()
-            ]),
+            configFactory: WebRTCConfigFactory(turnService: turnService),
             peerConnectionFactory: WebRTCPeerConnectionFactoryProvider.make(),
             logger: logger
         )

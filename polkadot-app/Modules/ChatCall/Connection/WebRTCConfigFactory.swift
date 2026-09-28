@@ -9,16 +9,10 @@ protocol WebRTCConfigMaking: Sendable {
 final class WebRTCConfigFactory: WebRTCConfigMaking {
     private let turnService: TURNCredentialsProviding
     private let iceCandidatePoolSize: Int32
-    private let iceTransportPolicy: RTCIceTransportPolicy
 
-    init(
-        turnService: TURNCredentialsProviding,
-        iceCandidatePoolSize: Int32 = 8,
-        iceTransportPolicy: RTCIceTransportPolicy = .all
-    ) {
+    init(turnService: TURNCredentialsProviding, iceCandidatePoolSize: Int32 = 8) {
         self.turnService = turnService
         self.iceCandidatePoolSize = iceCandidatePoolSize
-        self.iceTransportPolicy = iceTransportPolicy
     }
 
     func makeConnectionConfiguration() async throws -> RTCConfiguration {
@@ -28,7 +22,6 @@ final class WebRTCConfigFactory: WebRTCConfigMaking {
         configuration.iceServers = makeIceServers(from: credentials)
         configuration.sdpSemantics = .unifiedPlan
         configuration.iceCandidatePoolSize = iceCandidatePoolSize
-        configuration.iceTransportPolicy = iceTransportPolicy
         // recommended by WebRTC team to avoid complexity explosion
         configuration.maxIPv6Networks = 1
 

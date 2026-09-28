@@ -57,6 +57,10 @@ extension ChatCallPresenter: ChatCallInteractorOutputProtocol {
         wireframe.presentMicrophoneAccessDenied(dismissing: view)
     }
 
+    func didRequireMicrophoneAccess() {
+        wireframe.presentMicrophoneAccessRequired()
+    }
+
     func didUpdateConnectedAt(_ date: Date?) {
         view?.didUpdateConnectedAt(date)
     }

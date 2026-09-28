@@ -396,28 +396,6 @@
           }
         }
       }
-    },
-    "chat.notification.missedCall.noPermissions.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Missed call"
-          }
-        }
-      }
-    },
-    "chat.notification.missedCall.noPermissions.body": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No audio/video permissions."
-          }
-        }
-      }
     }
   },
   "version": "1.1"
