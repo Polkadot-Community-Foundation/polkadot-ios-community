@@ -200,6 +200,8 @@ private struct CoinageBalanceBreakdownView: View {
     @State private var showDetails = false
     /// How the coins came out, reported by the view as it lays them out.
     @State private var coinMetrics = CoinageCoinsView.Metrics()
+    /// How tall the coins are actually drawn, as opposed to how much room the card gives them.
+    @State private var drawHeight = CoinageStripLayout.Options().height
 
     /// Anchors the card for the scroll that follows it down as it collapses.
     private static let anchor = "coinageCard"
@@ -249,13 +251,24 @@ private struct CoinageBalanceBreakdownView: View {
                     isExpanded: showDetails,
                     metrics: $coinMetrics
                 )
-                .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
-                // Deliberately not animated. Expanding takes its full height at once, so the coins
-                // fly out into a box that is already the right size; animating it made the scroll
-                // view chase a growing content size and bounce against its own edge. Collapsing is
-                // animated, but from inside the toggle, where the scroll can be moved in the same
-                // breath.
+                // Tall enough for the roomiest arrangement it has been asked for, and never
+                // resized while anything is animating. A Metal layer whose bounds change under an
+                // animation keeps showing its last frame mapped into the new bounds, and a frame
+                // of coins mapped anywhere is a frame of coins in the wrong place; collapsing made
+                // the top row dart upwards and come back. Held at one size there is no mapping to
+                // get wrong, and the card closes over the coins by clipping them.
+                .frame(height: drawHeight, alignment: .top)
                 .overlay(alignment: .topLeading) { blockHeaders }
+                // What the card gives the coins, which is what animates. Expanding is deliberately
+                // not animated: it takes its full height at once, so the coins fly out into a box
+                // that is already the right size, and animating it made the scroll view chase a
+                // growing content size and bounce against its own edge. Collapsing is animated,
+                // from inside the toggle, where the scroll can be moved in the same breath.
+                .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height), alignment: .top)
+                .clipped()
+                .onChange(of: coinMetrics.height) { _, height in
+                    drawHeight = max(drawHeight, height)
+                }
 
                 if !showDetails {
                     runMarkers
