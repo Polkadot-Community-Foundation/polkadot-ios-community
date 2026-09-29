@@ -21,12 +21,14 @@ enum CoinageScene {
         case polygonBimetal = "g4"
         case curvedPolygonBimetal = "g5"
         case scalloped = "g6"
+        case flowerBimetal = "g7"
 
         /// Face-on extent in coin heights. A property of the outline, not of the value, so it
         /// travels with the mesh rather than with the denomination.
         var faceWidth: CGFloat {
             switch self {
-            case .flower: 1.012238
+            case .flower,
+                 .flowerBimetal: 1.012238
             case .scalloped: 0.96574
             default: 1
             }
@@ -45,8 +47,10 @@ enum CoinageScene {
 
     /// Our four bands: dull bronze, bright silver, brighter gold, and bimetallic at the top.
     ///
-    /// The single-metal bands each run the same four outlines. The top band has three denominations
-    /// and the reference exports exactly three bimetallic meshes, which is a happy fit.
+    /// Every band runs the same four outlines in the same order, so a coin's shape names its place
+    /// within its metal wherever it sits. The top band has three denominations and so gets the
+    /// first three. The reference's own table never pairs a flower with a core, so that mesh is
+    /// exported for us specifically; see `NATIVE_ONLY_GEOMETRIES` in its `export-native.mjs`.
     static func geometry(forExponent exponent: Int16) -> Geometry {
         let clamped = Int(min(max(exponent, 0), CoinageCoinDesign.highestExponent))
         let band = clamped / CoinageCoinDesign.denominationsPerBand
@@ -54,7 +58,7 @@ enum CoinageScene {
         guard band < CoinageCoinDesign.Band.twin.rawValue else {
             let within = clamped - CoinageCoinDesign.Band.twin.rawValue * CoinageCoinDesign.denominationsPerBand
 
-            return [.roundBimetal, .curvedPolygonBimetal, .polygonBimetal][min(within, 2)]
+            return [.roundBimetal, .curvedPolygonBimetal, .flowerBimetal][min(within, 2)]
         }
 
         let shapes: [Geometry] = [.round, .curvedPolygon, .flower, .scalloped]

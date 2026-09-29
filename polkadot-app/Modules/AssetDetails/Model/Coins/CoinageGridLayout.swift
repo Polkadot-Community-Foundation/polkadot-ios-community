@@ -10,6 +10,10 @@ import Foundation
 enum CoinageGridLayout {
     struct Options: Equatable {
         var maxDiameter: CGFloat = 52
+        /// The reference's own floor, and what any crowded grid is drawn at: the fit is a cliff
+        /// rather than a slope, so a grid that overflows at all drops straight here. Fifty coins
+        /// are drawn at 51 and two hundred at the floor, with nothing in between. Raising it to 40
+        /// was tried and turned five hundred coins into five screens of scrolling rather than three.
         var minDiameter: CGFloat = 28
         var gap: CGFloat = 5
         var header: CGFloat = 34

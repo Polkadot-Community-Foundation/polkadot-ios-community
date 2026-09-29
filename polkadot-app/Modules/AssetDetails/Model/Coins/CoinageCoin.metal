@@ -105,9 +105,17 @@ constant float MARK_INNER = 0.30;   // clear of the struck figure, which has to 
 constant float MARK_OUTER = 0.45;   // out to the rim
 constant float PIT_RADIUS = 0.10;   // a pit is large on purpose: you can count them
 constant float PIT_DEPTH = 2.6;
-constant float STREAK_DEPTH = 1.1;
+constant float PIT_FLOOR = 0.51;    // how dark the bottom of a pit goes; 1.0 would not darken at all
+constant float STREAK_DEPTH = 1.65;
 constant int PIT_MAX = 8;
 constant int STREAK_MAX = 12;
+
+// How much harder than the reference a coin wears. Its own figure is tuned for a coin filling a
+// desktop window; here the largest is sixty points tall, and the four things wear does — toning the
+// metal toward its own darker cast, hazing the field while the relief rubs shiny, killing the mint
+// luster, and collecting grime in the cut figure — all have to read at that size. Saturates early
+// rather than reaching further: a fully worn coin looked right, everything between did not.
+constant float WEAR_GAIN = 1.5;
 
 static float2 markHash(float seed) {
   return fract(sin(float2(seed * 12.9898, seed * 78.233 + 1.7)) * float2(43758.5453, 22578.1459));
@@ -129,7 +137,7 @@ static void addPits(float2 local, float count, float seed, thread float2 &slope,
 
     float bowl = 1.0 - dist * dist;
     slope += normalize(delta + float2(1e-5, 0.0)) * PIT_DEPTH * dist * bowl;
-    shade *= mix(1.0, 0.3, bowl * bowl);
+    shade *= mix(1.0, PIT_FLOOR, bowl * bowl);
   }
 }
 
@@ -274,7 +282,7 @@ fragment float4 coinFragment(VertexOut in [[stage_in]],
   int metalIndex = int(isCore ? in.lookI.z : in.lookI.y);
   float4 m0 = metals[metalIndex * 2];
   float4 m1 = metals[metalIndex * 2 + 1];
-  float wear = clamp(in.lookI.x, 0.0, 1.0);
+  float wear = min(clamp(in.lookI.x, 0.0, 1.0) * WEAR_GAIN, 1.0);
   float toning = wear * P.tone * mix(0.55, 1.0, cut);
   float3 baseColor = m0.xyz * mix(float3(1.0), m1.xyz, toning);
   float inRoll = 1.0 - clamp(in.fxI.y, 0.0, 1.0);

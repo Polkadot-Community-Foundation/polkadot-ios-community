@@ -1003,5 +1003,151 @@
    "ymin": -0.5,
    "ymax": 0.5
   }
+ },
+ {
+  "id": "g7",
+  "key": "flower:{\"notches\":7,\"depth\":0.04,\"width\":0.15,\"round\":0.055}:1",
+  "kind": "flower",
+  "dials": {
+   "notches": 7,
+   "depth": 0.04,
+   "width": 0.15,
+   "round": 0.055
+  },
+  "bimetal": true,
+  "lods": {
+   "high": {
+    "file": "meshes/g7-high.bin",
+    "vertexCount": 5994,
+    "triangleCount": 11592,
+    "layout": {
+     "position": {
+      "offset": 0,
+      "count": 5994,
+      "components": 3,
+      "type": "f32"
+     },
+     "normal": {
+      "offset": 71928,
+      "count": 5994,
+      "components": 3,
+      "type": "f32"
+     },
+     "surf": {
+      "offset": 143856,
+      "count": 5994,
+      "components": 4,
+      "type": "f32"
+     },
+     "index": {
+      "offset": 239760,
+      "count": 34776,
+      "components": 1,
+      "type": "u32"
+     }
+    }
+   },
+   "mid": {
+    "file": "meshes/g7-mid.bin",
+    "vertexCount": 1472,
+    "triangleCount": 2772,
+    "layout": {
+     "position": {
+      "offset": 0,
+      "count": 1472,
+      "components": 3,
+      "type": "f32"
+     },
+     "normal": {
+      "offset": 17664,
+      "count": 1472,
+      "components": 3,
+      "type": "f32"
+     },
+     "surf": {
+      "offset": 35328,
+      "count": 1472,
+      "components": 4,
+      "type": "f32"
+     },
+     "index": {
+      "offset": 58880,
+      "count": 8316,
+      "components": 1,
+      "type": "u32"
+     }
+    }
+   },
+   "low": {
+    "file": "meshes/g7-low.bin",
+    "vertexCount": 551,
+    "triangleCount": 1008,
+    "layout": {
+     "position": {
+      "offset": 0,
+      "count": 551,
+      "components": 3,
+      "type": "f32"
+     },
+     "normal": {
+      "offset": 6612,
+      "count": 551,
+      "components": 3,
+      "type": "f32"
+     },
+     "surf": {
+      "offset": 13224,
+      "count": 551,
+      "components": 4,
+      "type": "f32"
+     },
+     "index": {
+      "offset": 22040,
+      "count": 3024,
+      "components": 1,
+      "type": "u32"
+     }
+    }
+   },
+   "sliver": {
+    "file": "meshes/g7-sliver.bin",
+    "vertexCount": 203,
+    "triangleCount": 336,
+    "layout": {
+     "position": {
+      "offset": 0,
+      "count": 203,
+      "components": 3,
+      "type": "f32"
+     },
+     "normal": {
+      "offset": 2436,
+      "count": 203,
+      "components": 3,
+      "type": "f32"
+     },
+     "surf": {
+      "offset": 4872,
+      "count": 203,
+      "components": 4,
+      "type": "f32"
+     },
+     "index": {
+      "offset": 8120,
+      "count": 1008,
+      "components": 1,
+      "type": "u32"
+     }
+    }
+   }
+  },
+  "width": 1.012238,
+  "centerY": 0.00614,
+  "bounds": {
+   "xmin": -0.506119,
+   "xmax": 0.506119,
+   "ymin": -0.49386,
+   "ymax": 0.50614
+  }
  }
 ]

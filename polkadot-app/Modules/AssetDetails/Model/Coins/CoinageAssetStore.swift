@@ -75,8 +75,8 @@ final class CoinageAssetStore {
     /// land, and two megabytes of high meshes are read in the middle of a frame. Every coin freezes
     /// for as long as it takes, including the ones already moving.
     ///
-    /// All twenty-eight come to about three megabytes, which is cheaper to hold than to fetch at
-    /// the wrong moment.
+    /// All thirty-two come to about three and a half megabytes, which is cheaper to hold than to
+    /// fetch at the wrong moment.
     func mesh(geometry: String, levelOfDetail: CoinageLevelOfDetail) throws -> Mesh {
         let key = "\(geometry)-\(Self.lodNames[levelOfDetail.rawValue])"
 

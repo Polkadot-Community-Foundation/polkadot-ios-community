@@ -65,8 +65,8 @@ struct CoinageBreakdownOrderTests {
 
     // MARK: - The order
 
-    @Test("Unknown histories lead, deepest first, then known levels least fungible first")
-    func order() {
+    @Test("Within one denomination: unknown histories lead, then known levels least fungible first")
+    func orderWithinADenomination() {
         let holdings = CoinageHoldings(
             coins: [
                 holding(coin(age: 2, fungibility: nil, hops: hops(2))),
@@ -88,8 +88,8 @@ struct CoinageBreakdownOrderTests {
         #expect(severities(of: holdings) == expected)
     }
 
-    @Test("Value breaks ties within one bucket, largest first")
-    func valueBreaksTies() {
+    @Test("Denomination leads, largest first")
+    func denominationLeads() {
         let holdings = CoinageHoldings(
             coins: [
                 holding(coin(exponent: 3, age: 0, fungibility: 20)),
@@ -100,6 +100,106 @@ struct CoinageBreakdownOrderTests {
         )
 
         #expect(CoinageBreakdownFactory.rows(from: holdings).map(\.exponent) == [9, 6, 3])
+    }
+
+    @Test("Denomination outranks fungibility, which only separates coins worth the same")
+    func denominationOutranksFungibility() {
+        let holdings = CoinageHoldings(
+            coins: [
+                holding(coin(exponent: 2, age: 4, fungibility: nil, hops: hops(4))),
+                holding(coin(exponent: 9, age: 0, fungibility: 100))
+            ],
+            vouchers: []
+        )
+
+        // The small coin nobody can trace used to lead on being the least fungible thing in the
+        // list. It is still the least fungible; it is no longer what the eye meets first.
+        #expect(CoinageBreakdownFactory.rows(from: holdings).map(\.exponent) == [9, 2])
+    }
+
+    @Test("Coins built without a row behind them are still ordered, test sets among them")
+    func anyListComesOutOrdered() {
+        // The test-data switch builds scene coins directly rather than through `rows(from:)`, and
+        // it is the only place the depiction is ever reviewed. `everyStatus` generates its states
+        // most fungible first, the exact reverse of the rule, so this is not a hypothetical.
+        for mode in CoinageTestDataMode.allCases {
+            guard let coins = mode.strip else { continue }
+
+            let clearing = coins.prefix { $0.partition == .clearing }
+            let ready = coins.dropFirst(clearing.count)
+
+            #expect(ready.allSatisfy { $0.partition == .ready }, "\(mode) interleaves the partitions")
+
+            for block in [Array(clearing), Array(ready)] where !block.isEmpty {
+                #expect(
+                    block.map(\.exponent) == block.map(\.exponent).sorted(by: >),
+                    "\(mode) does not run largest denomination first"
+                )
+
+                for run in Dictionary(grouping: block, by: \.exponent).values {
+                    #expect(
+                        run.map(\.level) == run.map(\.level).sorted(),
+                        "\(mode) does not run least fungible first within a denomination"
+                    )
+                }
+            }
+        }
+    }
+
+    @Test("Least fungible leads within a denomination, deepest history among those")
+    func fungibilityOrdersOneDenomination() {
+        let coins = [
+            scene(id: "clean", exponent: 5, level: 9, hops: 0),
+            scene(id: "traced-once", exponent: 5, level: 0, hops: 1),
+            scene(id: "traced-often", exponent: 5, level: 0, hops: 4),
+            scene(id: "hiding", exponent: 5, level: 4, hops: 0)
+        ]
+
+        #expect(
+            CoinageBreakdownFactory.inDisplayOrder(coins).map(\.id)
+                == ["traced-often", "traced-once", "hiding", "clean"]
+        )
+    }
+
+    @Test("A finer order set by the caller survives inside one denomination")
+    func theOrderWithinADenominationIsKept() {
+        let coins = (0 ..< 6).map {
+            CoinageScene.Coin(
+                id: "coin-\($0)", exponent: Int16($0 % 2), wear: 0,
+                partition: .ready, status: "ready", level: 0, hops: 0
+            )
+        }
+
+        // Exponent 1: coins 1, 3, 5 in that order. Exponent 0: coins 0, 2, 4.
+        #expect(
+            CoinageBreakdownFactory.inDisplayOrder(coins).map(\.id)
+                == ["coin-1", "coin-3", "coin-5", "coin-0", "coin-2", "coin-4"]
+        )
+    }
+
+    @Test("Partition outranks denomination, so the two blocks never interleave")
+    func partitionOutranksDenomination() {
+        let coins = [
+            CoinageScene.Coin(
+                id: "small-clearing", exponent: 2, wear: 1,
+                partition: .clearing, status: "clearing", level: 0, hops: 0
+            ),
+            CoinageScene.Coin(
+                id: "large-ready", exponent: 9, wear: 0,
+                partition: .ready, status: "ready", level: 8, hops: 0
+            ),
+            CoinageScene.Coin(
+                id: "large-clearing", exponent: 8, wear: 1,
+                partition: .clearing, status: "clearing", level: 0, hops: 0
+            )
+        ]
+
+        // Both clearing coins first even though one is worth less than the ready one, and the
+        // larger of the two leads inside the block.
+        #expect(
+            CoinageBreakdownFactory.inDisplayOrder(coins).map(\.id)
+                == ["large-clearing", "small-clearing", "large-ready"]
+        )
     }
 }
 
@@ -122,6 +222,18 @@ private extension CoinageBreakdownOrderTests {
 
     /// One installation for the whole suite: ordering only ever compares items within it.
     static let installation = try! CoinageInstallationId(value: Data(repeating: 7, count: 32))
+
+    func scene(id: String, exponent: Int16, level: Int, hops: Int) -> CoinageScene.Coin {
+        CoinageScene.Coin(
+            id: id,
+            exponent: exponent,
+            wear: CoinageWear.amount(forLevel: level),
+            partition: .ready,
+            status: "ready",
+            level: level,
+            hops: hops
+        )
+    }
 
     func keyIndex(_ item: DerivationIndex) -> CoinageKeyIndex {
         CoinageKeyIndex(installation: Self.installation, item: item)

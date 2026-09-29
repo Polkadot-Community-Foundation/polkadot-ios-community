@@ -9,8 +9,8 @@ import Foundation
 /// Pure and free of the presenter's state, so the ordering and the value weighting can be
 /// exercised directly.
 enum CoinageBreakdownFactory {
-    /// Which half of the list a row belongs to. Holdings whose recycler we have no record of are
-    /// the least fungible thing we can say anything about, so they lead.
+    /// Which half of a denomination's run a row belongs to. Holdings whose recycler we have no
+    /// record of are the least fungible thing we can say anything about, so they lead.
     enum Standing: Int, Equatable {
         case unknownHistory = 0
         case knownLevel = 1
@@ -22,7 +22,8 @@ enum CoinageBreakdownFactory {
         let exponent: Int16
         let standing: Standing
         /// Descending within a standing: hop count for ``Standing/unknownHistory``, fungibility
-        /// bucket for ``Standing/knownLevel``. Both read "least fungible first".
+        /// bucket for ``Standing/knownLevel``. Both read "least fungible first", which now only
+        /// separates holdings of the same denomination.
         let severity: Int
         let derivationIndex: CoinageKeyIndex
         /// How worn the holding is drawn as a coin. `0` is untraceable, `1` is fully traceable.
@@ -32,9 +33,16 @@ enum CoinageBreakdownFactory {
         let status: CoinageHoldingStatus
     }
 
-    /// One list, ordered least fungible first: unknown histories lead, deepest first, then
-    /// everything whose level we know, by bucket. Value breaks ties, then derivation index so
-    /// equal holdings keep a stable order across refreshes.
+    /// One list, ordered by denomination, largest first.
+    ///
+    /// Partition comes before any of this and is applied by ``inDisplayOrder``, which is stable, so
+    /// the whole order reads: Clearing before Ready, then by denomination, and only within one
+    /// denomination by how fungible a holding is — unknown histories first, then by bucket. A
+    /// derivation index breaks the last tie so equal holdings keep their order across refreshes.
+    ///
+    /// Fungibility used to lead, which is what the stakeholder asked for before the partitions
+    /// existed. With them it put a one-cent coin nobody can trace ahead of the largest coin in the
+    /// same partition, and the eye had nothing to hold on to.
     static func rows(from holdings: CoinageHoldings) -> [Row] {
         let coinRows = holdings.coins.map { holding in
             let bucket = bucket(for: holding.coin)
@@ -85,16 +93,16 @@ enum CoinageBreakdownFactory {
 
         // Value is `unit * 2^exponent`, so ordering by exponent is exactly ordering by value.
         return (coinRows + voucherRows).sorted { lhs, rhs in
+            if lhs.exponent != rhs.exponent {
+                return lhs.exponent > rhs.exponent
+            }
+
             if lhs.standing != rhs.standing {
                 return lhs.standing.rawValue < rhs.standing.rawValue
             }
 
             if lhs.severity != rhs.severity {
                 return lhs.severity > rhs.severity
-            }
-
-            if lhs.exponent != rhs.exponent {
-                return lhs.exponent > rhs.exponent
             }
 
             return lhs.derivationIndex < rhs.derivationIndex
@@ -169,13 +177,49 @@ enum CoinageBreakdownFactory {
         )
     }
 
-    /// Clearing first, then Ready, each run keeping the order it came in.
+    /// The whole order coins are drawn in: Clearing before Ready, then largest denomination first,
+    /// then least fungible first, and deepest history first among those.
     ///
-    /// Both the strip and the grid start a new block wherever the partition changes, so coins that
-    /// arrive interleaved would produce a block, and a header, per coin. Two passes rather than a
-    /// sort, so the ordering inside each run survives untouched.
+    /// The first two keys are the stakeholder's; the rest is what ``rows(from:)`` settles for live
+    /// holdings, restated over what a ``CoinageScene/Coin`` carries so that it holds for any list.
+    /// A holding nobody can trace wears as though it hides among nobody, which puts it at level
+    /// zero and so at the front, exactly where its unknown history puts it upstream.
+    ///
+    /// Stating it twice is the point. Anything assembled without a row behind it — the test-data
+    /// switch, which is the only place the depiction is ever reviewed — used to reach the layout
+    /// with nothing but the partitions split, and came out in whatever order it was generated in.
+    /// One of those sets runs its states most fungible first, the exact reverse of the rule.
+    ///
+    /// Stable, so live holdings are unaffected: they arrive in this order already, and a sort by
+    /// the same keys cannot move them.
+    ///
+    /// Both layouts start a new block wherever the partition changes, so coins arriving interleaved
+    /// would produce a block, and a header, per coin.
     static func inDisplayOrder(_ coins: [CoinageScene.Coin]) -> [CoinageScene.Coin] {
-        coins.filter { $0.partition == .clearing } + coins.filter { $0.partition == .ready }
+        let ordered = coins.enumerated().sorted { lhs, rhs in
+            if lhs.element.partition != rhs.element.partition {
+                return lhs.element.partition == .clearing
+            }
+
+            if lhs.element.exponent != rhs.element.exponent {
+                return lhs.element.exponent > rhs.element.exponent
+            }
+
+            // Level counts the doublings of the crowd a coin hides in, so the lowest is the one
+            // that hides among fewest and wears hardest.
+            if lhs.element.level != rhs.element.level {
+                return lhs.element.level < rhs.element.level
+            }
+
+            if lhs.element.hops != rhs.element.hops {
+                return lhs.element.hops > rhs.element.hops
+            }
+
+            // Swift's sort is not stable, so the original position is the last word.
+            return lhs.offset < rhs.offset
+        }
+
+        return ordered.map(\.element)
     }
 
     /// Where a depiction sits on the fungibility ladder.

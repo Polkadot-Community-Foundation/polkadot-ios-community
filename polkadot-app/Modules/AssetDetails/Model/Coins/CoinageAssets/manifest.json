@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-29T01:30:05.845Z",
+ "generated": "2026-09-29T07:16:05.656Z",
  "generator": "scripts/export-native.mjs",
  "guide": "native/README.md",
  "env": {
@@ -278,8 +278,24 @@
    "bytes": 8760
   },
   {
+   "path": "meshes/g7-high.bin",
+   "bytes": 378864
+  },
+  {
+   "path": "meshes/g7-mid.bin",
+   "bytes": 92144
+  },
+  {
+   "path": "meshes/g7-low.bin",
+   "bytes": 34136
+  },
+  {
+   "path": "meshes/g7-sliver.bin",
+   "bytes": 12152
+  },
+  {
    "path": "meshes.json",
-   "bytes": 17960
+   "bytes": 20619
   },
   {
    "path": "designs.json",
