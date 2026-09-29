@@ -62,7 +62,11 @@ final class AssetDetailsPresenter {
             formatterFactory: balanceFormatterFactory
         )
 
-        let balanceViewModel = balanceViewModelFactory.balanceFromPrice(
+        let balanceViewModel = PrimitiveBalanceViewModelFactory(
+            targetAssetInfo: chainAsset.asset.digitalDollarFigureDisplayInfo,
+            formatterFactory: balanceFormatterFactory
+        )
+        .balanceFromPrice(
             balance,
             priceData: price
         )
@@ -283,10 +287,9 @@ private extension AssetDetailsPresenter {
 
 private extension AssetDetailsPresenter {
     func provideCoinageBreakdown() {
-        func formatted(from decimal: Decimal, includeSymbol: Bool = true) -> String {
-            let assetInfo = chainAsset.asset.digitalDollarDisplayInfo
+        func formatted(from decimal: Decimal, as assetInfo: AssetBalanceDisplayInfo) -> String {
             let balanceViewModelFactory = PrimitiveBalanceViewModelFactory(
-                targetAssetInfo: includeSymbol ? assetInfo : assetInfo.withoutSymbol,
+                targetAssetInfo: assetInfo,
                 formatterFactory: balanceFormatterFactory
             )
             return balanceViewModelFactory.balanceFromPrice(
@@ -298,12 +301,15 @@ private extension AssetDetailsPresenter {
         }
 
         let amounts = coinageAmounts ?? .zero
+        // The run markers set their amounts beside a label in one small line, so they take the bare
+        // figure; only the headline carries the fiat symbol.
+        let runAmountInfo = chainAsset.asset.digitalDollarDisplayInfo.withoutSymbol
         let strip = CoinageBreakdownFactory.stripCoins(CoinageBreakdownFactory.rows(from: holdings))
 
         let breakdown = CoinageBalanceBreakdownViewModel(
-            totalBalance: formatted(from: amounts.total, includeSymbol: false),
-            availableNowBalance: formatted(from: amounts.availableNow, includeSymbol: false),
-            gainingPrivacyBalance: formatted(from: amounts.gainingPrivacy, includeSymbol: false),
+            totalBalance: formatted(from: amounts.total, as: chainAsset.asset.digitalDollarFigureDisplayInfo),
+            availableNowBalance: formatted(from: amounts.availableNow, as: runAmountInfo),
+            gainingPrivacyBalance: formatted(from: amounts.gainingPrivacy, as: runAmountInfo),
             symbol: chainAsset.asset.digitalDollarDisplayInfo.symbol,
             strip: strip
         )

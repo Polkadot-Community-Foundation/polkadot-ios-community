@@ -313,16 +313,13 @@ private struct CoinageBalanceBreakdownView: View {
     }
 
     private var totalHeadline: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text(breakdown.totalBalance)
-                .typography(.displaySmall)
-                .lineLimit(1)
-                .accessibilityId(AccessibilityID.Wallet.coinageTotalBalanceValue)
-
-            Text(breakdown.symbol)
-                .typography(.titleMedium)
-                .foregroundStyle(Color.fgSecondary)
-        }
+        DSAmount(
+            amount: breakdown.totalBalance,
+            symbol: breakdown.symbol,
+            typography: .displaySmall
+        )
+        .lineLimit(1)
+        .accessibilityId(AccessibilityID.Wallet.coinageTotalBalanceValue)
         .foregroundStyle(Color.fgPrimary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
