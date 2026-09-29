@@ -5,9 +5,42 @@ import Metal
 /// Loads everything the coin renderer draws with: the meshes, the struck-relief atlas, the studio
 /// environment, and the constants the shader reads.
 ///
-/// All of it is exported by `coinage-viz` (`npm run export:native`) and vendored under
-/// `CoinageAssets`. The constants arrive as data rather than as code, so a material tweak upstream
-/// ships as a file change here.
+/// All of it is exported by `paritytech/coinage-viz` (`npm run export:native`, which writes
+/// `public/native/assets`) and vendored under `CoinageAssets`. The constants arrive as data rather
+/// than as code, so a material change is a file change here.
+///
+/// That project has done its job and nothing regenerates these files. Changing a coin face, a
+/// shape or the studio means reproducing the export, and it needs four things that were never
+/// upstreamed. Written down because they were lost once already: the CASH currency vanished with a
+/// working copy, and recovering it meant reconstructing the definition and proving it by
+/// reproducing the shipped atlas byte for byte before changing anything. That is also how to check
+/// a reproduction — export at the settings of the day and compare bytes, then change one thing.
+///
+/// 1. `src/currency.js` gains
+///    `cash: { id: "cash", symbol: "", decimals: 2, minor: null, name: "Cash" }`. No minor unit, so
+///    every face is struck in the major unit with its decimals and the fifteen read as one series;
+///    the reference's own currencies strike small values in the minor unit, which puts "16" and
+///    "0.16" on two coins of the same value. The symbol is `""` rather than `null` because the
+///    exported label is built by concatenation, and `null` reaches `designs.json` as "null0.01".
+///
+/// 2. `scripts/export-native.mjs` sets `NATIVE_TILE_PX = 256`, passes it to `createReliefAtlas` and
+///    writes it into `params.json`. The atlas is four tiles square, so 1024². The web build's 512
+///    is more than any coin here draws: the largest is sixty points, and the shader's own mip
+///    selection never reaches the top level.
+///
+/// 3. The same script writes the relief as raw RGBA bytes, `relief/<cur>-relief.bin`, rather than
+///    as a PNG. The alpha is a height, not an opacity, and CoreGraphics premultiplies RGBA —
+///    silently scaling every normal by its own height. ``CoinageReliefAtlasTests`` guards it.
+///
+/// 4. The same script appends
+///    `NATIVE_ONLY_GEOMETRIES = [{ kind: "flower", dials: defaultDials("flower"), core: 0 }]`
+///    after `allDesigns()` in the mesh loop. Every metal band runs the same four outlines, so the
+///    bimetallic band needs a flower with a core, which the reference's own denomination table
+///    never asks for. Appended rather than added to that table, so `g0`–`g6` keep their numbers and
+///    the new mesh is `g7`.
+///
+/// `metals.json` is not taken from a fresh export: it carries local tuning that separates bronze
+/// further from gold.
 final class CoinageAssetStore {
     struct Mesh {
         let positions: MTLBuffer
