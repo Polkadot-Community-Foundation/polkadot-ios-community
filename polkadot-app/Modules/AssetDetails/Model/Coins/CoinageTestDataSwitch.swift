@@ -26,15 +26,19 @@ enum CoinageTestDataMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// `nil` draws whatever the wallet actually holds.
+    /// `nil` draws whatever the wallet actually holds. Ordered the way the live path orders, so
+    /// the test sets exercise the same arrangement rather than a shape the app never produces.
     var strip: [CoinageScene.Coin]? {
-        switch self {
-        case .live: nil
-        case .everyDenomination: CoinageTestData.everyDenomination()
-        case .everyStatus: CoinageTestData.everyStatus()
-        case .randomFifty: CoinageTestData.random(count: 50, seed: 50)
-        case .randomFiveHundred: CoinageTestData.random(count: 500, seed: 500)
-        }
+        let coins: [CoinageScene.Coin]? =
+            switch self {
+            case .live: nil
+            case .everyDenomination: CoinageTestData.everyDenomination()
+            case .everyStatus: CoinageTestData.everyStatus()
+            case .randomFifty: CoinageTestData.random(count: 50, seed: 50)
+            case .randomFiveHundred: CoinageTestData.random(count: 500, seed: 500)
+            }
+
+        return coins.map { CoinageBreakdownFactory.inDisplayOrder($0) }
     }
 }
 
@@ -86,7 +90,8 @@ enum CoinageTestData {
                 id: "test-state-\(index)",
                 exponent: exponent,
                 level: CoinageWear.maximumLevel - index * CoinageWear.maximumLevel / (count - 1),
-                isReady: index % 4 != 0
+                isReady: index % 4 != 0,
+                hops: index % 5
             )
         }
     }
@@ -107,7 +112,8 @@ enum CoinageTestData {
                 id: "test-random-\(seed)-\(index)",
                 exponent: exponent,
                 level: level,
-                isReady: noise.next() > 0.25
+                isReady: noise.next() > 0.25,
+                hops: Int(noise.next() * 5)
             )
         }
     }
@@ -116,7 +122,8 @@ enum CoinageTestData {
         id: String,
         exponent: Int16,
         level: Int,
-        isReady: Bool = true
+        isReady: Bool = true,
+        hops: Int = 0
     ) -> CoinageScene.Coin {
         CoinageScene.Coin(
             id: id,
@@ -124,7 +131,8 @@ enum CoinageTestData {
             wear: CoinageWear.amount(forLevel: level),
             partition: isReady ? .ready : .clearing,
             status: isReady ? "ready" : "recycling",
-            level: level
+            level: level,
+            hops: hops
         )
     }
 }

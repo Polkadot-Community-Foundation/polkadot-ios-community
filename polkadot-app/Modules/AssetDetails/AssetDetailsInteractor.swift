@@ -167,17 +167,14 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
                     let balance = summary.balance
                     await presenter?.didReceive(balance: context.decimal(fromPlanks: balance.total))
 
-                    // The breakdown shows the domain's own two buckets rather than
-                    // re-deriving them, and the holdings that produced them arrive in the same
-                    // value — so its figures and the bar below them cannot disagree.
+                    // Ready and Clearing come from the one place that collapses the domain's
+                    // three buckets into the two the user is shown, so the figures, the bar and
+                    // the coins cannot disagree, and the two add up to the total above them.
                     await presenter?.didReceive(
                         coinageAmounts: CoinageAmounts(
                             total: context.decimal(fromPlanks: balance.total),
-                            availableNow: context.decimal(fromPlanks: balance.availablePrivate),
-                            gainingPrivacy: context.decimal(
-                                fromPlanks: balance.gainingPrivacy.amount
-                            ),
-                            pending: context.decimal(fromPlanks: balance.pending)
+                            availableNow: context.decimal(fromPlanks: balance.ready),
+                            gainingPrivacy: context.decimal(fromPlanks: balance.clearing)
                         ),
                         holdings: summary.holdings
                     )

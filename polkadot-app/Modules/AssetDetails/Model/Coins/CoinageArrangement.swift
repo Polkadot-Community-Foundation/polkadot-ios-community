@@ -16,6 +16,16 @@ enum CoinageArrangement {
         let height: CGFloat
         /// Where each partition's header sits, for the labels over the grid.
         let blocks: [CoinageGridLayout.Block]
+        /// Where a stack of alike coins sits and how many it holds, for the count under it.
+        let piles: [Pile]
+    }
+
+    /// A stack of alike coins, which without a count reads as one oddly thick, tilted coin.
+    struct Pile: Equatable, Identifiable {
+        let id: String
+        let count: Int
+        /// Directly under the lowest coin of the stack.
+        let bottom: CGPoint
     }
 
     static func targets(
@@ -81,7 +91,7 @@ private extension CoinageArrangement {
             )
         }
 
-        return Result(targets: targets, height: height, blocks: [])
+        return Result(targets: targets, height: height, blocks: [], piles: [])
     }
 }
 
@@ -104,16 +114,27 @@ private extension CoinageArrangement {
                     level: $0.level
                 )
             },
-            area: area
+            area: area,
+            stacking: false
         )
 
         var targets: [(coin: CoinageScene.Coin, target: CoinageCoinField.Target)] = []
+        var piles: [Pile] = []
 
         for cell in layout.cells {
             targets += cellTargets(cell, layout: layout, coins: byId, designs: designs)
+
+            if let pile = pile(for: cell, layout: layout, coins: byId, designs: designs) {
+                piles.append(pile)
+            }
         }
 
-        return Result(targets: targets, height: layout.height, blocks: layout.blocks)
+        return Result(
+            targets: targets,
+            height: layout.height,
+            blocks: layout.blocks,
+            piles: piles
+        )
     }
 
     /// A cell holds one coin, or a pile of alike ones tipped back so their edges show. Coins past
@@ -163,6 +184,31 @@ private extension CoinageArrangement {
                 )
             )
         }
+    }
+
+    static func pile(
+        for cell: CoinageGridLayout.Cell,
+        layout: CoinageGridLayout.Layout,
+        coins: [String: CoinageScene.Coin],
+        designs: [CoinageAssetStore.Design]
+    ) -> Pile? {
+        guard cell.count > 1, let id = cell.ids.first, let first = coins[id] else { return nil }
+
+        let height = layout.diameter * CoinageCoinDesign.design(forExponent: first.exponent).size
+        let stack = CoinageGridLayout.pile(
+            count: cell.count,
+            height: height,
+            thickness: CGFloat(design(for: first, in: designs)?.thickness ?? 0.075)
+        )
+
+        return Pile(
+            id: id,
+            count: cell.count,
+            bottom: CGPoint(
+                x: cell.centre.x,
+                y: cell.centre.y + stack.height + height / 2
+            )
+        )
     }
 
     static func single(

@@ -36,6 +36,12 @@
     "numeral": "1",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "0.01",
+    "numeral": "0.01",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -81,6 +87,12 @@
     "numeral": "2",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "0.02",
+    "numeral": "0.02",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -120,6 +132,12 @@
     "label": "¥4",
     "numeral": "4",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "0.04",
+    "numeral": "0.04",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -164,6 +182,12 @@
     "numeral": "8",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "0.08",
+    "numeral": "0.08",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -203,6 +227,12 @@
     "label": "¥16",
     "numeral": "16",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "0.16",
+    "numeral": "0.16",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -249,6 +279,12 @@
     "numeral": "32",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "0.32",
+    "numeral": "0.32",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -288,6 +324,12 @@
     "label": "¥64",
     "numeral": "64",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "0.64",
+    "numeral": "0.64",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -332,6 +374,12 @@
     "numeral": "128",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "1.28",
+    "numeral": "1.28",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -371,6 +419,12 @@
     "label": "¥256",
     "numeral": "256",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "2.56",
+    "numeral": "2.56",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -415,6 +469,12 @@
     "numeral": "512",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "5.12",
+    "numeral": "5.12",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -454,6 +514,12 @@
     "label": "¥1024",
     "numeral": "1024",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "10.24",
+    "numeral": "10.24",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -499,6 +565,12 @@
     "numeral": "2048",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "20.48",
+    "numeral": "20.48",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -538,6 +610,12 @@
     "label": "¥4096",
     "numeral": "4096",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "40.96",
+    "numeral": "40.96",
+    "mark": "",
     "markAfter": false
    }
   }
@@ -582,6 +660,12 @@
     "numeral": "8192",
     "mark": "¥",
     "markAfter": false
+   },
+   "cash": {
+    "label": "81.92",
+    "numeral": "81.92",
+    "mark": "",
+    "markAfter": false
    }
   }
  },
@@ -625,6 +709,12 @@
     "label": "¥16384",
     "numeral": "16384",
     "mark": "¥",
+    "markAfter": false
+   },
+   "cash": {
+    "label": "163.84",
+    "numeral": "163.84",
+    "mark": "",
     "markAfter": false
    }
   }

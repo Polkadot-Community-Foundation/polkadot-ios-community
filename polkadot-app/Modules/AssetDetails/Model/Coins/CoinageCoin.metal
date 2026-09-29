@@ -34,6 +34,7 @@ struct VertexIn {
   float4 iRot     [[attribute(4)]];  // turn, tilt, spin, thickness scale
   float4 iLook    [[attribute(5)]];  // wear, outer metal, core metal or −1, relief tile
   float4 iFx      [[attribute(6)]];  // reeds, luster, recede, edge calm
+  float4 iMarks   [[attribute(7)]];  // pits (hops and splits), streaks, seed, spare
 };
 
 struct VertexOut {
@@ -46,6 +47,7 @@ struct VertexOut {
   float4 rotI  [[flat]];
   float4 lookI [[flat]];
   float4 fxI   [[flat]];
+  float4 marksI [[flat]];
   float3 axisX [[flat]];
   float3 axisY [[flat]];
   float3 axisZ [[flat]];
@@ -73,6 +75,7 @@ vertex VertexOut coinVertex(VertexIn in [[stage_in]], constant CoinParams &P [[b
   o.rotI = in.iRot;
   o.lookI = in.iLook;
   o.fxI = in.iFx;
+  o.marksI = in.iMarks;
   o.axisX = rotateCoin(float3(1, 0, 0), in.iRot.xyz);
   o.axisY = rotateCoin(float3(0, 1, 0), in.iRot.xyz);
   o.axisZ = rotateCoin(float3(0, 0, 1), in.iRot.xyz);
@@ -86,6 +89,76 @@ constant float PI_F = 3.14159265358979;
 constant float LUSTER_TAPS[6] = { -1.25, -0.75, -0.25, 0.25, 0.75, 1.25 };
 
 static float3 toWorld(VertexOut in, float3 v) { return in.axisX * v.x + in.axisY * v.y + in.axisZ * v.z; }
+
+// Wear marks. Two things happen to a coin and they are deliberately different to look at.
+//
+// Every payment a coin has been through leaves a pit: a struck dish, few and large, that reads as
+// damage done TO the coin. How far its recycler still has to go leaves streaks: many fine scratches
+// that read as a dull, scuffed surface. A coin nobody can follow is clean of both.
+//
+// Both are procedural and seeded per coin, so a coin keeps its own face across frames without any
+// storage. Both are pushed harder than the reference's own wear, which is legible on a large render
+// and all but invisible at strip size.
+constant float MARK_INNER = 0.30;   // clear of the struck figure, which has to stay readable
+constant float MARK_OUTER = 0.45;   // out to the rim
+constant float PIT_RADIUS = 0.10;   // a pit is large on purpose: you can count them
+constant float PIT_DEPTH = 2.6;
+constant float STREAK_DEPTH = 1.1;
+constant int PIT_MAX = 8;
+constant int STREAK_MAX = 12;
+
+static float2 markHash(float seed) {
+  return fract(sin(float2(seed * 12.9898, seed * 78.233 + 1.7)) * float2(43758.5453, 22578.1459));
+}
+
+// Pits: circular dishes in the field. The slope runs outward from the centre, which under a key
+// light from the upper left gives a dark upper wall and a lit lower lip, the way a strike reads.
+static void addPits(float2 local, float count, float seed, thread float2 &slope, thread float &shade) {
+  int total = min(int(count + 0.5), PIT_MAX);
+
+  for (int i = 0; i < total; ++i) {
+    float2 h = markHash(seed + float(i) * 7.13);
+    float angle = h.x * 2.0 * PI_F;
+    float ring = mix(MARK_INNER, MARK_OUTER, h.y);
+    float2 delta = local - float2(cos(angle), sin(angle)) * ring;
+    float dist = length(delta) / PIT_RADIUS;
+
+    if (dist >= 1.0) { continue; }
+
+    float bowl = 1.0 - dist * dist;
+    slope += normalize(delta + float2(1e-5, 0.0)) * PIT_DEPTH * dist * bowl;
+    shade *= mix(1.0, 0.3, bowl * bowl);
+  }
+}
+
+// Streaks: short grooves at random angles, as many as the coin is still traceable. They fade out
+// over the struck figure, so a heavily scuffed coin still reads its own value.
+static void addStreaks(float2 local, float amount, float seed, thread float2 &slope, thread float &rough) {
+  int total = min(int(amount * float(STREAK_MAX) + 0.5), STREAK_MAX);
+  float clear = smoothstep(MARK_INNER * 0.72, MARK_INNER, length(local));
+
+  if (clear <= 0.0) { return; }
+
+  for (int i = 0; i < total; ++i) {
+    float2 h = markHash(seed + 31.7 + float(i) * 3.77);
+    float2 g = markHash(seed + 91.3 + float(i) * 5.21);
+    float angle = h.x * PI_F;
+    float2 along = float2(cos(angle), sin(angle));
+    float2 across = float2(-along.y, along.x);
+    float2 centre = (g - 0.5) * 2.0 * MARK_OUTER;
+    float2 delta = local - centre;
+    float gap = abs(dot(delta, across));
+    float run = abs(dot(delta, along));
+    float reach = mix(0.10, 0.26, h.y);
+    float width = 0.008 + 0.012 * g.x;
+
+    if (gap >= width || run >= reach) { continue; }
+
+    float groove = (1.0 - gap / width) * (1.0 - run / reach) * clear;
+    slope += across * sign(dot(delta, across)) * STREAK_DEPTH * groove;
+    rough += 0.3 * groove;
+  }
+}
 
 static float3 yawDir(float3 d, float yaw) {
   float c = cos(yaw), s = sin(yaw);
@@ -154,6 +227,17 @@ fragment float4 coinFragment(VertexOut in [[stage_in]],
   float k = PI_F / 2.0 / RELIEF_RADIUS;
   float basinSlope = P.basin * k * sin(rr * 2.0 * k) * (rr < RELIEF_RADIUS ? 1.0 : 0.0);
   slope -= lp.xy / max(rr, 1e-4) * basinSlope;
+  // ---- wear marks ----
+  float2 markSlope = float2(0.0);
+  float markShade = 1.0;
+  float markRough = 0.0;
+
+  if (front && in.surf.w > 0.5) {
+    addPits(local, in.marksI.x, in.marksI.z, markSlope, markShade);
+    addStreaks(local, in.marksI.y, in.marksI.z, markSlope, markRough);
+  }
+
+  slope += markSlope;
   n = normalize(n + float3(slope, 0.0) * mask);
   float reliefVar = max((1.0 - nrLen) / nrLen, 0.0) * mask;
   float cut = clamp((-height - 0.05) * 1.3, 0.0, 1.0) * mask;
@@ -184,13 +268,13 @@ fragment float4 coinFragment(VertexOut in [[stage_in]],
   float3 baseColor = m0.xyz * mix(float3(1.0), m1.xyz, toning);
   float inRoll = 1.0 - clamp(in.fxI.y, 0.0, 1.0);
   float rough = clamp(m0.w - inRoll * P.rollGloss + in.surf.z * P.wallRough + cut * P.frost
-                      + wear * P.haze * (1.0 - high) - wear * P.polish * high, 0.05, 1.0);
+                      + wear * P.haze * (1.0 - high) - wear * P.polish * high + markRough, 0.05, 1.0);
   float hub = smoothstep(0.02, 0.1, length(lp.xy));
   float lusterOn = clamp(in.fxI.y, 0.0, 1.0) * smoothstep(P.lusterMinPx * 0.7, P.lusterMinPx, px);
   float lusterSlope = (P.luster * in.surf.w * hub + P.rimLuster * rimTop)
       * (1.0 - wear) * (1.0 - high * wear) * (1.0 - cut) * lusterOn;
   float3 across = normalize(float3(-lp.y, lp.x, 0.0) + float3(1e-5, 0.0, 0.0));
-  float occlusion = clamp(1.0 - P.engraveDark * cut, 0.1, 1.0) * reedAO;
+  float occlusion = clamp(1.0 - P.engraveDark * cut, 0.1, 1.0) * reedAO * markShade;
   float grime = cut * wear * P.grime;
 
   // ---- lighting ----

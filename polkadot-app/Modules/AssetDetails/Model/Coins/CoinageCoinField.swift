@@ -38,6 +38,9 @@ final class CoinageCoinField {
 
     struct Member {
         let coin: CoinageScene.Coin
+        /// Scatters this coin's pits and streaks. Taken from its identity, so a coin keeps the same
+        /// face across frames and across relayouts without anything being stored.
+        let seed: Float
         var channels: Channels
         var target: Target
         /// Staggers this coin's start across an arrangement change, in display order.
@@ -49,6 +52,14 @@ final class CoinageCoinField {
 
     /// True while any coin is still travelling, which is what decides whether to draw a frame.
     private(set) var isMoving = false
+
+    static func seed(for id: String) -> Float {
+        let hashed = id.unicodeScalars.reduce(UInt64(0x9E37_79B9_7F4A_7C15)) {
+            ($0 &* 31) &+ UInt64($1.value)
+        }
+
+        return Float(hashed % 100_000) / 1_000
+    }
 
     /// Beyond this a coin counts as in flight, which caps its mesh detail and holds back its
     /// luster. Half a point, as the reference has it.
@@ -74,6 +85,7 @@ final class CoinageCoinField {
                 updated.append(
                     Member(
                         coin: entry.coin,
+                        seed: Self.seed(for: entry.coin.id),
                         channels: seeded(for: entry.target, edge: edge),
                         target: entry.target,
                         hold: hold

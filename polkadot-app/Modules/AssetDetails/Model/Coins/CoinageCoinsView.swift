@@ -11,10 +11,13 @@ import SwiftUI
 /// One view, one set of coins. A toggle only moves targets, so the coins fly between the two
 /// arrangements rather than one view cutting to another.
 struct CoinageCoinsView: UIViewRepresentable {
+    /// Coins arrive in display order, Clearing first: both arrangements block on runs of one
+    /// partition, so ordering them is the presenter's job, not this view's.
     /// What the coins came out as, so the card can grow with them and label the blocks.
     struct Metrics: Equatable {
         var height: CGFloat = CoinageStripLayout.Options().height
         var blocks: [Block] = []
+        var piles: [CoinageArrangement.Pile] = []
 
         struct Block: Equatable, Identifiable {
             let partition: CoinageStripLayout.Partition
@@ -83,6 +86,7 @@ extension CoinageCoinsView {
         let renderer: CoinageMetalRenderer?
 
         private let field = CoinageCoinField()
+        private let tilt = CoinageTilt()
         private let report: (Metrics) -> Void
         private let stripHeight: CGFloat
         private var coins: [CoinageScene.Coin]
@@ -97,7 +101,7 @@ extension CoinageCoinsView {
             stripHeight: CGFloat,
             report: @escaping (Metrics) -> Void
         ) {
-            self.coins = CoinageScene.ordered(coins)
+            self.coins = coins
             self.isExpanded = isExpanded
             self.stripHeight = stripHeight
             self.report = report
@@ -107,18 +111,21 @@ extension CoinageCoinsView {
 
         func attach(to view: MTKView) {
             self.view = view
+            tilt.start()
+            // The studio turns with the phone even when nothing else is moving, so the view keeps
+            // drawing while a hand is moving and stops when it holds still.
+            run()
         }
 
         func detach() {
+            tilt.stop()
             view = nil
         }
 
         func update(coins: [CoinageScene.Coin], isExpanded: Bool) {
-            let ordered = CoinageScene.ordered(coins)
+            guard coins != self.coins || isExpanded != self.isExpanded else { return }
 
-            guard ordered != self.coins || isExpanded != self.isExpanded else { return }
-
-            self.coins = ordered
+            self.coins = coins
             self.isExpanded = isExpanded
             laidOut = .zero
             run()
@@ -141,7 +148,7 @@ extension CoinageCoinsView {
                 laidOut = size
             }
 
-            advance()
+            let moved = advance()
 
             let batches = CoinageScene.batches(
                 for: field,
@@ -152,9 +159,15 @@ extension CoinageCoinsView {
                 designs: renderer.store.designs
             )
 
-            renderer.draw(batches, in: view, viewport: size, dpr: view.contentScaleFactor)
+            renderer.draw(
+                batches,
+                in: view,
+                viewport: size,
+                dpr: view.contentScaleFactor,
+                lightYaw: tilt.yaw
+            )
 
-            if !field.isMoving {
+            if !field.isMoving, !moved {
                 view.isPaused = true
                 lastFrame = nil
             }
@@ -173,12 +186,16 @@ private extension CoinageCoinsView.Coordinator {
 
     /// A real elapsed time rather than a nominal frame: the spring is exact for any step, and a
     /// dropped frame should not slow the motion down.
-    func advance() {
+    /// Returns whether the studio is still turning, so a field at rest keeps drawing only while
+    /// the phone is actually being moved.
+    func advance() -> Bool {
         let now = CACurrentMediaTime()
         let elapsed = lastFrame.map { min(now - $0, 1.0 / 20) } ?? 1.0 / 60
         lastFrame = now
 
         field.advance(by: CGFloat(elapsed))
+
+        return tilt.advance(by: CGFloat(elapsed))
     }
 
     /// How tall the grid is allowed to get before it starts stacking alike coins into piles.
@@ -215,7 +232,8 @@ private extension CoinageCoinsView.Coordinator {
                         top: $0.top,
                         count: $0.count
                     )
-                }
+                },
+                piles: result.piles
             )
         )
         run()

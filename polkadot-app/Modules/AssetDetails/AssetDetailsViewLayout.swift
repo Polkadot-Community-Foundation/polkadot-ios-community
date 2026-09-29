@@ -208,7 +208,6 @@ private struct CoinageBalanceBreakdownView: View {
     @Binding var testDataMode: CoinageTestDataMode
 
     @State private var showDetails = false
-    @State private var showExplanation = false
     /// How the coins came out, reported by the view as it lays them out.
     @State private var coinMetrics = CoinageCoinsView.Metrics()
 
@@ -254,11 +253,14 @@ private struct CoinageBalanceBreakdownView: View {
                 metrics: $coinMetrics
             )
             .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
+            // The coins report their own height once they have been laid out, which lands outside
+            // the toggle's animation. Without this the card resizes in one step: collapsing from a
+            // tall grid shortens the page under the reader, and a scroll view that was past the new
+            // bottom snaps to it. Animating the height instead lets the scroll view follow the
+            // content down, which is what it does for any other shrinking page.
+            .animation(.easeInOut(duration: 0.32), value: coinMetrics.height)
             .overlay(alignment: .topLeading) { blockHeaders }
-
-            if showDetails {
-                CoinageExplanationView(isExpanded: $showExplanation)
-            }
+            .overlay(alignment: .topLeading) { pileCounts }
         }
         .padding(DSSpacings.mediumIncreased)
         .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: DSRadii.large))
@@ -275,6 +277,27 @@ private struct CoinageBalanceBreakdownView: View {
                 .offset(y: block.top)
         }
     }
+
+    /// How many coins a stack holds. Without it a pile reads as one oddly thick, tilted coin.
+    ///
+    /// At the tightest packing the rows leave barely a point between them, so the count sits over
+    /// the foot of the pile on its own ground rather than in a gap that is not there.
+    @ViewBuilder
+    private var pileCounts: some View {
+        ForEach(coinMetrics.piles) { pile in
+            Text(verbatim: "×\(pile.count)")
+                .typography(.labelSmall)
+                .foregroundStyle(Color.fgPrimary)
+                .padding(.horizontal, DSSpacings.extraTiny)
+                .background(.bgSurfaceContainer, in: Capsule())
+                .fixedSize()
+                .frame(width: Self.pileCountWidth)
+                .offset(x: pile.bottom.x - Self.pileCountWidth / 2, y: pile.bottom.y - 7)
+        }
+    }
+
+    /// Wide enough for any count a pile can carry, so the badge centres on the stack.
+    private static let pileCountWidth: CGFloat = 48
 
     private var totalHeadline: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {

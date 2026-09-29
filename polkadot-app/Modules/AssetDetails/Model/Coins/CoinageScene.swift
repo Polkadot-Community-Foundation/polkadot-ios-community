@@ -4,6 +4,10 @@ import Foundation
 /// Turns the strip layout into the instances the renderer draws, applying our own banding rather
 /// than the reference's.
 ///
+/// Geometry only. Which coins exist, which bucket each is in and what order they come in are
+/// decided before they get here: both layouts start a new block wherever the partition changes, so
+/// they take display order as given rather than sorting it themselves.
+///
 /// The reference assigns a metal and an outline per denomination; we band four denominations to a
 /// metal and run the same four outlines through each band, so its `designs.json` is read only for
 /// what belongs to the geometry itself: thickness, face width, relief tile.
@@ -67,15 +71,6 @@ enum CoinageScene {
         }
     }
 
-    /// Clearing first, then ready, each run keeping the order it came in.
-    ///
-    /// Both layouts take display order as given and start a new block wherever the partition
-    /// changes, so coins that arrive interleaved would produce a block, and a header, per coin.
-    /// Every caller goes through here rather than being trusted to have sorted.
-    static func ordered(_ coins: [Coin]) -> [Coin] {
-        coins.filter { $0.partition == .clearing } + coins.filter { $0.partition == .ready }
-    }
-
     /// One holding, as much of it as the renderer and the packing need.
     struct Coin: Equatable {
         let id: String
@@ -87,6 +82,8 @@ enum CoinageScene {
         let status: String
         /// How hidden the coin is, on the doubling ladder. Piles group by band, not by level.
         let level: Int
+        /// Payments this holding has been through. Each one leaves a pit.
+        let hops: Int
     }
 
     /// Everything that is true of the whole frame rather than of one coin.
@@ -190,6 +187,14 @@ private extension CoinageScene {
                 Float(channels.luster.value * landing * landing),
                 0,
                 Float(channels.calm.value)
+            ),
+            // Streaks follow the animated wear, so a coin visibly cleans up as its ring fills.
+            // Pits do not: a payment happened or it did not.
+            marks: SIMD4(
+                Float(member.coin.hops),
+                Float(channels.wear.value),
+                member.seed,
+                0
             )
         )
     }

@@ -91,7 +91,7 @@ extension CoinageAssetStore {
         var dpr: Float = 2
         let tilePixels: Float
         let environmentMaxLod: Float
-        let lightYaw: Float = 0
+        var lightYaw: Float = 0
         let material: [Float]
         var backdrop: [Float] = [0, 0, 0]
         var debug: Int32 = 0
@@ -265,12 +265,17 @@ private extension CoinageAssetStore {
 
     /// The normal map's RGB and the height map's red go into one RGBA8 texture.
     ///
+    /// The atlas is generated for CASH rather than taken from the reference's currencies: every
+    /// value is struck in the major unit with its decimals and no mark, so the fifteen faces read
+    /// as one series. The reference's own atlases strike small values in the minor unit, which puts
+    /// "16" and "0.16" on two coins of the same value.
+    ///
     /// Both are read straight from the decoder with no colour management and no premultiplication:
     /// these are normals and heights, not colours, and either would corrupt them. They are vendored
     /// with a `.reliefpng` extension for the same reason, so Xcode's PNG compressor leaves them be.
     static func loadReliefAtlas(device: MTLDevice, bundle: Bundle) throws -> MTLTexture {
-        let normal = try rawPixels("usd-normal", in: bundle)
-        let height = try rawPixels("usd-height", in: bundle)
+        let normal = try rawPixels("cash-normal", in: bundle)
+        let height = try rawPixels("cash-height", in: bundle)
 
         guard normal.width == height.width, normal.height == height.height else {
             throw Failure.malformed("relief maps disagree on size")

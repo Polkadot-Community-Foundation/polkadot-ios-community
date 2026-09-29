@@ -19,6 +19,8 @@ final class CoinageMetalRenderer {
         var look: SIMD4<Float>
         /// Reeds, luster, recede, edge calm.
         var effects: SIMD4<Float>
+        /// Pits (one per hop or split), how streaked the face is, and the coin's own seed.
+        var marks: SIMD4<Float>
     }
 
     /// A run of instances sharing a mesh, which is what an instanced draw needs.
@@ -82,7 +84,13 @@ final class CoinageMetalRenderer {
         }
     }
 
-    func draw(_ batches: [Batch], in view: MTKView, viewport: CGSize, dpr: CGFloat) {
+    func draw(
+        _ batches: [Batch],
+        in view: MTKView,
+        viewport: CGSize,
+        dpr: CGFloat,
+        lightYaw: CGFloat
+    ) {
         guard let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let command = queue.makeCommandBuffer()
@@ -101,6 +109,7 @@ final class CoinageMetalRenderer {
         params.viewportWidth = Float(viewport.width)
         params.viewportHeight = Float(viewport.height)
         params.dpr = Float(dpr)
+        params.lightYaw = Float(lightYaw)
 
         let packed = params.packed()
         let metals = store.metalRows
@@ -194,14 +203,14 @@ private extension CoinageMetalRenderer {
         attribute(1, .float3, buffer: 1, offset: 0)
         attribute(2, .float4, buffer: 2, offset: 0)
 
-        for slot in 0 ..< 4 {
+        for slot in 0 ..< 5 {
             attribute(3 + slot, .float4, buffer: 3, offset: slot * 16)
         }
 
         layout.layouts[0].stride = 12
         layout.layouts[1].stride = 12
         layout.layouts[2].stride = 16
-        layout.layouts[3].stride = 64
+        layout.layouts[3].stride = 80
         layout.layouts[3].stepFunction = .perInstance
         layout.layouts[3].stepRate = 1
 

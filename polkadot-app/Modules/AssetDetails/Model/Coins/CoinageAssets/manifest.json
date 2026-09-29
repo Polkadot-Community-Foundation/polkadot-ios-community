@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-24T21:07:43.848Z",
+ "generated": "2026-09-28T19:26:54.717Z",
  "generator": "scripts/export-native.mjs",
  "guide": "native/README.md",
  "env": {
@@ -144,6 +144,11 @@
    "size": 2048,
    "normal": "relief/jpy-normal.png",
    "height": "relief/jpy-height.png"
+  },
+  "cash": {
+   "size": 2048,
+   "normal": "relief/cash-normal.png",
+   "height": "relief/cash-height.png"
   }
  },
  "files": [
@@ -273,7 +278,7 @@
   },
   {
    "path": "designs.json",
-   "bytes": 10046
+   "bytes": 11588
   },
   {
    "path": "env/studio-equirect.hdr",
@@ -473,11 +478,11 @@
   },
   {
    "path": "relief/usd-normal.png",
-   "bytes": 1078146
+   "bytes": 1078151
   },
   {
    "path": "relief/usd-height.png",
-   "bytes": 237691
+   "bytes": 237690
   },
   {
    "path": "relief/eur-normal.png",
@@ -502,6 +507,14 @@
   {
    "path": "relief/jpy-height.png",
    "bytes": 241850
+  },
+  {
+   "path": "relief/cash-normal.png",
+   "bytes": 1179019
+  },
+  {
+   "path": "relief/cash-height.png",
+   "bytes": 261698
   },
   {
    "path": "conformance/strip.json",

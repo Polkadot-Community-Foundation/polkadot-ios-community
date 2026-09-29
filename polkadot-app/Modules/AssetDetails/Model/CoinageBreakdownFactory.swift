@@ -49,7 +49,7 @@ enum CoinageBreakdownFactory {
                     forScore: holding.coin.recyclerFungibility,
                     isBatchUnloaded: holding.coin.hops.isEmpty && holding.coin.age == 1
                 ),
-                isReady: holding.isAvailableNow,
+                isReady: holding.availability.displayBucket == .ready,
                 status: .coin(
                     CoinStatusView.Model(
                         hopDots: holding.coin.hops.map(innerDots(for:)),
@@ -70,7 +70,7 @@ enum CoinageBreakdownFactory {
                 severity: bucket,
                 derivationIndex: holding.voucher.derivationIndex,
                 wear: wear(forScore: holding.voucher.recyclerFungibility, isBatchUnloaded: false),
-                isReady: holding.isAvailableNow,
+                isReady: holding.availability.displayBucket == .ready,
                 status: .voucher(
                     VoucherStatusView.Model(
                         maxBucket: CoinageStatusMetrics.bucket(
@@ -126,6 +126,15 @@ enum CoinageBreakdownFactory {
         }
     }
 
+    /// Payments a holding has been through, which the face shows as pits. A voucher sitting in a
+    /// recycler has been through none.
+    private static func hops(for status: CoinageHoldingStatus) -> Int {
+        switch status {
+        case let .coin(model): model.hopDots.count
+        case .voucher: 0
+        }
+    }
+
     /// How worn a holding is drawn, from the size of the crowd its recycler hides it in.
     ///
     /// The stored score is a share of ring capacity, so it converts back to a crowd size before it
@@ -145,21 +154,28 @@ enum CoinageBreakdownFactory {
     /// One coin per holding for the summary strip. Clearing leads, as the reference orders it, so
     /// the two runs stay in the same places whether the strip is face on or edge on.
     static func stripCoins(_ rows: [Row]) -> [CoinageScene.Coin] {
-        func coins(ready: Bool) -> [CoinageScene.Coin] {
-            rows.filter { $0.isReady == ready }.map {
+        inDisplayOrder(
+            rows.map {
                 CoinageScene.Coin(
                     id: $0.id,
                     exponent: $0.exponent,
                     wear: $0.wear,
-                    partition: ready ? .ready : .clearing,
+                    partition: $0.isReady ? .ready : .clearing,
                     status: $0.isReady ? "ready" : "clearing",
-                    level: CoinageWear.level(forAmount: $0.wear)
+                    level: CoinageWear.level(forAmount: $0.wear),
+                    hops: hops(for: $0.status)
                 )
             }
-        }
+        )
+    }
 
-        // Two passes rather than a sort, so the ordering inside each run survives untouched.
-        return coins(ready: false) + coins(ready: true)
+    /// Clearing first, then Ready, each run keeping the order it came in.
+    ///
+    /// Both the strip and the grid start a new block wherever the partition changes, so coins that
+    /// arrive interleaved would produce a block, and a header, per coin. Two passes rather than a
+    /// sort, so the ordering inside each run survives untouched.
+    static func inDisplayOrder(_ coins: [CoinageScene.Coin]) -> [CoinageScene.Coin] {
+        coins.filter { $0.partition == .clearing } + coins.filter { $0.partition == .ready }
     }
 
     /// Where a depiction sits on the fungibility ladder.
@@ -189,8 +205,8 @@ enum CoinageBreakdownFactory {
     }
 
     /// Value-weighted split for the summary bar, bucketed exactly as the figures above it are:
-    /// every holding lands in one bucket regardless of whether it is a coin or a voucher, so the
-    /// two shares account for the available now and gaining privacy figures.
+    /// every holding lands in one of the two display buckets regardless of whether it is a coin or
+    /// a voucher, so the bar's two shares account for the whole balance and nothing falls out.
     static func composition(
         of holdings: CoinageHoldings,
         context: DenominationBreakdownContext
@@ -230,10 +246,9 @@ enum CoinageBreakdownFactory {
         var planks = BucketPlanks()
 
         func add(_ availability: CoinageAvailability, _ amount: BigUInt) {
-            switch availability {
-            case .availableNow: planks.availableNow += amount
-            case .gainingPrivacy: planks.gainingPrivacy += amount
-            case .pending: break
+            switch availability.displayBucket {
+            case .ready: planks.availableNow += amount
+            case .clearing: planks.gainingPrivacy += amount
             }
         }
 
@@ -264,12 +279,13 @@ enum CoinageBreakdownFactory {
 struct CoinageAmounts: Equatable {
     let total: Decimal
     let availableNow: Decimal
+    /// Everything still clearing, which is what the user is shown: the domain's gaining-privacy
+    /// and pending buckets both land here, so this and ``availableNow`` account for the total.
     let gainingPrivacy: Decimal
-    let pending: Decimal
 
-    static let zero = CoinageAmounts(total: 0, availableNow: 0, gainingPrivacy: 0, pending: 0)
+    static let zero = CoinageAmounts(total: 0, availableNow: 0, gainingPrivacy: 0)
 
     var hasFundsNotReady: Bool {
-        gainingPrivacy > 0 || pending > 0
+        gainingPrivacy > 0
     }
 }

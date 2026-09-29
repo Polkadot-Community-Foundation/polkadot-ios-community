@@ -103,7 +103,17 @@ enum CoinageGridLayout {
         }
     }
 
-    static func layout(_ items: [Item], area: CGSize, options: Options = Options()) -> Layout {
+    /// Laying out with `stacking` off keeps every coin its own cell, however many there are: the
+    /// grid simply grows taller and scrolls. The reference stacks runs of alike coins once the
+    /// smallest pitch stops fitting, and the port keeps that code and its vectors, but the app does
+    /// not ask for it — a stack of two reads as one oddly thick coin and answers a grouping
+    /// question that is not being asked.
+    static func layout(
+        _ items: [Item],
+        area: CGSize,
+        options: Options = Options(),
+        stacking: Bool = true
+    ) -> Layout {
         let partitions = split(items)
 
         // Both searches below are over monotone choices, so they bisect: the same answer as trying
@@ -123,6 +133,16 @@ enum CoinageGridLayout {
         if widest < diameters {
             return attempt(
                 diameter: options.maxDiameter - CGFloat(widest),
+                groups: singles,
+                partitions: partitions,
+                area: area,
+                options: options
+            )
+        }
+
+        guard stacking else {
+            return attempt(
+                diameter: options.minDiameter,
                 groups: singles,
                 partitions: partitions,
                 area: area,
