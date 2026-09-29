@@ -14,17 +14,14 @@ final class TabBarChromeSurfaceView: UIView {
     private weak var barView: DSTabBarView?
     private var glassContainerHeightConstraint: Constraint?
     private var appliedGlassContainerHeight: CGFloat = 0
-    private var glassContainerKeyboardConstraint: Constraint?
-    private var barKeyboardConstraint: Constraint?
+    private var restingBottomConstraints: [Constraint] = []
+    private var sunkenBottomConstraints: [Constraint] = []
     private var isPanelTrackingKeyboard = false
     private var isContentFilling = false
-    private var isBarVisible = true
-    private var keyboardAvoidanceAnimator: UIViewPropertyAnimator?
-    private var isBarSettling = false
 
-    /// At rest the chrome only clears the home indicator gap, and it keeps that same gap once it
-    /// rides above the keys. While the chrome's own search is focused it sinks instead, by half a
-    /// capsule, so the capsule's lower half hides behind the keys.
+    /// The chrome sits at the bottom, clearing the home indicator gap, and a keyboard covers it
+    /// like any other bottom bar. The one exception is the chrome's own search: focusing it sinks
+    /// the chrome by half a capsule, so the capsule's lower half hides behind the keys.
     private static let restingBottomOffset = -DSTabBarView.bottomGap
     private static let sunkenBottomOffset = DSTabBarView.capsuleHeight / 2
 
@@ -54,14 +51,9 @@ final class TabBarChromeSurfaceView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
 
-        // Without the bottom safe area the dismissed guide rests on the view's bottom edge,
-        // leaving the keyboard inequality slack instead of lifting the chrome by the home indicator.
-        keyboardLayoutGuide.usesBottomSafeArea = false
-
         installGlassContainer()
         installTabsPanel()
         installContentPanel()
-        observeKeyboard()
     }
 
     @available(*, unavailable)
@@ -81,13 +73,18 @@ final class TabBarChromeSurfaceView: UIView {
         bar.snp.makeConstraints { make in
             make.leading.trailing.equalTo(glassContainer.contentView)
             make.height.equalTo(DSTabBarView.capsuleHeight)
-            barKeyboardConstraint = pinBottomAvoidingKeyboard(make)
+            pinBottom(make)
         }
     }
 
     func setPanelsOpen(_ kind: TabBarPanelKind?, animator: UIViewPropertyAnimator?) {
         tabsPanelView.setOpen(kind == .spaTabs, animator: animator)
         contentPanelView.setOpen(kind?.contentAction != nil, animator: animator)
+
+        // Only an open panel can hold the focused search the sunken anchor belongs to.
+        if kind == nil {
+            setPanelTracksKeyboard(false)
+        }
     }
 
     @discardableResult
@@ -142,35 +139,15 @@ final class TabBarChromeSurfaceView: UIView {
 
         isPanelTrackingKeyboard = tracking
 
-        let offset = tracking ? Self.sunkenBottomOffset : Self.restingBottomOffset
-        glassContainerKeyboardConstraint?.update(offset: offset)
-        barKeyboardConstraint?.update(offset: offset)
+        if tracking {
+            restingBottomConstraints.forEach { $0.deactivate() }
+            sunkenBottomConstraints.forEach { $0.activate() }
+        } else {
+            sunkenBottomConstraints.forEach { $0.deactivate() }
+            restingBottomConstraints.forEach { $0.activate() }
+        }
+
         barView?.setKeyboardShadowVisible(tracking)
-
-        guard tracking else { return }
-        // The panel tracks only while a keyboard is up. Arming here too keeps the caller's
-        // animator correct whichever of the two keyboard observers ran first.
-        setKeyboardAvoidance(isBarVisible)
-    }
-
-    /// A hidden bar is only translated aside, not unloaded, so it still answers to the keyboard.
-    /// Only ever disarms: a returning bar must not arm, because a pop restores it at the start of
-    /// the transition while the keyboard is still on screen. The drop back to rest joins the fold
-    /// animator, so it does not snap while the bar slides aside.
-    func setBarVisible(_ visible: Bool, animator: UIViewPropertyAnimator?) {
-        isBarVisible = visible
-
-        guard !visible else {
-            settle(with: animator)
-            return
-        }
-
-        setPanelTracksKeyboard(false)
-        setKeyboardAvoidance(false)
-
-        animator?.addAnimations { [weak self] in
-            self?.layoutIfNeeded()
-        }
     }
 
     /// While a search is active the content panel fills the available height instead of fitting its rows.
@@ -179,93 +156,21 @@ final class TabBarChromeSurfaceView: UIView {
     }
 }
 
-// MARK: - Keyboard
-
-private extension TabBarChromeSurfaceView {
-    func observeKeyboard() {
-        let center = NotificationCenter.default
-        center.addObserver(
-            self,
-            selector: #selector(handleKeyboardWillShow(_:)),
-            name: UIResponder.keyboardWillShowNotification,
-            object: nil
-        )
-        center.addObserver(
-            self,
-            selector: #selector(handleKeyboardWillHide(_:)),
-            name: UIResponder.keyboardWillHideNotification,
-            object: nil
-        )
-    }
-
-    /// iOS 17 replays a keyboard show for the screen being torn down, after the bar is already
-    /// back on screen, so the bar would rise to it and drop again. Keyboard traffic is ignored
-    /// until the reveal has settled.
-    @objc
-    func handleKeyboardWillShow(_ notification: NSNotification) {
-        guard !isBarSettling else {
-            return
-        }
-
-        setKeyboardAvoidance(isBarVisible, matching: notification)
-    }
-
-    @objc
-    func handleKeyboardWillHide(_ notification: NSNotification) {
-        setKeyboardAvoidance(false, matching: notification)
-    }
-
-    /// The animator is the one revealing the bar; the reveal is over when it finishes.
-    func settle(with animator: UIViewPropertyAnimator?) {
-        isBarSettling = animator != nil
-
-        animator?.addCompletion { [weak self] _ in
-            self?.isBarSettling = false
-        }
-    }
-
-    func setKeyboardAvoidance(_ active: Bool, matching notification: NSNotification) {
-        setKeyboardAvoidance(active)
-
-        let animator = UIViewPropertyAnimator.keyboardMatching(notification)
-        animator.addAnimations { [weak self] in
-            self?.layoutIfNeeded()
-        }
-        animator.addCompletion { [weak self] _ in
-            self?.keyboardAvoidanceAnimator = nil
-        }
-        keyboardAvoidanceAnimator = animator
-        animator.startAnimation()
-    }
-
-    /// Any animator of ours is dropped first: whoever changes the arming owns the move from here.
-    func setKeyboardAvoidance(_ active: Bool) {
-        keyboardAvoidanceAnimator?.cancelInPlace()
-
-        if active {
-            glassContainerKeyboardConstraint?.activate()
-            barKeyboardConstraint?.activate()
-        } else {
-            glassContainerKeyboardConstraint?.deactivate()
-            barKeyboardConstraint?.deactivate()
-        }
-    }
-}
-
 // MARK: - Layout
 
 private extension TabBarChromeSurfaceView {
-    /// Pins a view to the chrome's bottom at rest, only preferred, so the required keyboard
-    /// inequality wins once the keys cover that position. Returns the inequality: its offset picks
-    /// the riding height, and it stays inactive until a keyboard is up with the bar on screen.
-    func pinBottomAvoidingKeyboard(_ make: ConstraintMaker) -> Constraint {
-        make.bottom.equalToSuperview().offset(Self.restingBottomOffset).priority(.high)
+    /// Pins a view to the chrome's bottom, and prepares the anchor it swaps to while the chrome's
+    /// own search is focused. Only that explicit focus moves the chrome, so no keyboard raised by
+    /// another screen can reach it.
+    func pinBottom(_ make: ConstraintMaker) {
+        restingBottomConstraints.append(
+            make.bottom.equalToSuperview().offset(Self.restingBottomOffset).constraint
+        )
 
-        let keyboardConstraint = make.bottom.lessThanOrEqualTo(keyboardLayoutGuide.snp.top)
-            .offset(Self.restingBottomOffset).constraint
-        keyboardConstraint.deactivate()
-
-        return keyboardConstraint
+        let sunken = make.bottom.equalTo(keyboardLayoutGuide.snp.top)
+            .offset(Self.sunkenBottomOffset).constraint
+        sunken.deactivate()
+        sunkenBottomConstraints.append(sunken)
     }
 
     func installGlassContainer() {
@@ -274,7 +179,7 @@ private extension TabBarChromeSurfaceView {
             make.centerX.equalToSuperview()
             make.width.lessThanOrEqualTo(DSTabBarView.maxWidth)
             make.width.equalToSuperview().offset(-DSTabBarView.horizontalMargin * 2).priority(.high)
-            glassContainerKeyboardConstraint = pinBottomAvoidingKeyboard(make)
+            pinBottom(make)
             glassContainerHeightConstraint = make.height.equalTo(DSTabBarView.capsuleHeight).constraint
         }
     }

@@ -20,9 +20,8 @@ final class TabBarFoldController {
     private let grabZoneSink: (CGRect) -> Void
     /// A state other than `.shown` must dismiss any open panel.
     private let closePanel: () -> Void
-    /// Receives each committed visibility state, with the animator realising it when there is
-    /// one; fires only when the state actually changes.
-    private let stateSink: (TabBarVisibilityState, UIViewPropertyAnimator?) -> Void
+    /// Receives each committed visibility state; fires only when the state actually changes.
+    private let stateSink: (TabBarVisibilityState) -> Void
 
     private(set) var state: TabBarVisibilityState = .shown
     private(set) var isTabRoot = true
@@ -41,7 +40,7 @@ final class TabBarFoldController {
         chromeBounds: @escaping () -> CGRect,
         grabZoneSink: @escaping (CGRect) -> Void,
         closePanel: @escaping () -> Void,
-        stateSink: @escaping (TabBarVisibilityState, UIViewPropertyAnimator?) -> Void
+        stateSink: @escaping (TabBarVisibilityState) -> Void
     ) {
         self.barView = barView
         self.foldSurface = foldSurface
@@ -140,7 +139,7 @@ private extension TabBarFoldController {
             closePanel()
         }
         applyVisibility(newState, animated: true, initialVelocity: foldVelocity)
-        stateSink(newState, foldAnimator)
+        stateSink(newState)
     }
 
     func applyVisibility(_ state: TabBarVisibilityState, animated: Bool, initialVelocity: CGFloat) {

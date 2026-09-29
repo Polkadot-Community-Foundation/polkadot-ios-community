@@ -126,9 +126,18 @@ private extension TabBarInputFocusController {
         surface.layoutIfNeeded()
     }
 
-    /// Deliberately not registered with the panel controller.
+    /// Mirrors the keyboard's duration and curve so the anchor, the focus layout and the container
+    /// height move with the keys. Deliberately not registered with the panel controller.
     func animate(matching notification: NSNotification, _ animations: @escaping () -> Void) {
-        let animator = UIViewPropertyAnimator.keyboardMatching(notification)
+        let userInfo = notification.userInfo
+        let duration = userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.3
+        let curveRawValue = userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int ?? 0
+        let curve = UIView.AnimationCurve(rawValue: curveRawValue) ?? .linear
+
+        let animator = UIViewPropertyAnimator(
+            duration: duration,
+            timingParameters: UICubicTimingParameters(animationCurve: curve)
+        )
         animator.addAnimations(animations)
         animator.addCompletion { [weak self] _ in
             self?.keyboardAnimator = nil

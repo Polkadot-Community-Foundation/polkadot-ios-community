@@ -31,9 +31,8 @@ final class TabBarBottomChromeController: UIViewController {
         closePanel: { [weak self] in
             self?.setPanel(nil, animated: false)
         },
-        stateSink: { [weak self] state, animator in
+        stateSink: { [weak self] state in
             self?.tipController.setBarShown(state == .shown)
-            self?.chromeSurface.setBarVisible(state != .hidden, animator: animator)
         }
     )
 
