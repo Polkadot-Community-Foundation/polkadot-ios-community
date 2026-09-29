@@ -20,6 +20,7 @@ final class TabBarChromeSurfaceView: UIView {
     private var isContentFilling = false
     private var isBarVisible = true
     private var keyboardAvoidanceAnimator: UIViewPropertyAnimator?
+    private var isBarSettling = false
 
     /// At rest the chrome only clears the home indicator gap, and it keeps that same gap once it
     /// rides above the keys. While the chrome's own search is focused it sinks instead, by half a
@@ -160,6 +161,7 @@ final class TabBarChromeSurfaceView: UIView {
         isBarVisible = visible
 
         guard !visible else {
+            settle(with: animator)
             return
         }
 
@@ -196,14 +198,30 @@ private extension TabBarChromeSurfaceView {
         )
     }
 
+    /// iOS 17 replays a keyboard show for the screen being torn down, after the bar is already
+    /// back on screen, so the bar would rise to it and drop again. Keyboard traffic is ignored
+    /// until the reveal has settled.
     @objc
     func handleKeyboardWillShow(_ notification: NSNotification) {
+        guard !isBarSettling else {
+            return
+        }
+
         setKeyboardAvoidance(isBarVisible, matching: notification)
     }
 
     @objc
     func handleKeyboardWillHide(_ notification: NSNotification) {
         setKeyboardAvoidance(false, matching: notification)
+    }
+
+    /// The animator is the one revealing the bar; the reveal is over when it finishes.
+    func settle(with animator: UIViewPropertyAnimator?) {
+        isBarSettling = animator != nil
+
+        animator?.addCompletion { [weak self] _ in
+            self?.isBarSettling = false
+        }
     }
 
     func setKeyboardAvoidance(_ active: Bool, matching notification: NSNotification) {
