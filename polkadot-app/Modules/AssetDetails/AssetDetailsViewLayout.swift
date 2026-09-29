@@ -225,37 +225,42 @@ private struct CoinageBalanceBreakdownView: View {
                 totalHeadline
             }
 
-            // Above the coins rather than below them, so it stays on the same side whether they
-            // are stacked into the strip or spread out one by one.
-            Button {
-                toggleDetails(scroll: scroll)
-            } label: {
-                HStack(spacing: DSSpacings.extraSmall) {
-                    Image(.iconArrowUp16)
-                        .renderingMode(.template)
-                        .rotationEffect(.degrees(showDetails ? 0 : 180))
-                    Text(String(localized: showDetails ? .coinageHideDetails : .coinageShowDetails))
-                        .typography(.bodyMediumEmphasized)
+            // Nothing held, nothing to draw: no strip to reserve height for, no runs to rule, and
+            // nothing for the toggle to expand.
+            if !breakdown.strip.isEmpty {
+                // Above the coins rather than below them, so it stays on the same side whether they
+                // are stacked into the strip or spread out one by one.
+                Button {
+                    toggleDetails(scroll: scroll)
+                } label: {
+                    HStack(spacing: DSSpacings.extraSmall) {
+                        Image(.iconArrowUp16)
+                            .renderingMode(.template)
+                            .rotationEffect(.degrees(showDetails ? 0 : 180))
+                        Text(String(localized: showDetails ? .coinageHideDetails : .coinageShowDetails))
+                            .typography(.bodyMediumEmphasized)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.fgPrimary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(.fgPrimary)
-            }
 
-            CoinageCoinsView(
-                coins: breakdown.strip,
-                isExpanded: showDetails,
-                metrics: $coinMetrics
-            )
-            .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
-            // Deliberately not animated. Expanding takes its full height at once, so the coins fly
-            // out into a box that is already the right size; animating it made the scroll view
-            // chase a growing content size and bounce against its own edge. Collapsing is animated,
-            // but from inside the toggle, where the scroll can be moved in the same breath.
-            .overlay(alignment: .topLeading) { blockHeaders }
+                CoinageCoinsView(
+                    coins: breakdown.strip,
+                    isExpanded: showDetails,
+                    metrics: $coinMetrics
+                )
+                .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
+                // Deliberately not animated. Expanding takes its full height at once, so the coins
+                // fly out into a box that is already the right size; animating it made the scroll
+                // view chase a growing content size and bounce against its own edge. Collapsing is
+                // animated, but from inside the toggle, where the scroll can be moved in the same
+                // breath.
+                .overlay(alignment: .topLeading) { blockHeaders }
 
-            if !showDetails {
-                runMarkers
-                    .transition(.opacity)
+                if !showDetails {
+                    runMarkers
+                        .transition(.opacity)
+                }
             }
         }
         .padding(DSSpacings.mediumIncreased)
