@@ -77,7 +77,7 @@ final class CoinageMetalRenderer {
             throw Failure.shaderMissing("coinVertex/coinFragment")
         }
 
-        sampleCount = device.supportsTextureSampleCount(4) ? 4 : 1
+        sampleCount = CoinageRendererLoader.sampleCount(for: device)
         pipeline = try Self.makePipeline(
             device: device,
             vertex: vertex,

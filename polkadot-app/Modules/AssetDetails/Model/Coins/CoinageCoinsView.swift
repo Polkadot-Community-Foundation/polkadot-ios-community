@@ -40,7 +40,7 @@ struct CoinageCoinsView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> MTKView {
-        let view = MTKView(frame: .zero, device: context.coordinator.renderer?.device)
+        let view = MTKView(frame: .zero, device: context.coordinator.device)
         view.colorPixelFormat = .bgra8Unorm
         view.depthStencilPixelFormat = .depth32Float
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
@@ -59,7 +59,7 @@ struct CoinageCoinsView: UIViewRepresentable {
         // Whatever the pipeline was built for. Asking the device again here could answer
         // differently, and a pipeline and a render pass that disagree on samples fail validation at
         // the draw call rather than anywhere that would explain it.
-        view.sampleCount = context.coordinator.renderer?.sampleCount ?? 1
+        view.sampleCount = context.coordinator.sampleCount
 
         view.delegate = context.coordinator
         context.coordinator.attach(to: view)
@@ -83,8 +83,12 @@ extension CoinageCoinsView {
     /// every coin has got to. It outlives both arrangements, which is what lets coins fly between
     /// them instead of being made afresh.
     final class Coordinator: NSObject, MTKViewDelegate {
-        let renderer: CoinageMetalRenderer?
+        /// The device and its sample count are needed the moment the view is made; the renderer is
+        /// not, because a view with nothing to draw simply draws nothing.
+        let device = MTLCreateSystemDefaultDevice()
+        let sampleCount: Int
 
+        private var renderer: CoinageMetalRenderer?
         private let field = CoinageCoinField()
         private let tilt = CoinageTilt()
         private let report: (Metrics) -> Void
@@ -105,8 +109,17 @@ extension CoinageCoinsView {
             self.isExpanded = isExpanded
             self.stripHeight = stripHeight
             self.report = report
-            renderer = try? CoinageMetalRenderer()
+            sampleCount = CoinageRendererLoader.sampleCount(for: device)
             super.init()
+
+            CoinageRendererLoader.load { [weak self] renderer in
+                guard let self else { return }
+
+                self.renderer = renderer
+                // Whatever the field was told while there was nothing to draw it with.
+                laidOut = .zero
+                run()
+            }
         }
 
         func attach(to view: MTKView) {
@@ -138,7 +151,11 @@ extension CoinageCoinsView {
         }
 
         func draw(in view: MTKView) {
-            guard let renderer else { return }
+            // Nothing to draw with yet. The loader wakes the view when there is.
+            guard let renderer else {
+                view.isPaused = true
+                return
+            }
 
             let size = view.bounds.size
 

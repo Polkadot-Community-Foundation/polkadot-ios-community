@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-28T19:26:54.717Z",
+ "generated": "2026-09-29T01:30:05.845Z",
  "generator": "scripts/export-native.mjs",
  "guide": "native/README.md",
  "env": {
@@ -126,29 +126,34 @@
  },
  "atlases": {
   "usd": {
-   "size": 2048,
-   "normal": "relief/usd-normal.png",
-   "height": "relief/usd-height.png"
+   "size": 1024,
+   "tilePx": 256,
+   "channels": 4,
+   "relief": "relief/usd-relief.bin"
   },
   "eur": {
-   "size": 2048,
-   "normal": "relief/eur-normal.png",
-   "height": "relief/eur-height.png"
+   "size": 1024,
+   "tilePx": 256,
+   "channels": 4,
+   "relief": "relief/eur-relief.bin"
   },
   "gbp": {
-   "size": 2048,
-   "normal": "relief/gbp-normal.png",
-   "height": "relief/gbp-height.png"
+   "size": 1024,
+   "tilePx": 256,
+   "channels": 4,
+   "relief": "relief/gbp-relief.bin"
   },
   "jpy": {
-   "size": 2048,
-   "normal": "relief/jpy-normal.png",
-   "height": "relief/jpy-height.png"
+   "size": 1024,
+   "tilePx": 256,
+   "channels": 4,
+   "relief": "relief/jpy-relief.bin"
   },
   "cash": {
-   "size": 2048,
-   "normal": "relief/cash-normal.png",
-   "height": "relief/cash-height.png"
+   "size": 1024,
+   "tilePx": 256,
+   "channels": 4,
+   "relief": "relief/cash-relief.bin"
   }
  },
  "files": [
@@ -477,44 +482,24 @@
    "bytes": 16444
   },
   {
-   "path": "relief/usd-normal.png",
-   "bytes": 1078151
+   "path": "relief/usd-relief.bin",
+   "bytes": 4194304
   },
   {
-   "path": "relief/usd-height.png",
-   "bytes": 237690
+   "path": "relief/eur-relief.bin",
+   "bytes": 4194304
   },
   {
-   "path": "relief/eur-normal.png",
-   "bytes": 1078146
+   "path": "relief/gbp-relief.bin",
+   "bytes": 4194304
   },
   {
-   "path": "relief/eur-height.png",
-   "bytes": 237691
+   "path": "relief/jpy-relief.bin",
+   "bytes": 4194304
   },
   {
-   "path": "relief/gbp-normal.png",
-   "bytes": 1078144
-  },
-  {
-   "path": "relief/gbp-height.png",
-   "bytes": 237690
-  },
-  {
-   "path": "relief/jpy-normal.png",
-   "bytes": 1098208
-  },
-  {
-   "path": "relief/jpy-height.png",
-   "bytes": 241850
-  },
-  {
-   "path": "relief/cash-normal.png",
-   "bytes": 1179019
-  },
-  {
-   "path": "relief/cash-height.png",
-   "bytes": 261698
+   "path": "relief/cash-relief.bin",
+   "bytes": 4194304
   },
   {
    "path": "conformance/strip.json",

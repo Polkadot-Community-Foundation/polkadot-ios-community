@@ -303,7 +303,7 @@
  ],
  "atlas": {
   "tiles": 4,
-  "tilePx": 512,
+  "tilePx": 256,
   "reverseTile": 15,
   "reliefRadius": 0.37,
   "raised": 0.011,

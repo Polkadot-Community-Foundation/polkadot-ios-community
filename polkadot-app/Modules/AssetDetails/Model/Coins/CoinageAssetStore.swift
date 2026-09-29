@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import Metal
 
 /// Loads everything the coin renderer draws with: the meshes, the struck-relief atlas, the studio
@@ -56,7 +55,11 @@ final class CoinageAssetStore {
                 loaded["\(entry.key)-\(lod)"] = try Self.load(mesh, device: device, bundle: bundle)
             }
         }
-        reliefAtlas = try Self.loadReliefAtlas(device: device, bundle: bundle)
+        guard let atlas = manifest.atlases["cash"] else {
+            throw Failure.malformed("manifest has no cash atlas")
+        }
+
+        reliefAtlas = try Self.loadReliefAtlas(device: device, bundle: bundle, atlas: atlas)
         environment = try Self.loadEnvironment(
             device: device,
             bundle: bundle,
@@ -231,7 +234,15 @@ private extension CoinageAssetStore {
             let cube: Cube
         }
 
+        /// What the relief atlas is, rather than what this file hopes it is. The tile size is in
+        /// `params.json` for the shader; the rest is here because only the loader needs it.
+        struct Atlas: Decodable {
+            let size: Int
+            let channels: Int
+        }
+
         let env: Environment
+        let atlases: [String: Atlas]
     }
 
     static func decode<T: Decodable>(_ name: String, in bundle: Bundle) throws -> T {
@@ -283,44 +294,39 @@ private extension CoinageAssetStore {
         )
     }
 
-    /// The normal map's RGB and the height map's red go into one RGBA8 texture.
+    /// The relief atlas: the struck normal in RGB, the height in A, one tile per denomination.
+    ///
+    /// Raw bytes, exactly as the texture wants them, so loading is a file read and an upload. It
+    /// used to arrive as two images — normal as RGB, height as greyscale — and be merged here, a
+    /// scalar pass over four million texels that cost 450 ms of the second between tapping the card
+    /// and seeing any coins, producing identical bytes on every launch from files that never change.
+    ///
+    /// Raw rather than a PNG of the merged result, which is the obvious thing to try: the alpha
+    /// here is a height, not an opacity, and an image decoder is entitled to premultiply RGBA.
+    /// CoreGraphics does, reporting `premultipliedLast` and handing back every normal scaled by its
+    /// own height — a flat, quietly wrong relief rather than anything that fails.
+    /// ``CoinageReliefAtlasTests`` keeps that door shut.
     ///
     /// The atlas is generated for CASH rather than taken from the reference's currencies: every
     /// value is struck in the major unit with its decimals and no mark, so the fifteen faces read
     /// as one series. The reference's own atlases strike small values in the minor unit, which puts
     /// "16" and "0.16" on two coins of the same value.
-    ///
-    /// Both are read straight from the decoder with no colour management and no premultiplication:
-    /// these are normals and heights, not colours, and either would corrupt them. They are vendored
-    /// with a `.reliefpng` extension for the same reason, so Xcode's PNG compressor leaves them be.
-    static func loadReliefAtlas(device: MTLDevice, bundle: Bundle) throws -> MTLTexture {
-        let normal = try rawPixels("cash-normal", in: bundle)
-        let height = try rawPixels("cash-height", in: bundle)
-
-        guard normal.width == height.width, normal.height == height.height else {
-            throw Failure.malformed("relief maps disagree on size")
+    static func loadReliefAtlas(device: MTLDevice, bundle: Bundle, atlas: Manifest.Atlas) throws -> MTLTexture {
+        guard let url = bundle.url(forResource: "cash-relief", withExtension: "bin") else {
+            throw Failure.missingAsset("cash-relief.bin")
         }
 
-        var interleaved = [UInt8](repeating: 0, count: normal.width * normal.height * 4)
+        let bytes = try Data(contentsOf: url)
+        let expected = atlas.size * atlas.size * atlas.channels
 
-        for row in 0 ..< normal.height {
-            for column in 0 ..< normal.width {
-                let source = row * normal.bytesPerRow + column * normal.channels + normal.leadingAlpha
-                let target = (row * normal.width + column) * 4
-
-                interleaved[target] = normal.bytes[source]
-                interleaved[target + 1] = normal.bytes[source + 1]
-                interleaved[target + 2] = normal.bytes[source + 2]
-                interleaved[target + 3] = height.bytes[
-                    row * height.bytesPerRow + column * height.channels + height.leadingAlpha
-                ]
-            }
+        guard atlas.channels == 4, bytes.count == expected else {
+            throw Failure.malformed("relief atlas is \(bytes.count) bytes, not \(expected)")
         }
 
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .rgba8Unorm,
-            width: normal.width,
-            height: normal.height,
+            width: atlas.size,
+            height: atlas.size,
             mipmapped: true
         )
         descriptor.usage = [.shaderRead]
@@ -329,49 +335,26 @@ private extension CoinageAssetStore {
             throw Failure.deviceRefused("relief atlas")
         }
 
-        texture.replace(
-            region: MTLRegionMake2D(0, 0, normal.width, normal.height),
-            mipmapLevel: 0,
-            withBytes: interleaved,
-            bytesPerRow: normal.width * 4
-        )
+        bytes.withUnsafeBytes {
+            texture.replace(
+                region: MTLRegionMake2D(0, 0, atlas.size, atlas.size),
+                mipmapLevel: 0,
+                withBytes: $0.baseAddress!,
+                bytesPerRow: atlas.size * atlas.channels
+            )
+        }
 
         return texture
     }
 
-    struct RawImage {
-        let width: Int
-        let height: Int
-        let channels: Int
-        let leadingAlpha: Int
-        let bytesPerRow: Int
-        let bytes: [UInt8]
-    }
-
-    static func rawPixels(_ name: String, in bundle: Bundle) throws -> RawImage {
-        guard let url = bundle.url(forResource: name, withExtension: "reliefpng"),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
-              let data = image.dataProvider?.data as Data?
-        else {
-            throw Failure.missingAsset("\(name).reliefpng")
-        }
-
-        let alpha = image.alphaInfo
-        let leading = alpha == .first || alpha == .noneSkipFirst || alpha == .premultipliedFirst
-
-        return RawImage(
-            width: image.width,
-            height: image.height,
-            channels: image.bitsPerPixel / 8,
-            leadingAlpha: leading ? 1 : 0,
-            bytesPerRow: image.bytesPerRow,
-            bytes: [UInt8](data)
-        )
-    }
-
     /// Slices go in Metal's own face order; every level of the prefiltered chain is uploaded, so a
     /// rough metal reads a blurred studio without the shader doing the blurring.
+    /// The prefiltered studio: seven mip levels of a cube, forty-two Radiance files.
+    ///
+    /// Decoded all at once rather than one after another. They are independent, decoding is the
+    /// whole cost, and doing them in turn was most of what was left of the wait to open the view.
+    /// The uploads stay on one thread: `MTLTexture.replace` makes no promise about being called
+    /// from several at once, and they are not where the time goes.
     static func loadEnvironment(
         device: MTLDevice,
         bundle: Bundle,
@@ -391,8 +374,53 @@ private extension CoinageAssetStore {
             throw Failure.deviceRefused("environment cube")
         }
 
-        for level in levels {
-            for (slice, face) in faceOrder.enumerated() {
+        let faces = try environmentFaces(bundle: bundle, levels: levels)
+        var decoded = [CoinageRadianceImage.Face?](repeating: nil, count: faces.count)
+        let lock = NSLock()
+
+        DispatchQueue.concurrentPerform(iterations: faces.count) { index in
+            guard let image = try? CoinageRadianceImage.decode(Data(contentsOf: faces[index].url)) else { return }
+
+            lock.lock()
+            decoded[index] = image
+            lock.unlock()
+        }
+
+        for (index, face) in faces.enumerated() {
+            guard let image = decoded[index] else {
+                throw Failure.malformed("could not read \(face.url.lastPathComponent)")
+            }
+
+            image.pixels.withUnsafeBytes { raw in
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, image.width, image.height),
+                    mipmapLevel: face.level,
+                    slice: face.slice,
+                    withBytes: raw.baseAddress!,
+                    bytesPerRow: image.width * 8,
+                    bytesPerImage: image.width * image.height * 8
+                )
+            }
+        }
+
+        return texture
+    }
+
+    /// One face of one mip level of the cube, resolved to a file.
+    private struct EnvironmentFace {
+        let level: Int
+        let slice: Int
+        let url: URL
+    }
+
+    /// Every face of every level, in the order the cube wants them, resolved up front so the
+    /// decode has nothing to look up and nothing to throw.
+    private static func environmentFaces(
+        bundle: Bundle,
+        levels: [Manifest.Level]
+    ) throws -> [EnvironmentFace] {
+        try levels.flatMap { level in
+            try faceOrder.enumerated().map { slice, face in
                 guard let path = level.faces[face] else {
                     throw Failure.malformed("level \(level.level) is missing \(face)")
                 }
@@ -403,22 +431,9 @@ private extension CoinageAssetStore {
                     throw Failure.missingAsset("\(name).hdr")
                 }
 
-                let decoded = try CoinageRadianceImage.decode(Data(contentsOf: url))
-
-                decoded.pixels.withUnsafeBytes { raw in
-                    texture.replace(
-                        region: MTLRegionMake2D(0, 0, decoded.width, decoded.height),
-                        mipmapLevel: level.level,
-                        slice: slice,
-                        withBytes: raw.baseAddress!,
-                        bytesPerRow: decoded.width * 8,
-                        bytesPerImage: decoded.width * decoded.height * 8
-                    )
-                }
+                return EnvironmentFace(level: level.level, slice: slice, url: url)
             }
         }
-
-        return texture
     }
 
     static let faceOrder = ["px", "nx", "py", "ny", "pz", "nz"]
