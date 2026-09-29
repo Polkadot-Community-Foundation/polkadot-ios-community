@@ -30,7 +30,9 @@ enum CoinageBreakdownFactory {
         let wear: CGFloat
         /// Spendable now, as opposed to still clearing. The strip keeps the two in separate runs.
         let isReady: Bool
-        let status: CoinageHoldingStatus
+        /// Payments this holding has been through, which the face shows as pits. A voucher sitting
+        /// in a recycler has been through none.
+        let hops: Int
     }
 
     /// One list, ordered by denomination, largest first.
@@ -58,13 +60,7 @@ enum CoinageBreakdownFactory {
                     isBatchUnloaded: holding.coin.hops.isEmpty && holding.coin.age == 1
                 ),
                 isReady: holding.availability.displayBucket == .ready,
-                status: .coin(
-                    CoinStatusView.Model(
-                        hopDots: holding.coin.hops.map(innerDots(for:)),
-                        bucket: bucket,
-                        isSpendable: holding.isAvailableNow
-                    )
-                )
+                hops: holding.coin.hops.count
             )
         }
 
@@ -79,15 +75,7 @@ enum CoinageBreakdownFactory {
                 derivationIndex: holding.voucher.derivationIndex,
                 wear: wear(forScore: holding.voucher.recyclerFungibility, isBatchUnloaded: false),
                 isReady: holding.availability.displayBucket == .ready,
-                status: .voucher(
-                    VoucherStatusView.Model(
-                        maxBucket: CoinageStatusMetrics.bucket(
-                            forScore: holding.voucher.maxRecyclerFungibility
-                        ),
-                        bucket: bucket,
-                        isUnloadable: holding.isAvailableNow
-                    )
-                )
+                hops: 0
             )
         }
 
@@ -106,15 +94,6 @@ enum CoinageBreakdownFactory {
             }
 
             return lhs.derivationIndex < rhs.derivationIndex
-        }
-    }
-
-    /// Payments a holding has been through, which the face shows as pits. A voucher sitting in a
-    /// recycler has been through none.
-    private static func hops(for status: CoinageHoldingStatus) -> Int {
-        switch status {
-        case let .coin(model): model.hopDots.count
-        case .voucher: 0
         }
     }
 
@@ -146,7 +125,7 @@ enum CoinageBreakdownFactory {
                     partition: $0.isReady ? .ready : .clearing,
                     status: $0.isReady ? "ready" : "clearing",
                     level: CoinageWear.level(forAmount: $0.wear),
-                    hops: hops(for: $0.status)
+                    hops: $0.hops
                 )
             }
         )
@@ -244,16 +223,6 @@ enum CoinageBreakdownFactory {
         }
 
         return planks
-    }
-
-    /// Inner dots for a hop: one per sibling it moved or was produced alongside.
-    private static func innerDots(for hop: Hop) -> Int {
-        switch hop {
-        case let .transfer(bundleSize):
-            CoinageStatusMetrics.innerDots(forCount: bundleSize)
-        case let .split(fanout):
-            CoinageStatusMetrics.innerDots(forCount: fanout)
-        }
     }
 }
 

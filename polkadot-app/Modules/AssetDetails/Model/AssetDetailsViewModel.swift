@@ -15,11 +15,6 @@ struct CoinageBalanceBreakdownViewModel {
     let strip: [CoinageScene.Coin]
 }
 
-enum CoinageHoldingStatus: Equatable {
-    case coin(CoinStatusView.Model)
-    case voucher(VoucherStatusView.Model)
-}
-
 protocol AssetDetailsViewModelProtocol: Observation.Observable {
     var balanceCardModel: AssetDetailsBalanceCard.ViewModel? { get set }
     var showsBackupNotification: Bool { get set }
