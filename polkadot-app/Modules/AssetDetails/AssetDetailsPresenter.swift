@@ -301,15 +301,16 @@ private extension AssetDetailsPresenter {
         }
 
         let amounts = coinageAmounts ?? .zero
-        // The run markers set their amounts beside a label in one small line, so they take the bare
-        // figure; only the headline carries the fiat symbol.
-        let runAmountInfo = chainAsset.asset.digitalDollarDisplayInfo.withoutSymbol
+        // Every figure here carries the fiat symbol. Only the headline names the asset after it;
+        // the run markers set their amount beside a label on one small line, where the headline
+        // above has already said what is being counted.
+        let figureInfo = chainAsset.asset.digitalDollarFigureDisplayInfo
         let strip = CoinageBreakdownFactory.stripCoins(CoinageBreakdownFactory.rows(from: holdings))
 
         let breakdown = CoinageBalanceBreakdownViewModel(
-            totalBalance: formatted(from: amounts.total, as: chainAsset.asset.digitalDollarFigureDisplayInfo),
-            availableNowBalance: formatted(from: amounts.availableNow, as: runAmountInfo),
-            gainingPrivacyBalance: formatted(from: amounts.gainingPrivacy, as: runAmountInfo),
+            totalBalance: formatted(from: amounts.total, as: figureInfo),
+            availableNowBalance: formatted(from: amounts.availableNow, as: figureInfo),
+            gainingPrivacyBalance: formatted(from: amounts.gainingPrivacy, as: figureInfo),
             symbol: chainAsset.asset.digitalDollarDisplayInfo.symbol,
             strip: strip
         )
