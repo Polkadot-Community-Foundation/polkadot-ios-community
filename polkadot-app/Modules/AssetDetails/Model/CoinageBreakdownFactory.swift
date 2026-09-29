@@ -1,5 +1,6 @@
 import BigInt
 import Coinage
+import CoreGraphics
 import Foundation
 
 /// Turns a classified ``CoinageHoldings`` snapshot into what the breakdown draws: the ordered
@@ -24,6 +25,10 @@ enum CoinageBreakdownFactory {
         /// bucket for ``Standing/knownLevel``. Both read "least fungible first".
         let severity: Int
         let derivationIndex: CoinageKeyIndex
+        /// How worn the holding is drawn as a coin. `0` is untraceable, `1` is fully traceable.
+        let wear: CGFloat
+        /// Spendable now, as opposed to still clearing. The strip keeps the two in separate runs.
+        let isReady: Bool
         let status: CoinageHoldingStatus
     }
 
@@ -40,6 +45,11 @@ enum CoinageBreakdownFactory {
                 standing: bucket == nil ? .unknownHistory : .knownLevel,
                 severity: bucket ?? holding.coin.hops.count,
                 derivationIndex: holding.coin.derivationIndex,
+                wear: wear(
+                    forScore: holding.coin.recyclerFungibility,
+                    isBatchUnloaded: holding.coin.hops.isEmpty && holding.coin.age == 1
+                ),
+                isReady: holding.isAvailableNow,
                 status: .coin(
                     CoinStatusView.Model(
                         hopDots: holding.coin.hops.map(innerDots(for:)),
@@ -59,6 +69,8 @@ enum CoinageBreakdownFactory {
                 standing: .knownLevel,
                 severity: bucket,
                 derivationIndex: holding.voucher.derivationIndex,
+                wear: wear(forScore: holding.voucher.recyclerFungibility, isBatchUnloaded: false),
+                isReady: holding.isAvailableNow,
                 status: .voucher(
                     VoucherStatusView.Model(
                         maxBucket: CoinageStatusMetrics.bucket(
@@ -114,26 +126,40 @@ enum CoinageBreakdownFactory {
         }
     }
 
-    /// One coin per holding, in the list's own order, for the table depiction.
-    static func tableCoins(_ rows: [Row]) -> [CoinageTableView.Coin] {
-        rows.map { row in
-            switch row.status {
-            case let .coin(model):
-                CoinageTableView.Coin(
-                    id: row.id,
-                    exponent: row.exponent,
-                    dents: model.hopDots.count,
-                    bucket: model.bucket
-                )
-            case let .voucher(model):
-                CoinageTableView.Coin(
-                    id: row.id,
-                    exponent: row.exponent,
-                    dents: 0,
-                    bucket: model.bucket
+    /// How worn a holding is drawn, from the size of the crowd its recycler hides it in.
+    ///
+    /// The stored score is a share of ring capacity, so it converts back to a crowd size before it
+    /// goes on the doubling scale the depiction uses. Without a recycler record nothing can be
+    /// credited, and the holding wears as though it hides among nobody.
+    static func wear(forScore score: UInt8?, isBatchUnloaded: Bool) -> CGFloat {
+        guard let score else { return CoinageWear.unknown }
+
+        let crowd = Int(CGFloat(min(score, CoinageConstants.fullFungibility))
+            / CGFloat(CoinageConstants.fullFungibility)
+            * CGFloat(CoinageWear.ringCapacity - 1))
+        let penalty = isBatchUnloaded ? CoinageStatusMetrics.batchUnloadPenalty : 0
+
+        return CoinageWear.amount(forLevel: max(CoinageWear.level(hiddenAmong: crowd) - penalty, 0))
+    }
+
+    /// One coin per holding for the summary strip. Clearing leads, as the reference orders it, so
+    /// the two runs stay in the same places whether the strip is face on or edge on.
+    static func stripCoins(_ rows: [Row]) -> [CoinageScene.Coin] {
+        func coins(ready: Bool) -> [CoinageScene.Coin] {
+            rows.filter { $0.isReady == ready }.map {
+                CoinageScene.Coin(
+                    id: $0.id,
+                    exponent: $0.exponent,
+                    wear: $0.wear,
+                    partition: ready ? .ready : .clearing,
+                    status: $0.isReady ? "ready" : "clearing",
+                    level: CoinageWear.level(forAmount: $0.wear)
                 )
             }
         }
+
+        // Two passes rather than a sort, so the ordering inside each run survives untouched.
+        return coins(ready: false) + coins(ready: true)
     }
 
     /// Where a depiction sits on the fungibility ladder.

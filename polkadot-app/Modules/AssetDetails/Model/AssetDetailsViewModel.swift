@@ -19,8 +19,8 @@ struct CoinageBalanceBreakdownViewModel {
     let groups: [CoinageHoldingGroupViewModel]
     let distribution: CoinageFungibilityDistribution
     let matrix: CoinageHoldingMatrix
-    /// Every holding, in list order, for the table depiction.
-    let table: [CoinageTableView.Coin]
+    /// Every holding, in display order, drawn as coins. Clearing leads.
+    let strip: [CoinageScene.Coin]
 }
 
 /// A single coin or voucher row: its value, and a number-free status depiction.

@@ -9,6 +9,8 @@ struct AssetDetailsView: View {
     var onCardTapped: () -> Void
     var overscroll: CGFloat = 0
     var onCollapse: (() -> Void)?
+    // TODO: Remove along with `CoinageTestDataSwitch.swift`.
+    @State private var testDataMode = CoinageTestDataMode.live
 
     init(
         viewModel: AssetDetailsViewModelProtocol = AssetDetailsViewModel(),
@@ -53,9 +55,15 @@ struct AssetDetailsView: View {
             } else {
                 actions()
             }
-            if let breakdown = viewModel.coinageBreakdown,
-               viewModel.balanceCardModel != nil {
-                CoinageBalanceBreakdownView(breakdown: breakdown)
+            if viewModel.balanceCardModel != nil {
+                // TODO: Remove the `??` along with `CoinageTestDataSwitch.swift`. It keeps the card,
+                // and with it the switch, on a wallet that holds no coinage, which is where test
+                // data is most useful.
+                CoinageBalanceBreakdownView(
+                    breakdown: viewModel.coinageBreakdown
+                        ?? .testDataPlaceholder,
+                    testDataMode: $testDataMode
+                )
             }
 
             #if TESTNET_FEATURE
@@ -196,12 +204,19 @@ struct AssetDetailsFundingBar: View {
 
 private struct CoinageBalanceBreakdownView: View {
     let breakdown: CoinageBalanceBreakdownViewModel
+    // TODO: Remove along with `CoinageTestDataSwitch.swift`.
+    @Binding var testDataMode: CoinageTestDataMode
 
     @State private var showDetails = false
     @State private var showExplanation = false
+    /// How the coins came out, reported by the view as it lays them out.
+    @State private var coinMetrics = CoinageCoinsView.Metrics()
 
     var body: some View {
         VStack(spacing: DSSpacings.extraMedium) {
+            // TODO: Remove along with `CoinageTestDataSwitch.swift`.
+            CoinageTestDataSwitch(mode: $testDataMode)
+
             VStack(spacing: 0) {
                 Text(.coinageSummaryTitle)
                     .typography(.bodyMedium)
@@ -217,6 +232,8 @@ private struct CoinageBalanceBreakdownView: View {
 
             summaryLegend
 
+            // Above the coins rather than below them, so it stays on the same side whether they
+            // are stacked into the strip or spread out one by one.
             Button {
                 withAnimation { showDetails.toggle() }
             } label: {
@@ -231,13 +248,32 @@ private struct CoinageBalanceBreakdownView: View {
                 .foregroundStyle(.fgPrimary)
             }
 
+            CoinageCoinsView(
+                coins: testDataMode.strip ?? breakdown.strip,
+                isExpanded: showDetails,
+                metrics: $coinMetrics
+            )
+            .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
+            .overlay(alignment: .topLeading) { blockHeaders }
+
             if showDetails {
-                CoinageDetailsView(breakdown: breakdown)
                 CoinageExplanationView(isExpanded: $showExplanation)
             }
         }
         .padding(DSSpacings.mediumIncreased)
         .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: DSRadii.large))
+    }
+
+    /// The Clearing and Ready headers over the grid. The layout leaves room for them above each
+    /// block, so they sit in space the coins already made rather than pushing them about.
+    @ViewBuilder
+    private var blockHeaders: some View {
+        ForEach(coinMetrics.blocks) { block in
+            Text(String(localized: block.partition == .ready ? .coinageSpendable : .coinageLoading))
+                .typography(.bodySmall)
+                .foregroundStyle(Color.fgSecondary)
+                .offset(y: block.top)
+        }
     }
 
     private var totalHeadline: some View {
@@ -308,59 +344,6 @@ private struct CoinageBalanceBreakdownView: View {
                 value: breakdown.gainingPrivacyBalance
             )
         ]
-    }
-}
-
-/// Two columns in a lazy stack: holdings run into the hundreds and every depiction is a `Canvas`
-/// or a measured bar, so only visible rows are built. A lazy stack cannot see every row, so the
-/// value column takes the width of the longest value, measured once off-screen; with tabular
-/// digits the longest string is also the widest, and every depiction starts at the same x.
-private struct CoinageDetailsView: View {
-    let breakdown: CoinageBalanceBreakdownViewModel
-
-    @State private var amountColumnWidth: CGFloat?
-
-    var body: some View {
-        LazyVStack(spacing: DSSpacings.mediumIncreased) {
-            ForEach(breakdown.holdings) { holding in
-                HStack(spacing: DSSpacings.extraMedium) {
-                    amountText(holding.amount)
-                        .frame(width: amountColumnWidth, alignment: .trailing)
-
-                    switch holding.status {
-                    case let .coin(model):
-                        CoinStatusView(model: model)
-                    case let .voucher(model):
-                        VoucherStatusView(model: model)
-                    }
-                }
-            }
-        }
-        .background {
-            amountText(longestAmount)
-                .fixedSize()
-                .hidden()
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.width
-                } action: {
-                    amountColumnWidth = $0
-                }
-        }
-    }
-}
-
-private extension CoinageDetailsView {
-    var longestAmount: String? {
-        breakdown.holdings.compactMap(\.amount).max { $0.count < $1.count }
-    }
-
-    func amountText(_ amount: String?) -> some View {
-        Text(verbatim: amount ?? "—")
-            .textStyle(.body14Regular())
-            .monospacedDigit()
-            .foregroundStyle(.fgPrimary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.9)
     }
 }
 

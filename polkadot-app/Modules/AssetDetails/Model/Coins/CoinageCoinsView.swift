@@ -1,0 +1,223 @@
+import MetalKit
+import SwiftUI
+
+/// Every holding, as real coins, in one of two arrangements.
+///
+/// Collapsed, they are the summary strip: a fixed height however many there are, face on with
+/// margins while they fit, turning about their vertical axis as they multiply, thinning once fully
+/// edge-on. Expanded, the same coins spread into a honeycomb, with runs of alike coins in piles
+/// when there are too many to lay out singly.
+///
+/// One view, one set of coins. A toggle only moves targets, so the coins fly between the two
+/// arrangements rather than one view cutting to another.
+struct CoinageCoinsView: UIViewRepresentable {
+    /// What the coins came out as, so the card can grow with them and label the blocks.
+    struct Metrics: Equatable {
+        var height: CGFloat = CoinageStripLayout.Options().height
+        var blocks: [Block] = []
+
+        struct Block: Equatable, Identifiable {
+            let partition: CoinageStripLayout.Partition
+            let top: CGFloat
+            let count: Int
+
+            var id: String { partition.rawValue }
+        }
+    }
+
+    let coins: [CoinageScene.Coin]
+    let isExpanded: Bool
+    @Binding var metrics: Metrics
+    var stripHeight: CGFloat = CoinageStripLayout.Options().height
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(coins: coins, isExpanded: isExpanded, stripHeight: stripHeight) { measured in
+            metrics = measured
+        }
+    }
+
+    func makeUIView(context: Context) -> MTKView {
+        let view = MTKView(frame: .zero, device: context.coordinator.renderer?.device)
+        view.colorPixelFormat = .bgra8Unorm
+        view.depthStencilPixelFormat = .depth32Float
+        view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        view.clearDepth = 1
+        view.isOpaque = false
+        view.layer.isOpaque = false
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        view.preferredFramesPerSecond = 60
+        // Driven by the display link, paused the moment the springs settle, so coins at rest cost
+        // nothing. `enableSetNeedsDisplay` would switch the link off and leave the view drawing one
+        // frame per change, which renders correctly and never animates.
+        view.enableSetNeedsDisplay = false
+        view.isPaused = true
+
+        if let device = view.device,
+           device.supportsTextureSampleCount(CoinageMetalRenderer.sampleCount) {
+            view.sampleCount = CoinageMetalRenderer.sampleCount
+        }
+
+        view.delegate = context.coordinator
+        context.coordinator.attach(to: view)
+
+        return view
+    }
+
+    func updateUIView(_: MTKView, context: Context) {
+        context.coordinator.update(coins: coins, isExpanded: isExpanded)
+    }
+
+    static func dismantleUIView(_: MTKView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+}
+
+// MARK: - Coordinator
+
+extension CoinageCoinsView {
+    /// Owns the renderer, which owns the meshes and the studio, and the field, which owns where
+    /// every coin has got to. It outlives both arrangements, which is what lets coins fly between
+    /// them instead of being made afresh.
+    final class Coordinator: NSObject, MTKViewDelegate {
+        let renderer: CoinageMetalRenderer?
+
+        private let field = CoinageCoinField()
+        private let report: (Metrics) -> Void
+        private let stripHeight: CGFloat
+        private var coins: [CoinageScene.Coin]
+        private var isExpanded: Bool
+        private var laidOut: CGSize = .zero
+        private var lastFrame: CFTimeInterval?
+        private weak var view: MTKView?
+
+        init(
+            coins: [CoinageScene.Coin],
+            isExpanded: Bool,
+            stripHeight: CGFloat,
+            report: @escaping (Metrics) -> Void
+        ) {
+            self.coins = CoinageScene.ordered(coins)
+            self.isExpanded = isExpanded
+            self.stripHeight = stripHeight
+            self.report = report
+            renderer = try? CoinageMetalRenderer()
+            super.init()
+        }
+
+        func attach(to view: MTKView) {
+            self.view = view
+        }
+
+        func detach() {
+            view = nil
+        }
+
+        func update(coins: [CoinageScene.Coin], isExpanded: Bool) {
+            let ordered = CoinageScene.ordered(coins)
+
+            guard ordered != self.coins || isExpanded != self.isExpanded else { return }
+
+            self.coins = ordered
+            self.isExpanded = isExpanded
+            laidOut = .zero
+            run()
+        }
+
+        func mtkView(_: MTKView, drawableSizeWillChange _: CGSize) {
+            laidOut = .zero
+            run()
+        }
+
+        func draw(in view: MTKView) {
+            guard let renderer else { return }
+
+            let size = view.bounds.size
+
+            guard size.width > 0 else { return }
+
+            if abs(size.width - laidOut.width) > 0.5 {
+                retarget(width: size.width, designs: renderer.store.designs)
+                laidOut = size
+            }
+
+            advance()
+
+            let batches = CoinageScene.batches(
+                for: field,
+                frame: CoinageScene.Frame(
+                    dpr: view.contentScaleFactor,
+                    movingCoins: field.movingCoins
+                ),
+                designs: renderer.store.designs
+            )
+
+            renderer.draw(batches, in: view, viewport: size, dpr: view.contentScaleFactor)
+
+            if !field.isMoving {
+                view.isPaused = true
+                lastFrame = nil
+            }
+        }
+    }
+}
+
+// MARK: - Driving
+
+private extension CoinageCoinsView.Coordinator {
+    /// Wakes the view. Everything else is the springs' business.
+    func run() {
+        lastFrame = nil
+        view?.isPaused = false
+    }
+
+    /// A real elapsed time rather than a nominal frame: the spring is exact for any step, and a
+    /// dropped frame should not slow the motion down.
+    func advance() {
+        let now = CACurrentMediaTime()
+        let elapsed = lastFrame.map { min(now - $0, 1.0 / 20) } ?? 1.0 / 60
+        lastFrame = now
+
+        field.advance(by: CGFloat(elapsed))
+    }
+
+    /// How tall the grid is allowed to get before it starts stacking alike coins into piles.
+    ///
+    /// The grid has to be packed against a real height or nothing ever fails to fit: it would keep
+    /// the largest coins, never pile, and five hundred holdings would lay out about five thousand
+    /// points tall. Past sixteen thousand device pixels the drawable is clamped and scaled, which
+    /// is what turned the five hundred coin grid into a blur.
+    ///
+    /// A screenful is the right budget because the grid is meant to be taken in at a glance; past
+    /// that the reference's own answer is piles, not scrolling.
+    var gridBudget: CGFloat {
+        let screen = view?.window?.windowScene?.screen.bounds.height ?? 800
+
+        return max(screen * 0.62, 240)
+    }
+
+    func retarget(width: CGFloat, designs: [CoinageAssetStore.Design]) {
+        let result = CoinageArrangement.targets(
+            for: coins,
+            arrangement: isExpanded ? .grid : .strip,
+            area: CGSize(width: width, height: gridBudget),
+            designs: designs,
+            stripHeight: stripHeight
+        )
+
+        field.retarget(result.targets, spawningFrom: width)
+        report(
+            CoinageCoinsView.Metrics(
+                height: result.height,
+                blocks: result.blocks.map {
+                    CoinageCoinsView.Metrics.Block(
+                        partition: $0.partition,
+                        top: $0.top,
+                        count: $0.count
+                    )
+                }
+            )
+        )
+        run()
+    }
+}
