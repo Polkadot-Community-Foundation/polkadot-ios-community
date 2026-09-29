@@ -49,6 +49,12 @@ struct CoinageCoinsView: UIViewRepresentable {
         view.layer.isOpaque = false
         view.backgroundColor = .clear
         view.isUserInteractionEnabled = false
+        // Expanding gives the view its full height in one step, and until the next frame is drawn
+        // the layer still holds the strip's much shorter texture. Under the default gravity that
+        // texture is stretched to fill, which is a flash of coins smeared down the card. Anchored
+        // top left it is simply drawn where it already was, at its own size, and the grid replaces
+        // it on the next frame.
+        view.layer.contentsGravity = .topLeft
         view.preferredFramesPerSecond = 60
         // Driven by the display link, paused the moment the springs settle, so coins at rest cost
         // nothing. `enableSetNeedsDisplay` would switch the link off and leave the view drawing one

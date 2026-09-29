@@ -29,7 +29,10 @@ struct CoinageRunMarkers: View {
     let width: CGFloat
 
     static let height: CGFloat = 30
-    private static let rule: CGFloat = 3
+    private static let rule: CGFloat = 4
+    /// Both textures are mostly white, and the card behind them is not always dark. Half a point,
+    /// inset, so the outline reads without eating the pattern it is there to make visible.
+    private static let outline: CGFloat = 0.5
     private static let labelTop: CGFloat = 7
     /// Between two labels that have both been pushed toward the middle.
     private static let labelGap: CGFloat = 12
@@ -44,6 +47,9 @@ struct CoinageRunMarkers: View {
                 texture(for: run.partition)
                     .frame(width: max(run.end - run.start, Self.rule), height: Self.rule)
                     .clipShape(Capsule())
+                    // A capsule rather than a slight radius: at four points tall anything less is
+                    // indistinguishable, and fully rounded ends read as a deliberate stop.
+                    .overlay(Capsule().strokeBorder(Color.black, lineWidth: Self.outline))
                     .offset(x: run.start)
 
                 label(for: run)
@@ -77,7 +83,7 @@ struct CoinageRunMarkers: View {
     private func texture(for partition: CoinageStripLayout.Partition) -> some View {
         switch partition {
         case .ready: Color.fgStaticWhite
-        case .clearing: DSBarberPole(isAnimated: false)
+        case .clearing: DSBarberPole()
         }
     }
 }

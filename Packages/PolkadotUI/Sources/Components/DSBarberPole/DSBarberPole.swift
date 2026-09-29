@@ -1,7 +1,10 @@
 import DesignSystem
 import SwiftUI
 
-/// Diagonal stripes sliding leftwards, for depicting work that is still in progress.
+/// Diagonal stripes sliding rightwards, for depicting work that is still in progress.
+///
+/// Rightwards with the stripes leaning right, which is the way a barber's pole turns: the pattern
+/// reads as travelling up and away rather than back on itself.
 ///
 /// The pattern repeats every `stripeWidth * 2`, so sliding by exactly one period and wrapping back
 /// is seamless: at the end of a period the layer is drawing exactly what it drew at the start.
@@ -57,10 +60,12 @@ public struct DSBarberPole: View {
                     stripes(
                         in: size,
                         margin: margin,
-                        offset: -margin - period * Self.phase(
+                        // Counting the phase down rather than up walks the same interval the
+                        // other way, so the stripes travel rightwards over identical coverage.
+                        offset: -margin - period * (1 - Self.phase(
                             at: timeline.date,
                             periodDuration: periodDuration
-                        )
+                        ))
                     )
                 }
             } else {
