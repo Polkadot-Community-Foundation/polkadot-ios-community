@@ -95,36 +95,24 @@ struct CoinageConformanceTests {
         }
     }
 
-    @Test("The grid packs, blocks and piles as the reference does")
+    /// Only the cases that fit without stacking. The reference answers an overfull grid by piling
+    /// runs of alike coins, which this app does not draw, so a case whose expected cells hold more
+    /// than one coin describes a layout we deliberately do not produce. Filtered rather than
+    /// listed, so re-exported vectors need no edit here.
+    @Test("The grid packs and blocks as the reference does")
     func gridMatchesTheReference() throws {
         let vectors: GridVectors = try load("grid")
+        let unstacked = vectors.cases.filter { $0.output.cells.allSatisfy { $0.ids.count == 1 } }
 
-        for sample in vectors.hiddenBand {
-            #expect(CoinageGridLayout.hiddenBand(level: sample.level) == sample.band)
-        }
+        #expect(!unstacked.isEmpty, "no grid vector fits without stacking")
 
-        for sample in vectors.piles {
-            let pile = CoinageGridLayout.pile(
-                count: Int(sample.input[0]),
-                height: sample.input[1],
-                thickness: sample.input[2]
-            )
-
-            #expect(pile.shown == sample.output.shown)
-            expect(pile.thickness, sample.output.thick, "pile", "thickness")
-            expect(pile.step, sample.output.step, "pile", "step")
-            expect(pile.depthStep, sample.output.zstep, "pile", "depth step")
-            expect(pile.height, sample.output.height, "pile", "height")
-        }
-
-        for testCase in vectors.cases {
+        for testCase in unstacked {
             var options = CoinageGridLayout.Options()
             options.maxDiameter = testCase.options.maxDiameter
             options.minDiameter = testCase.options.minDiameter
             options.gap = testCase.options.gap
             options.header = testCase.options.header
             options.blockGap = testCase.options.blockGap
-            options.stackShow = testCase.options.stackShow
 
             let layout = CoinageGridLayout.layout(
                 testCase.input.map {
@@ -149,8 +137,7 @@ struct CoinageConformanceTests {
             for (cell, expected) in zip(layout.cells, testCase.output.cells) {
                 expect(cell.centre.x, expected.x, testCase.label, "cell x")
                 expect(cell.centre.y, expected.y, testCase.label, "cell y")
-                #expect(cell.count == expected.count, "\(testCase.label): cell count")
-                #expect(cell.ids == expected.ids.map(String.init), "\(testCase.label): cell ids")
+                #expect([cell.id] == expected.ids.map(String.init), "\(testCase.label): cell id")
             }
 
             #expect(layout.blocks.count == testCase.output.blocks.count, "\(testCase.label): blocks")
@@ -281,7 +268,6 @@ private extension CoinageConformanceTests {
             let gap: CGFloat
             let header: CGFloat
             let blockGap: CGFloat
-            let stackShow: Int
         }
 
         struct Area: Decodable {
@@ -327,27 +313,7 @@ private extension CoinageConformanceTests {
             let output: Output
         }
 
-        struct PileOutput: Decodable {
-            let shown: Int
-            let thick: CGFloat
-            let step: CGFloat
-            let zstep: CGFloat
-            let height: CGFloat
-        }
-
-        struct PileSample: Decodable {
-            let input: [CGFloat]
-            let output: PileOutput
-        }
-
-        struct BandSample: Decodable {
-            let level: Int
-            let band: Int
-        }
-
         let cases: [Case]
-        let piles: [PileSample]
-        let hiddenBand: [BandSample]
     }
 
     struct FungibilityVectors: Decodable {

@@ -66,8 +66,9 @@ enum CoinageStatusMetrics {
     static let overflowChipPadding: CGFloat = 6
 
     /// Swatch beside each summary figure, keying it to a section of the bar above.
-    static let legendSwatchSize: CGFloat = 12
-    static let legendSwatchCornerRadius: CGFloat = 3
+    /// Stands in for the bucket of a holding whose recycler we have no record of: it is off the
+    /// ladder rather than at the bottom of it.
+    static let unknownBand = -1
 
     /// Frame drawn around every mark.
     ///

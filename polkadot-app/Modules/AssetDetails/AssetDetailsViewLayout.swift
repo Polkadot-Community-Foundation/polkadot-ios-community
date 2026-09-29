@@ -9,8 +9,6 @@ struct AssetDetailsView: View {
     var onCardTapped: () -> Void
     var overscroll: CGFloat = 0
     var onCollapse: (() -> Void)?
-    // TODO: Remove along with `CoinageTestDataSwitch.swift`.
-    @State private var testDataMode = CoinageTestDataMode.live
 
     init(
         viewModel: AssetDetailsViewModelProtocol = AssetDetailsViewModel(),
@@ -55,15 +53,9 @@ struct AssetDetailsView: View {
             } else {
                 actions()
             }
-            if viewModel.balanceCardModel != nil {
-                // TODO: Remove the `??` along with `CoinageTestDataSwitch.swift`. It keeps the card,
-                // and with it the switch, on a wallet that holds no coinage, which is where test
-                // data is most useful.
-                CoinageBalanceBreakdownView(
-                    breakdown: viewModel.coinageBreakdown
-                        ?? .testDataPlaceholder,
-                    testDataMode: $testDataMode
-                )
+            if let breakdown = viewModel.coinageBreakdown,
+               viewModel.balanceCardModel != nil {
+                CoinageBalanceBreakdownView(breakdown: breakdown)
             }
 
             #if TESTNET_FEATURE
@@ -204,8 +196,6 @@ struct AssetDetailsFundingBar: View {
 
 private struct CoinageBalanceBreakdownView: View {
     let breakdown: CoinageBalanceBreakdownViewModel
-    // TODO: Remove along with `CoinageTestDataSwitch.swift`.
-    @Binding var testDataMode: CoinageTestDataMode
 
     @State private var showDetails = false
     /// How the coins came out, reported by the view as it lays them out.
@@ -225,9 +215,6 @@ private struct CoinageBalanceBreakdownView: View {
 
     private func card(scroll: ScrollViewProxy) -> some View {
         VStack(spacing: DSSpacings.extraMedium) {
-            // TODO: Remove along with `CoinageTestDataSwitch.swift`.
-            CoinageTestDataSwitch(mode: $testDataMode)
-
             VStack(spacing: 0) {
                 Text(.coinageSummaryTitle)
                     .typography(.bodyMedium)
@@ -237,11 +224,6 @@ private struct CoinageBalanceBreakdownView: View {
 
                 totalHeadline
             }
-
-            CoinageCompositionBar(model: breakdown.composition)
-                .padding(.vertical, DSSpacings.extraTiny)
-
-            summaryLegend
 
             // Above the coins rather than below them, so it stays on the same side whether they
             // are stacked into the strip or spread out one by one.
@@ -260,7 +242,7 @@ private struct CoinageBalanceBreakdownView: View {
             }
 
             CoinageCoinsView(
-                coins: testDataMode.strip ?? breakdown.strip,
+                coins: breakdown.strip,
                 isExpanded: showDetails,
                 metrics: $coinMetrics
             )
@@ -270,7 +252,11 @@ private struct CoinageBalanceBreakdownView: View {
             // chase a growing content size and bounce against its own edge. Collapsing is animated,
             // but from inside the toggle, where the scroll can be moved in the same breath.
             .overlay(alignment: .topLeading) { blockHeaders }
-            .overlay(alignment: .topLeading) { pileCounts }
+
+            if !showDetails {
+                runMarkers
+                    .transition(.opacity)
+            }
         }
         .padding(DSSpacings.mediumIncreased)
         .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: DSRadii.large))
@@ -308,27 +294,6 @@ private struct CoinageBalanceBreakdownView: View {
         }
     }
 
-    /// How many coins a stack holds. Without it a pile reads as one oddly thick, tilted coin.
-    ///
-    /// At the tightest packing the rows leave barely a point between them, so the count sits over
-    /// the foot of the pile on its own ground rather than in a gap that is not there.
-    @ViewBuilder
-    private var pileCounts: some View {
-        ForEach(coinMetrics.piles) { pile in
-            Text(verbatim: "×\(pile.count)")
-                .typography(.labelSmall)
-                .foregroundStyle(Color.fgPrimary)
-                .padding(.horizontal, DSSpacings.extraTiny)
-                .background(.bgSurfaceContainer, in: Capsule())
-                .fixedSize()
-                .frame(width: Self.pileCountWidth)
-                .offset(x: pile.bottom.x - Self.pileCountWidth / 2, y: pile.bottom.y - 7)
-        }
-    }
-
-    /// Wide enough for any count a pile can carry, so the badge centres on the stack.
-    private static let pileCountWidth: CGFloat = 48
-
     private var totalHeadline: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(breakdown.totalBalance)
@@ -344,69 +309,28 @@ private struct CoinageBalanceBreakdownView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The two figures partition the total and are the two sections of the bar above, in the
-    /// same order, each keyed to its section by a swatch.
+    /// Which coins are Clearing and which are Ready, ruled under the runs themselves.
     ///
-    /// A grid rather than two stacked columns: a label long enough to wrap would otherwise push
-    /// its own value down and leave the two figures on different lines.
-    private var summaryLegend: some View {
-        Grid(alignment: .leading, horizontalSpacing: DSSpacings.small, verticalSpacing: DSSpacings.tiny) {
-            GridRow {
-                ForEach(legendEntries) { entry in
-                    HStack(spacing: DSSpacings.extraSmall) {
-                        CoinageLegendSwatch(kind: entry.kind)
-
-                        Text(entry.title)
-                            .typography(.bodySmall)
-                            .foregroundStyle(Color.fgSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityId(entry.labelAccessibilityId)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .gridCellAnchor(.topLeading)
-
-            GridRow {
-                ForEach(legendEntries) { entry in
-                    Text(entry.value)
-                        .typography(.titleLarge)
-                        .foregroundStyle(Color.fgPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityId(entry.valueAccessibilityId)
-                }
-            }
-        }
-    }
-
-    private var legendEntries: [LegendEntry] {
-        [
-            LegendEntry(
-                kind: .availableNow,
-                title: String(localized: .coinageSpendable),
-                value: breakdown.availableNowBalance,
-                labelAccessibilityId: AccessibilityID.Wallet.coinageSpendableBalanceLabel,
-                valueAccessibilityId: AccessibilityID.Wallet.coinageSpendableBalanceValue
-            ),
-            // No accessibility id yet: the registry lives in another repo.
-            LegendEntry(
-                kind: .gainingPrivacy,
-                title: String(localized: .coinageLoading),
-                value: breakdown.gainingPrivacyBalance
+    /// Only while the coins are in the strip: spread into the grid they have headers of their own,
+    /// and the runs these rule no longer exist.
+    @ViewBuilder
+    private var runMarkers: some View {
+        GeometryReader { proxy in
+            CoinageRunMarkers(
+                runs: coinMetrics.runs.compactMap { run in
+                    CoinageRunMarkers.Run(
+                        partition: run.partition,
+                        start: run.start,
+                        end: run.end,
+                        title: String(localized: run.partition == .ready ? .coinageSpendable : .coinageLoading),
+                        amount: run.partition == .ready
+                            ? breakdown.availableNowBalance
+                            : breakdown.gainingPrivacyBalance
+                    )
+                },
+                width: proxy.size.width
             )
-        ]
+        }
+        .frame(height: CoinageRunMarkers.height)
     }
-}
-
-/// One of the two figures under the summary bar.
-private struct LegendEntry: Identifiable {
-    let kind: CoinageLegendSwatch.Kind
-    let title: String
-    let value: String
-    var labelAccessibilityId: (any AccessibilityIdentifying)?
-    var valueAccessibilityId: (any AccessibilityIdentifying)?
-
-    var id: String { title }
 }

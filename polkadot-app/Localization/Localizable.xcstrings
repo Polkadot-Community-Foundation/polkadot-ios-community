@@ -1288,17 +1288,6 @@
         }
       }
     },
-    "coinageLessFungible" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Less fungible"
-          }
-        }
-      }
-    },
     "coinageLoading" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1306,17 +1295,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Clearing"
-          }
-        }
-      }
-    },
-    "coinageMoreFungible" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "More fungible"
           }
         }
       }

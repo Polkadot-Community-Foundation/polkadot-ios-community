@@ -17,9 +17,10 @@ enum CoinageStripLayout {
         var height: CGFloat = 60
         var margin: CGFloat = 10
         var minimumMargin: CGFloat = 4
-        /// Between the Clearing and Ready runs, face on.
-        var gap: CGFloat = 12
-        var minimumGap: CGFloat = 3
+        /// Between the Clearing and Ready runs, face on. Twice a margin and then some: it is the
+        /// only thing separating the two, now that the bar above them is gone.
+        var gap: CGFloat = 26
+        var minimumGap: CGFloat = 8
 
         init() {}
     }

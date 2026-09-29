@@ -82,9 +82,10 @@ enum CoinageScene {
         /// `0` untraceable, `1` fully traceable.
         let wear: CGFloat
         let partition: CoinageStripLayout.Partition
-        /// What keeps two clearing holdings apart when the grid groups them into piles.
+        /// What keeps two clearing holdings apart: recycling now, or still to be recycled.
         let status: String
-        /// How hidden the coin is, on the doubling ladder. Piles group by band, not by level.
+        /// How hidden the coin is, on the doubling ladder, which is how the order breaks a tie
+        /// between two coins of the same denomination.
         let level: Int
         /// Payments this holding has been through. Each one leaves a pit.
         let hops: Int
@@ -119,11 +120,6 @@ enum CoinageScene {
         var order: [String] = []
 
         for member in field.members {
-            // Coins buried in a pile are covered by the ones on top once they land.
-            guard !member.target.isHidden || field.distanceToTarget(member) > CoinageCoinField.settled else {
-                continue
-            }
-
             let exponent = Int(min(max(member.coin.exponent, 0), CoinageCoinDesign.highestExponent))
 
             guard let design = designs[safe: exponent] else { continue }

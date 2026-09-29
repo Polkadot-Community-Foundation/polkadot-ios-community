@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// Collapsed, they are the summary strip: a fixed height however many there are, face on with
 /// margins while they fit, turning about their vertical axis as they multiply, thinning once fully
-/// edge-on. Expanded, the same coins spread into a honeycomb, with runs of alike coins in piles
-/// when there are too many to lay out singly.
+/// edge-on. Expanded, the same coins spread into a honeycomb, one cell each however many there
+/// are, and the card grows and scrolls.
 ///
 /// One view, one set of coins. A toggle only moves targets, so the coins fly between the two
 /// arrangements rather than one view cutting to another.
@@ -17,7 +17,8 @@ struct CoinageCoinsView: UIViewRepresentable {
     struct Metrics: Equatable {
         var height: CGFloat = CoinageStripLayout.Options().height
         var blocks: [Block] = []
-        var piles: [CoinageArrangement.Pile] = []
+        /// How far each partition's run reaches, so the card can rule and label it.
+        var runs: [CoinageStripLayout.Span] = []
 
         struct Block: Equatable, Identifiable {
             let partition: CoinageStripLayout.Partition
@@ -213,15 +214,15 @@ private extension CoinageCoinsView.Coordinator {
         return tilt.advance(by: CGFloat(elapsed))
     }
 
-    /// How tall the grid is allowed to get before it starts stacking alike coins into piles.
+    /// The height the grid is packed against, which is what makes the coins shrink at all.
     ///
-    /// The grid has to be packed against a real height or nothing ever fails to fit: it would keep
-    /// the largest coins, never pile, and five hundred holdings would lay out about five thousand
-    /// points tall. Past sixteen thousand device pixels the drawable is clamped and scaled, which
-    /// is what turned the five hundred coin grid into a blur.
+    /// It has to be a real height or nothing ever fails to fit: the grid would keep the largest
+    /// coins whatever the count, and five hundred holdings would lay out about five thousand points
+    /// tall. Past sixteen thousand device pixels the drawable is clamped and scaled, which is what
+    /// turned the five hundred coin grid into a blur.
     ///
-    /// A screenful is the right budget because the grid is meant to be taken in at a glance; past
-    /// that the reference's own answer is piles, not scrolling.
+    /// A screenful, because the grid is meant to be taken in at a glance. Overflowing it costs a
+    /// scroll rather than a redraw: the coins are already at their smallest by then.
     var gridBudget: CGFloat {
         let screen = view?.window?.windowScene?.screen.bounds.height ?? 800
 
@@ -254,7 +255,7 @@ private extension CoinageCoinsView.Coordinator {
                         count: $0.count
                     )
                 },
-                piles: result.piles
+                runs: result.runs
             )
         )
         run()

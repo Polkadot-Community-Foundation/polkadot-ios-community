@@ -117,29 +117,29 @@ struct CoinageBreakdownOrderTests {
         #expect(CoinageBreakdownFactory.rows(from: holdings).map(\.exponent) == [9, 2])
     }
 
-    @Test("Coins built without a row behind them are still ordered, test sets among them")
+    @Test("A list assembled without rows behind it still comes out ordered")
     func anyListComesOutOrdered() {
-        // The test-data switch builds scene coins directly rather than through `rows(from:)`, and
-        // it is the only place the depiction is ever reviewed. `everyStatus` generates its states
-        // most fungible first, the exact reverse of the rule, so this is not a hypothetical.
-        for mode in CoinageTestDataMode.allCases {
-            guard let coins = mode.strip else { continue }
-
+        // Not every list reaches the layout through `rows(from:)`. One that does not used to
+        // arrive with nothing but the partitions split and was drawn in whatever order it was
+        // built in — including, in one case, states running most fungible first, the exact
+        // reverse of the rule.
+        for unordered in [Self.statesOfOneDenomination, Self.mixedDenominations] {
+            let coins = CoinageBreakdownFactory.inDisplayOrder(unordered)
             let clearing = coins.prefix { $0.partition == .clearing }
             let ready = coins.dropFirst(clearing.count)
 
-            #expect(ready.allSatisfy { $0.partition == .ready }, "\(mode) interleaves the partitions")
+            #expect(ready.allSatisfy { $0.partition == .ready }, "the partitions interleave")
 
             for block in [Array(clearing), Array(ready)] where !block.isEmpty {
                 #expect(
                     block.map(\.exponent) == block.map(\.exponent).sorted(by: >),
-                    "\(mode) does not run largest denomination first"
+                    "the block does not run largest denomination first"
                 )
 
                 for run in Dictionary(grouping: block, by: \.exponent).values {
                     #expect(
                         run.map(\.level) == run.map(\.level).sorted(),
-                        "\(mode) does not run least fungible first within a denomination"
+                        "a denomination does not run least fungible first"
                     )
                 }
             }
@@ -222,6 +222,41 @@ private extension CoinageBreakdownOrderTests {
 
     /// One installation for the whole suite: ordering only ever compares items within it.
     static let installation = try! CoinageInstallationId(value: Data(repeating: 7, count: 32))
+
+    /// Twenty states of one denomination, generated most fungible first: the order a list is
+    /// built in has nothing to do with the order it should be drawn in.
+    static let statesOfOneDenomination: [CoinageScene.Coin] = (0 ..< 20).map { index in
+        Self.make(
+            id: "state-\(index)",
+            exponent: 4,
+            level: CoinageWear.maximumLevel - index * CoinageWear.maximumLevel / 19,
+            hops: index % 5,
+            isReady: index % 4 != 0
+        )
+    }
+
+    /// Denominations, levels and partitions all shuffled against each other.
+    static let mixedDenominations: [CoinageScene.Coin] = (0 ..< 60).map { index in
+        Self.make(
+            id: "mixed-\(index)",
+            exponent: Int16(index * 7 % 15),
+            level: index * 11 % (CoinageWear.maximumLevel + 1),
+            hops: index % 4,
+            isReady: index * 5 % 7 != 0
+        )
+    }
+
+    static func make(id: String, exponent: Int16, level: Int, hops: Int, isReady: Bool) -> CoinageScene.Coin {
+        CoinageScene.Coin(
+            id: id,
+            exponent: exponent,
+            wear: CoinageWear.amount(forLevel: level),
+            partition: isReady ? .ready : .clearing,
+            status: isReady ? "ready" : "clearing",
+            level: level,
+            hops: hops
+        )
+    }
 
     func scene(id: String, exponent: Int16, level: Int, hops: Int) -> CoinageScene.Coin {
         CoinageScene.Coin(

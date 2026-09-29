@@ -109,31 +109,6 @@ enum CoinageBreakdownFactory {
         }
     }
 
-    /// One depiction and the holdings that share it.
-    struct Group: Equatable {
-        let id: String
-        let status: CoinageHoldingStatus
-        /// Exponents in display order, one per holding, so a caller can price them and total them.
-        let exponents: [Int16]
-    }
-
-    /// Folds runs of identical depictions. Rows arrive ordered, so anything that draws the same is
-    /// already adjacent and this is a scan. Two rows merge exactly when their status compares
-    /// equal, which is the condition under which they would otherwise draw the same row twice.
-    static func group(_ rows: [Row]) -> [Group] {
-        rows.reduce(into: [Group]()) { groups, row in
-            if let last = groups.last, last.status == row.status {
-                groups[groups.count - 1] = Group(
-                    id: last.id,
-                    status: last.status,
-                    exponents: last.exponents + [row.exponent]
-                )
-            } else {
-                groups.append(Group(id: row.id, status: row.status, exponents: [row.exponent]))
-            }
-        }
-    }
-
     /// Payments a holding has been through, which the face shows as pits. A voucher sitting in a
     /// recycler has been through none.
     private static func hops(for status: CoinageHoldingStatus) -> Int {
@@ -222,16 +197,6 @@ enum CoinageBreakdownFactory {
         return ordered.map(\.element)
     }
 
-    /// Where a depiction sits on the fungibility ladder.
-    static func band(for status: CoinageHoldingStatus) -> Int {
-        switch status {
-        case let .coin(model):
-            model.bucket ?? CoinageFungibilityDistribution.unknownBand
-        case let .voucher(model):
-            model.bucket
-        }
-    }
-
     /// The bucket a coin's bar is drawn at, or `nil` when we have no record of its recycler.
     ///
     /// A coin that left in a batch is linked to everything that left with it, which the recycler's
@@ -246,32 +211,6 @@ enum CoinageBreakdownFactory {
         guard coin.hops.isEmpty, coin.age == 1 else { return base }
 
         return min(base + CoinageStatusMetrics.batchUnloadPenalty, CoinageStatusMetrics.maximumBucket)
-    }
-
-    /// Value-weighted split for the summary bar, bucketed exactly as the figures above it are:
-    /// every holding lands in one of the two display buckets regardless of whether it is a coin or
-    /// a voucher, so the bar's two shares account for the whole balance and nothing falls out.
-    static func composition(
-        of holdings: CoinageHoldings,
-        context: DenominationBreakdownContext
-    ) -> CoinageCompositionBar.Model {
-        let planks = planksByAvailability(of: holdings) {
-            context.valueInPlanks(for: $0)
-        }
-        let total = planks.total
-
-        guard total > 0 else { return .empty }
-
-        // Scaled integer division keeps this exact for plank counts far beyond Double.
-        func share(_ part: BigUInt) -> Double {
-            let scale = BigUInt(1_000_000)
-            return Double(part * scale / total) / Double(scale)
-        }
-
-        return CoinageCompositionBar.Model(
-            availableNowShare: share(planks.availableNow),
-            gainingPrivacyShare: share(planks.gainingPrivacy)
-        )
     }
 
     /// Plank totals per bucket. A named type rather than a tuple, so the two stay labelled

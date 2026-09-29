@@ -30,10 +30,9 @@ final class CoinageCoinField {
         var wear: CGFloat
         var luster: CGFloat
         var calm: CGFloat
-        /// Toward the viewer, which orders coins within a pile.
+        /// Toward the viewer.
         var lift: CGFloat = 0
         /// Buried under the coins on top of it, so it is never drawn.
-        var isHidden = false
     }
 
     struct Member {
