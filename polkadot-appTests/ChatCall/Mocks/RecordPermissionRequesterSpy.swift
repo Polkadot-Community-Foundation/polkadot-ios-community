@@ -1,7 +1,7 @@
+@testable import polkadot_app
 import Foundation
 
-/// Stands in for the system microphone prompt and counts how often it was raised.
-final class RecordPermissionRequesterSpy: @unchecked Sendable {
+final class RecordPermissionRequesterSpy: RecordPermissionRequesting, @unchecked Sendable {
     private let grants: Bool
     private let lock = NSLock()
     private var count = 0
@@ -14,7 +14,7 @@ final class RecordPermissionRequesterSpy: @unchecked Sendable {
         lock.withLock { count }
     }
 
-    func request() -> Bool {
+    func requestRecordPermission() async -> Bool {
         lock.withLock { count += 1 }
         return grants
     }

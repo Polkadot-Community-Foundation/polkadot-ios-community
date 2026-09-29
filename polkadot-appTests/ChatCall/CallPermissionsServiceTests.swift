@@ -102,8 +102,8 @@ private extension CallPermissionsServiceTests {
     ) -> CallPermissionsService {
         CallPermissionsService(
             applicationStateProvider: { appState },
-            recordPermissionProvider: { permission },
-            recordPermissionRequester: { requester.request() }
+            recordPermissionProvider: StubRecordPermissionProvider(recordPermission: permission),
+            recordPermissionRequester: requester
         )
     }
 }

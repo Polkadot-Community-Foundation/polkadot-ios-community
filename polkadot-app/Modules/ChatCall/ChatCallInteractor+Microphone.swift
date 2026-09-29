@@ -12,7 +12,6 @@ extension ChatCallInteractor {
         await presenter?.didUpdateMuteState(result)
     }
 
-    /// The call connects even without the microphone; muting before `connect()` creates the audio track disabled.
     func startMutedIfNeeded(for microphoneAccess: CallMicrophoneAccess) async {
         guard microphoneAccess != .granted else {
             return
@@ -33,7 +32,6 @@ extension ChatCallInteractor {
         }
 
         if !notifiesCallKit {
-            // A CallKit action must not wait on a prompt that may only appear after unlock.
             callKitManager.confirmMutedState(isSuccessful: false)
         }
 

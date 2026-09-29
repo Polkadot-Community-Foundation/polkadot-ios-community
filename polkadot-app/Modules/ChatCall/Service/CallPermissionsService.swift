@@ -3,25 +3,19 @@ import UIKit
 
 enum CallMicrophoneAccess: Equatable {
     case granted
-    /// The prompt was shown just now and declined.
     case refused
-    /// Declined earlier; only Settings can change it.
     case denied
-    /// Never asked, and the prompt policy didn't allow asking now.
     case deferred
 }
 
 enum MicrophonePromptPolicy {
-    /// Answering must not await a prompt that can't appear while the app isn't active.
     case whenActive
-    /// Unmuting during a live call asks whatever the app state.
     case always
 }
 
 protocol CallPermissionsServicing: AnyObject {
     var isMicrophoneGranted: Bool { get }
 
-    /// Only an explicit denial: iOS shows no Microphone switch in Settings until the app has asked once.
     var isMicrophoneDenied: Bool { get }
 
     func resolveMicrophoneAccess(prompting policy: MicrophonePromptPolicy) async -> CallMicrophoneAccess
@@ -33,19 +27,15 @@ protocol CallPermissionsServicing: AnyObject {
 
 final class CallPermissionsService {
     private let applicationStateProvider: @MainActor () -> UIApplication.State
-    private let recordPermissionProvider: () -> AVAudioApplication.recordPermission
-    private let recordPermissionRequester: () async -> Bool
+    private let recordPermissionProvider: RecordPermissionProviding
+    private let recordPermissionRequester: RecordPermissionRequesting
 
     init(
         applicationStateProvider: @escaping @MainActor () -> UIApplication.State = {
             UIApplication.shared.applicationState
         },
-        recordPermissionProvider: @escaping () -> AVAudioApplication.recordPermission = {
-            AVAudioApplication.shared.recordPermission
-        },
-        recordPermissionRequester: @escaping () async -> Bool = {
-            await AVAudioApplication.requestRecordPermission()
-        }
+        recordPermissionProvider: RecordPermissionProviding = RecordPermissionService(),
+        recordPermissionRequester: RecordPermissionRequesting = RecordPermissionService()
     ) {
         self.applicationStateProvider = applicationStateProvider
         self.recordPermissionProvider = recordPermissionProvider
@@ -54,7 +44,9 @@ final class CallPermissionsService {
 }
 
 private extension CallPermissionsService {
-    // Awaiting a system prompt the inactive app can't present stalls the caller instead of asking.
+    // An inactive/backgrounded app (e.g. a locked-screen CallKit answer) can't
+    // present the system permission prompt. Awaiting one there stalls the call
+    // instead of surfacing a dialog, so only prompt when the app is active.
     @MainActor
     var canPresentPermissionPrompt: Bool {
         applicationStateProvider() == .active
@@ -72,15 +64,15 @@ private extension CallPermissionsService {
 
 extension CallPermissionsService: CallPermissionsServicing {
     var isMicrophoneGranted: Bool {
-        recordPermissionProvider() == .granted
+        recordPermissionProvider.recordPermission == .granted
     }
 
     var isMicrophoneDenied: Bool {
-        recordPermissionProvider() == .denied
+        recordPermissionProvider.recordPermission == .denied
     }
 
     func resolveMicrophoneAccess(prompting policy: MicrophonePromptPolicy) async -> CallMicrophoneAccess {
-        switch recordPermissionProvider() {
+        switch recordPermissionProvider.recordPermission {
         case .granted:
             return .granted
         case .denied:
@@ -90,7 +82,7 @@ extension CallPermissionsService: CallPermissionsServicing {
                 return .deferred
             }
 
-            return await recordPermissionRequester() ? .granted : .refused
+            return await recordPermissionRequester.requestRecordPermission() ? .granted : .refused
         @unknown default:
             return .denied
         }

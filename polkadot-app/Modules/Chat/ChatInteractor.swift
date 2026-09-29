@@ -50,9 +50,6 @@ final class ChatInteractor {
 }
 
 private extension ChatInteractor {
-    /// Prompts while the app is still foregrounded: by call time the user may be answering
-    /// through CallKit on a locked screen, where no system prompt can appear. Advisory —
-    /// a denial never blocks the chat request.
     func resolveCallPermissions() async {
         let isGranted = await permissionsService.ensurePermissions(for: .audio)
 
