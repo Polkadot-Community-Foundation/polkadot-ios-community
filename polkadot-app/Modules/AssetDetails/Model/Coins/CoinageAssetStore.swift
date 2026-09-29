@@ -96,8 +96,7 @@ extension CoinageAssetStore {
         var dpr: Float = 2
         let tilePixels: Float
         let environmentMaxLod: Float
-        var lightYaw: Float = 0
-        var lightPitch: Float = 0
+        var lightTurn: SIMD3<Float> = .zero
         let material: [Float]
         var backdrop: [Float] = [0, 0, 0]
         var debug: Int32 = 0
@@ -128,7 +127,7 @@ extension CoinageAssetStore {
         func packed() -> [Float] {
             var out: [Float] = [
                 viewportWidth, viewportHeight, dpr, tilePixels, environmentMaxLod,
-                lightYaw, lightPitch
+                lightTurn.x, lightTurn.y, lightTurn.z
             ]
             out += material
             out += backdrop

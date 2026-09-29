@@ -162,7 +162,7 @@ extension CoinageCoinsView {
                 in: view,
                 viewport: size,
                 dpr: view.contentScaleFactor,
-                light: tilt.angles
+                light: tilt.turn
             )
 
             if !field.isMoving, !moved {

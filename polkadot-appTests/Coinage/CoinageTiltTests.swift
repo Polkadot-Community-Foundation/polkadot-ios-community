@@ -1,138 +1,210 @@
 import CoreMotion
 import Metal
+import simd
 import Testing
 
 @testable import polkadot_app
 
-/// The light angles cannot be tried in the simulator, which has no gyro, so the mapping from
-/// gravity to where the studio sits is pinned here instead.
+/// The light cannot be tried in the simulator, which has no gyro, so the mapping from gravity to
+/// where the studio sits is pinned here instead.
 @Suite("Coin light tilt")
 struct CoinageTiltTests {
-    /// Gravity for a phone tilted `angle` radians to its right, held upright otherwise.
-    private func sideways(_ angle: Double) -> CMAcceleration {
-        CMAcceleration(x: sin(angle), y: -cos(angle), z: 0)
+    /// Which way is down for a phone leaned `lean` radians back from vertical, then turned `angle`
+    /// radians about one of its own axes.
+    ///
+    /// Built by actually rotating gravity rather than by writing down its components, so the two
+    /// gestures below differ the way they do in a hand.
+    private func gravity(
+        lean: Double = 0,
+        turned angle: Double = 0,
+        about axis: SIMD3<Double> = .init(0, 0, 1)
+    ) -> CMAcceleration {
+        let down = SIMD3(0, -cos(lean), -sin(lean))
+        let unit = axis / max(length(axis), 1e-9)
+        let turned = down * cos(-angle)
+            + cross(unit, down) * sin(-angle)
+            + unit * dot(unit, down) * (1 - cos(-angle))
+
+        return CMAcceleration(x: turned.x, y: turned.y, z: turned.z)
     }
 
-    /// Gravity for a phone leaned `angle` radians back from vertical, screen toward the viewer.
-    private func leaned(_ angle: Double) -> CMAcceleration {
-        CMAcceleration(x: 0, y: -cos(angle), z: -sin(angle))
+    /// A wrist rolling the phone in the plane of its own screen: the gesture that used to do
+    /// nothing in one direction.
+    private func rolled(_ angle: Double, _ lean: Double = 0.9) -> CMAcceleration {
+        gravity(lean: lean, turned: angle, about: .init(0, 0, 1))
+    }
+
+    /// One long edge lifted off the table, the other gesture a hand calls tilting sideways.
+    private func lifted(_ angle: Double, _ lean: Double = 0.9) -> CMAcceleration {
+        gravity(lean: lean, turned: angle, about: .init(0, 1, 0))
     }
 
     private func pose(_ gravity: CMAcceleration) -> CoinageTilt.Pose {
         CoinageTilt.Pose(gravity: gravity)
     }
 
+    private func magnitude(_ turn: CoinageTilt.Turn) -> Double { length(turn) }
+
+    /// Feeds a pose for `seconds`, one reading per frame, as if the phone were held there.
+    private func hold(_ tilt: CoinageTilt, at gravity: CMAcceleration, for seconds: Double) {
+        for _ in 0 ..< Int(seconds * 60) {
+            tilt.absorb(pose(gravity), after: 1.0 / 60)
+        }
+    }
+
+    /// Feeds a sweep between two angles over `seconds`, as a hand actually moves.
+    private func sweep(
+        _ tilt: CoinageTilt,
+        from start: Double,
+        to end: Double,
+        over seconds: Double,
+        by gesture: (Double) -> CMAcceleration
+    ) {
+        let steps = Int(seconds * 60)
+
+        for step in 1 ... steps {
+            let angle = start + (end - start) * Double(step) / Double(steps)
+            tilt.absorb(pose(gesture(angle)), after: 1.0 / 60)
+        }
+    }
+
     @Test("However the phone is first picked up, the light starts square")
     func firstReadingIsNeutral() {
-        for held in [sideways(0), sideways(.pi / 5), leaned(1.1)] {
+        for start in [rolled(0), rolled(.pi / 5), gravity(lean: 1.1)] {
             let tilt = CoinageTilt()
-            tilt.absorb(pose(held), after: 1.0 / 60)
+            tilt.absorb(pose(start), after: 1.0 / 60)
             tilt.advance(by: 1)
 
-            #expect(abs(tilt.angles.yaw) < 1e-6)
-            #expect(abs(tilt.angles.pitch) < 1e-6)
+            #expect(magnitude(tilt.turn) < 1e-6)
         }
     }
 
-    @Test("A tilt moves the light, and the same tilt either way moves it the same amount")
-    func tiltsAreSymmetric() {
-        func offset(_ angle: Double) -> CGFloat {
-            let tilt = CoinageTilt()
-            tilt.absorb(pose(sideways(0)), after: 1.0 / 60)
-            tilt.absorb(pose(sideways(angle)), after: 1.0 / 60)
-            tilt.advance(by: 1)
+    @Test("Tilting one way and the other is the same movement mirrored, at any lean")
+    func tiltingBothWaysIsSymmetric() {
+        // The fault this replaces: a sideways movement turned the studio about the screen's long
+        // axis, which slides the reflection along a wall of even brightness one way and across the
+        // room the other. Measured over a coin's whole face, forty degrees changed it by 0.31 one
+        // way and 0.10 the other; correcting the sense only swapped which hand was dead.
+        for lean in [0.0, 0.5, 0.9, 1.4] {
+            for gesture in [rolled, lifted] {
+                let neutral = pose(gesture(0, lean))
+                let left = neutral.turn(to: pose(gesture(-0.4, lean)))
+                let right = neutral.turn(to: pose(gesture(0.4, lean)))
 
-            return tilt.angles.yaw
+                #expect(abs(magnitude(left) - magnitude(right)) < 1e-9)
+                #expect(abs(left.z + right.z) < 1e-9)
+            }
         }
-
-        #expect(offset(.pi / 8) > 0)
-        #expect(abs(offset(.pi / 8) + offset(-.pi / 8)) < 1e-6)
     }
 
-    @Test("Leaning back and forward move the light opposite ways")
-    func leaningMovesTheLight() {
-        func offset(_ angle: Double) -> CGFloat {
-            let tilt = CoinageTilt()
-            tilt.absorb(pose(leaned(0.5)), after: 1.0 / 60)
-            tilt.absorb(pose(leaned(0.5 + angle)), after: 1.0 / 60)
-            tilt.advance(by: 1)
+    @Test("A sideways movement rolls the studio about the axis the coin faces")
+    func sidewaysRollsAboutTheViewAxis() {
+        // A roll about the axis a coin faces cannot care which way it went, which is what makes
+        // the response symmetric.
+        for lean in [0.0, 0.5, 0.9, 1.4] {
+            // A roll in the plane of the screen leaves the lean alone, so it is pure roll.
+            let turn = pose(rolled(0, lean)).turn(to: pose(rolled(0.4, lean)))
 
-            return tilt.angles.pitch
+            #expect(magnitude(turn) > 1e-6)
+            #expect(abs(turn.x) < 1e-9)
+            #expect(abs(turn.y) < 1e-9)
+
+            // Lifting an edge leans the phone as well, so that one carries a pitch besides. It
+            // does nothing at all on an upright phone, where it turns about gravity itself.
+            let lift = pose(lifted(0, lean)).turn(to: pose(lifted(0.4, lean)))
+
+            #expect(abs(lift.z) > 1e-3 || lean < 0.3)
         }
-
-        #expect(offset(0.3) > 0)
-        #expect(offset(-0.3) < 0)
     }
 
-    @Test("Held at any angle long enough, the light settles back to square")
-    func neutralFollowsHowThePhoneIsHeld() {
+    @Test("Dipping an edge rolls the room the way the hand went")
+    func rollFollowsTheHand() {
+        let flat = pose(lifted(0, .pi / 2)).turn(to: pose(lifted(0.4, .pi / 2)))
+
+        #expect(flat.z > 0)
+    }
+
+    @Test("Leaning back pitches the studio without rolling it")
+    func leanIsPurePitch() {
+        let back = pose(gravity(lean: 0)).turn(to: pose(gravity(lean: 0.4)))
+
+        #expect(back.x > 0)
+        #expect(abs(back.z) < 1e-9)
+    }
+
+    @Test("Held at a new angle, the light is square again within a couple of seconds")
+    func heldBecomesSquare() {
         let tilt = CoinageTilt()
-        tilt.absorb(pose(sideways(0)), after: 1.0 / 60)
-        tilt.absorb(pose(sideways(.pi / 6)), after: 1.0 / 60)
+        tilt.absorb(pose(gravity(lean: 0)), after: 1.0 / 60)
+        sweep(tilt, from: 0, to: .pi / 6, over: 0.4) { gravity(lean: $0) }
         tilt.advance(by: 1)
 
-        let atFirst = tilt.angles.yaw
-        #expect(atFirst > 0.1)
+        #expect(magnitude(tilt.turn) > 0.4)
 
-        // Three times the window, so about a twentieth of the offset is left. Neutral chases
-        // exponentially, it does not arrive.
-        for _ in 0 ..< Int(CoinageTilt.recentre * 3 * 60) {
-            tilt.absorb(pose(sideways(.pi / 6)), after: 1.0 / 60)
-        }
-
+        hold(tilt, at: gravity(lean: .pi / 6), for: 3)
         tilt.advance(by: 1)
-        #expect(tilt.angles.yaw < atFirst / 10)
+
+        #expect(magnitude(tilt.turn) < 0.05)
     }
 
-    @Test("Neutral moves slowly enough that a flick of the wrist still shows")
-    func aQuickTiltStillReads() {
+    @Test("Going away and coming back leaves the resting position square")
+    func returningIsSquareAgain() {
         let tilt = CoinageTilt()
-        tilt.absorb(pose(sideways(0)), after: 1.0 / 60)
+        hold(tilt, at: rolled(0), for: 1)
 
-        // A fifth of a second of tilting, far inside the window.
-        for _ in 0 ..< 12 {
-            tilt.absorb(pose(sideways(.pi / 6)), after: 1.0 / 60)
-        }
-
+        sweep(tilt, from: 0, to: -.pi / 4, over: 0.4) { rolled($0) }
+        hold(tilt, at: rolled(-.pi / 4), for: 0.3)
+        sweep(tilt, from: -.pi / 4, to: 0, over: 0.4) { rolled($0) }
+        hold(tilt, at: rolled(0), for: 1.5)
         tilt.advance(by: 1)
-        #expect(tilt.angles.yaw > 0.5)
+
+        // The excursion must not have dragged the resting position with it.
+        #expect(magnitude(tilt.turn) < 0.05)
     }
 
-    @Test("Sideways reaches the ends of its travel and goes no further")
-    func sidewaysIsBounded() {
-        // Past the range, not at it: one reading has already nudged neutral, so a tilt of
-        // exactly the range falls a hair short of the end of the travel.
-        for angle in [Double(CoinageTilt.range) * 1.2, .pi / 3, .pi / 2] {
+    @Test("A deliberate tilt reads in full rather than being followed")
+    func movementIsNotChased() {
+        let tilt = CoinageTilt()
+        hold(tilt, at: gravity(lean: 0), for: 1)
+        sweep(tilt, from: 0, to: .pi / 4, over: 0.5) { gravity(lean: $0) }
+        tilt.advance(by: 1)
+
+        #expect(abs(magnitude(tilt.turn) - CoinageTilt.travel) < 1e-6)
+    }
+
+    @Test("A tilt reaches the ends of the travel and goes no further")
+    func travelIsBounded() {
+        for angle in [CoinageTilt.range, .pi / 3, .pi / 2] {
             let tilt = CoinageTilt()
-            tilt.absorb(pose(sideways(0)), after: 1.0 / 60)
-            tilt.absorb(pose(sideways(angle)), after: 1.0 / 60)
+            hold(tilt, at: gravity(lean: 0), for: 1)
+            sweep(tilt, from: 0, to: angle, over: 0.4) { gravity(lean: $0) }
             tilt.advance(by: 1)
 
-            #expect(abs(tilt.angles.yaw - CoinageTilt.travel) < 1e-6)
+            #expect(abs(magnitude(tilt.turn) - CoinageTilt.travel) < 1e-6)
         }
     }
 
-    @Test("Neutral averages bearings as directions, so the half-turn wrap is not a jump")
-    func neutralHandlesTheWrap() {
-        // Either side of the wrap: one just under half a turn, one just over.
-        var neutral = CoinageTilt.Neutral(pose: pose(sideways(.pi - 0.05)))
-        neutral.absorb(pose(sideways(-.pi + 0.05)), blend: 0.5)
+    @Test("Leaning the phone right through flat never jumps")
+    func leaningThroughFlatIsContinuous() {
+        // The fault this replaces: a bearing between two shrinking components, which turned a five
+        // degree roll into twenty-seven degrees leaned back and a hundred and seventy past flat.
+        let neutral = pose(gravity(lean: 0))
+        var previous = magnitude(neutral.turn(to: pose(gravity(lean: 0))))
 
-        #expect(abs(abs(neutral.sideways) - .pi) < 0.06)
+        for step in 1 ... 40 {
+            let current = magnitude(neutral.turn(to: pose(gravity(lean: Double(step) * 0.05))))
+
+            #expect(current - previous > -1e-9)
+            #expect(current - previous < 0.06)
+            previous = current
+        }
     }
 
-    @Test("Flat on a table the sideways angle holds still rather than chasing noise")
-    func flatKeepsItsBearing() {
-        let tilt = CoinageTilt()
-        tilt.absorb(pose(sideways(0)), after: 1.0 / 60)
-        tilt.absorb(pose(sideways(.pi / 6)), after: 1.0 / 60)
-        tilt.advance(by: 1)
+    @Test("Flat on a table the light sits square rather than chasing noise")
+    func flatIsSquare() {
+        let flat = pose(CMAcceleration(x: 0, y: 0, z: -1))
 
-        let held = tilt.angles.yaw
-        tilt.absorb(pose(CMAcceleration(x: 0, y: 0, z: -1)), after: 1.0 / 60)
-        tilt.advance(by: 1)
-
-        #expect(tilt.angles.yaw == held)
+        #expect(magnitude(flat.turn(to: flat)) < 1e-9)
     }
 }
 

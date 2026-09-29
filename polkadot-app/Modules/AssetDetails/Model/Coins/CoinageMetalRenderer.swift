@@ -121,7 +121,7 @@ final class CoinageMetalRenderer {
         in view: MTKView,
         viewport: CGSize,
         dpr: CGFloat,
-        light: CoinageTilt.Angles
+        light: CoinageTilt.Turn
     ) {
         ensureCapacity(batches.reduce(0) { $0 + $1.instances.count })
 
@@ -146,8 +146,7 @@ final class CoinageMetalRenderer {
         params.viewportWidth = Float(viewport.width)
         params.viewportHeight = Float(viewport.height)
         params.dpr = Float(dpr)
-        params.lightYaw = Float(light.yaw)
-        params.lightPitch = Float(light.pitch)
+        params.lightTurn = SIMD3(Float(light.x), Float(light.y), Float(light.z))
 
         let packed = params.packed()
         let metals = store.metalRows

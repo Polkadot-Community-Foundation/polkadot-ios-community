@@ -18,8 +18,9 @@ struct CoinParams {
   float dpr;             // device pixels per point
   float tilePx;          // atlas tile size (512)
   float envMaxLod;       // cube levels − 1 (6)
-  float lightYaw;        // studio turned about y, from the phone's own tilt
-  float lightPitch;      // and about x, from how far it is leaned back
+  float lightTurnX;      // studio turned with the phone: an axis scaled by the angle turned
+  float lightTurnY;      // about it, so a wrist roll and a lifted edge stay different turns
+  float lightTurnZ;
   float exposure, luster, rimLuster, lusterMinPx, studioRadius, studioScale;
   float basin, rollGloss, rollReliefHaze, envSharpen, haze, polish, tone, grime;
   float engraveDark, frost, wallRough, aaVariance, aaThreshold, reliefBias;
@@ -161,18 +162,18 @@ static void addStreaks(float2 local, float amount, float seed, thread float2 &sl
   }
 }
 
-static float3 yawDir(float3 d, float yaw) {
-  float c = cos(yaw), s = sin(yaw);
-  return float3(d.x * c + d.z * s, d.y, d.z * c - d.x * s);
+// Turns the studio with the phone, about the axis the phone actually turned about. Replaces
+// upstream's yawDir, which this generalises: a turn about y is the case where the axis is y.
+static float3 tiltDir(float3 d, float3 turn) {
+  float angle = length(turn);
+  if (angle < 1e-6) return d;
+  float3 axis = turn / angle;
+  float c = cos(angle), s = sin(angle);
+  return d * c + cross(axis, d) * s + axis * dot(axis, d) * (1.0 - c);
 }
 
-// Turns the studio with the phone: yaw about y swings the light sideways, pitch about x lifts it
-// over the coin or drops it below. Both are needed, because a phone is tilted in two directions and
-// a coin in the hand catches the light differently for each.
-static float3 tiltDir(float3 d, float yaw, float pitch) {
-  float3 turned = yawDir(d, yaw);
-  float c = cos(pitch), s = sin(pitch);
-  return float3(turned.x, turned.y * c - turned.z * s, turned.y * s + turned.z * c);
+static float3 lightTurn(constant CoinParams &P) {
+  return float3(P.lightTurnX, P.lightTurnY, P.lightTurnZ);
 }
 
 static float3 envBRDFApprox(float3 f0, float rough, float ndv) {
@@ -200,7 +201,7 @@ static float3 srgbEncode(float3 c) {
 }
 
 static float3 envAt(texturecube<float> env, sampler s, constant CoinParams &P, float3 p, float pp, float3 Rw, float r) {
-  float3 R = tiltDir(Rw, P.lightYaw, P.lightPitch);
+  float3 R = tiltDir(Rw, lightTurn(P));
   float b = dot(p, R);
   float t = -b + sqrt(max(b * b - pp, 0.0));
   float3 dir = normalize(p + R * t);
@@ -298,7 +299,7 @@ fragment float4 coinFragment(VertexOut in [[stage_in]],
   float roughness = sqrt(sqrt(a2));
   float3 v = float3(0.0, 0.0, 1.0);
   float ndv = max(dot(nW, v), 1e-4);
-  float3 p = tiltDir(toWorld(in, lp * float3(1.0, 1.0, thick)) * P.studioScale, P.lightYaw, P.lightPitch);
+  float3 p = tiltDir(toWorld(in, lp * float3(1.0, 1.0, thick)) * P.studioScale, lightTurn(P));
   float pp = dot(p, p) - P.studioRadius * P.studioRadius;
 
   float3 prefiltered = float3(0.0);
