@@ -27,7 +27,7 @@ extension ChatCallInteractor {
 
     func unmute(notifiesCallKit: Bool) async {
         guard !permissionsService.isMicrophoneGranted else {
-            await setMuted(false, notifiesCallKit: notifiesCallKit)
+            await unmuteWithGrantedMicrophone(notifiesCallKit: notifiesCallKit)
             return
         }
 
@@ -45,12 +45,19 @@ extension ChatCallInteractor {
 
         switch microphoneAccess {
         case .granted:
-            await setMuted(false, notifiesCallKit: true)
+            await unmuteWithGrantedMicrophone(notifiesCallKit: true)
         case .denied:
             await presenter?.didRequireMicrophoneAccess()
         case .refused,
              .deferred:
             logger.warning("Microphone access not granted, staying muted")
         }
+    }
+}
+
+private extension ChatCallInteractor {
+    func unmuteWithGrantedMicrophone(notifiesCallKit: Bool) async {
+        audioSessionManager.enableAudioIfPermitted()
+        await setMuted(false, notifiesCallKit: notifiesCallKit)
     }
 }
