@@ -15,7 +15,6 @@ protocol ChatEngineProtocol {
     func unblockUser() async throws
     func acceptChatRequest() async throws
     func declineChatRequest() async throws
-    func hasPendingOutgoingChatRequest() async -> Bool
     func chatMetadataStream() -> AnyAsyncSequence<ChatMetadata?>
     func footerStream() async throws -> AnyAsyncSequence<(any HashableContentConfiguration)?>?
     func processAction(_ action: Chat.Action) async
@@ -235,10 +234,6 @@ extension ChatEngine: ChatEngineProtocol {
         }
 
         try await blockUserService.unblockUser(accountId: accountId)
-    }
-
-    func hasPendingOutgoingChatRequest() async -> Bool {
-        await chatRequestContext.hasPendingRequest()
     }
 
     func acceptChatRequest() async throws {

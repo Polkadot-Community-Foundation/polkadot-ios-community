@@ -50,14 +50,6 @@ final class ChatInteractor {
 }
 
 private extension ChatInteractor {
-    func resolveCallPermissions() async {
-        let isGranted = await permissionsService.ensurePermissions(for: .audio)
-
-        if !isGranted {
-            logger.warning("Microphone permission not granted while establishing the chat")
-        }
-    }
-
     func subscribeMetadata() {
         metadataTask = Task { [weak self, logger, engine, usernameStorage] in
             guard let currentUsername = usernameStorage.username?.value else {
@@ -164,10 +156,6 @@ extension ChatInteractor: ChatInteractorInputProtocol {
                     } else {
                         content = .text(text ?? "")
                     }
-                }
-
-                if await self.engine.hasPendingOutgoingChatRequest() {
-                    await self.resolveCallPermissions()
                 }
 
                 try await self.engine.sendUserMessage(with: content)
@@ -340,7 +328,6 @@ extension ChatInteractor: ChatInteractorInputProtocol {
         Task {
             do {
                 try await engine.acceptChatRequest()
-                await resolveCallPermissions()
             } catch {
                 logger.error("Unexpect error while accepting request: \(error)")
             }
