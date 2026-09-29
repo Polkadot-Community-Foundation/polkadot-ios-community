@@ -86,18 +86,29 @@ enum CoinageScene {
         let hops: Int
     }
 
+    /// The one mesh every coin is drawn with.
+    ///
+    /// The reference picks between four by how many pixels a coin covers, and caps the choice while
+    /// coins are moving. At the sizes drawn here that buys nothing: a sixty-sample outline is a
+    /// tenth of a pixel off a true circle on the largest coin in the grid, where the finest mesh is
+    /// also five times the triangles. Picking per coin only earned a mesh change partway through
+    /// every flight.
+    ///
+    /// Worth revisiting for a detail view, where one coin fills the screen and sixty samples would
+    /// start to show at about two thirds of a pixel. ``CoinageLevelOfDetail`` keeps the reference's
+    /// rule and its vectors for that day.
+    static let levelOfDetail = CoinageLevelOfDetail.mid
+
     /// Everything that is true of the whole frame rather than of one coin.
     struct Frame {
         let dpr: CGFloat
-        /// How many coins are still travelling, which caps the mesh detail for all of them.
-        let movingCoins: Int
     }
 
     /// Reads the field's live spring values rather than the layout's targets, so what is drawn is
     /// wherever each coin has actually got to.
     static func batches(
         for field: CoinageCoinField,
-        frame: Frame,
+        frame _: Frame,
         designs: [CoinageAssetStore.Design]
     ) -> [CoinageMetalRenderer.Batch] {
         var batches: [String: CoinageMetalRenderer.Batch] = [:]
@@ -114,28 +125,13 @@ enum CoinageScene {
             guard let design = designs[safe: exponent] else { continue }
 
             let geometry = geometry(forExponent: member.coin.exponent)
-            let channels = member.channels
-            let visible = CoinageLevelOfDetail.visibleWidth(
-                height: channels.height.value,
-                faceWidth: geometry.faceWidth,
-                thickness: channels.thickness.value * CGFloat(design.thickness),
-                turn: channels.turn.value
-            )
-            let detail = CoinageLevelOfDetail.forCoin(
-                heightPixels: channels.height.value * frame.dpr,
-                visibleWidthPixels: visible * frame.dpr
-            )
             let distance = field.distanceToTarget(member)
-            let level = detail.capped(
-                inFlight: distance > CoinageCoinField.settled,
-                movingCoins: frame.movingCoins
-            )
-            let key = "\(geometry.rawValue)|\(level.rawValue)"
+            let key = "\(geometry.rawValue)|\(Self.levelOfDetail.rawValue)"
 
             if batches[key] == nil {
                 batches[key] = CoinageMetalRenderer.Batch(
                     geometry: geometry.rawValue,
-                    levelOfDetail: level,
+                    levelOfDetail: Self.levelOfDetail,
                     instances: []
                 )
                 order.append(key)

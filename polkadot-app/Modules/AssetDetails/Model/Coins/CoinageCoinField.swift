@@ -65,16 +65,39 @@ final class CoinageCoinField {
     /// luster. Half a point, as the reference has it.
     static let settled: CGFloat = 0.5
 
+    /// Which end of the field sets off first.
+    ///
+    /// Coins leave in display order and return in reverse, so in both directions the ones with
+    /// furthest to go start first. Spreading into the grid the far end has the long haul, and
+    /// gathering back into the strip it is the near end; taking the same end each way left the long
+    /// travellers setting off last and arriving well after everything else had settled.
+    enum Stagger {
+        case fromFront
+        case fromBack
+
+        func position(of order: Int, of count: Int) -> Int {
+            switch self {
+            case .fromFront: order
+            case .fromBack: count - 1 - order
+            }
+        }
+    }
+
     /// Re-aims every coin. A coin already in the field keeps where it has got to and simply gets a
     /// new destination, so a tap mid-flight re-aims rather than restarting. A coin new to the field
     /// arrives from off the right edge at a fraction of its size and fully worn, and settles in.
-    func retarget(_ targets: [(coin: CoinageScene.Coin, target: Target)], spawningFrom edge: CGFloat) {
+    func retarget(
+        _ targets: [(coin: CoinageScene.Coin, target: Target)],
+        spawningFrom edge: CGFloat,
+        stagger: Stagger
+    ) {
         var updated: [Member] = []
         var lookup: [String: Int] = [:]
         let count = max(targets.count, 1)
 
         for (order, entry) in targets.enumerated() {
-            let hold = CGFloat(order) / CGFloat(count) * CoinageSpring.stagger
+            let hold = CGFloat(stagger.position(of: order, of: count))
+                / CGFloat(count) * CoinageSpring.stagger
 
             if let existing = index[entry.coin.id], existing < members.count {
                 var member = members[existing]
@@ -124,16 +147,12 @@ final class CoinageCoinField {
         return moving
     }
 
-    /// How far a coin still has to travel, which decides its mesh detail and its luster.
+    /// How far a coin still has to travel, which decides how much luster it has picked up.
     func distanceToTarget(_ member: Member) -> CGFloat {
         let across = member.channels.centreX.value - member.target.centre.x
         let down = member.channels.centreY.value - member.target.centre.y
 
         return (across * across + down * down).squareRoot()
-    }
-
-    var movingCoins: Int {
-        members.count { distanceToTarget($0) > Self.settled }
     }
 }
 

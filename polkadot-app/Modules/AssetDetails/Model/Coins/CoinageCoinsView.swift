@@ -56,10 +56,10 @@ struct CoinageCoinsView: UIViewRepresentable {
         view.enableSetNeedsDisplay = false
         view.isPaused = true
 
-        if let device = view.device,
-           device.supportsTextureSampleCount(CoinageMetalRenderer.sampleCount) {
-            view.sampleCount = CoinageMetalRenderer.sampleCount
-        }
+        // Whatever the pipeline was built for. Asking the device again here could answer
+        // differently, and a pipeline and a render pass that disagree on samples fail validation at
+        // the draw call rather than anywhere that would explain it.
+        view.sampleCount = context.coordinator.renderer?.sampleCount ?? 1
 
         view.delegate = context.coordinator
         context.coordinator.attach(to: view)
@@ -111,9 +111,10 @@ extension CoinageCoinsView {
 
         func attach(to view: MTKView) {
             self.view = view
+            // The studio turns with the phone even when nothing else is moving, and the view sleeps
+            // whenever nothing is moving, so motion has to wake it rather than be waited for.
+            tilt.onMove = { [weak self] in self?.run() }
             tilt.start()
-            // The studio turns with the phone even when nothing else is moving, so the view keeps
-            // drawing while a hand is moving and stops when it holds still.
             run()
         }
 
@@ -152,10 +153,7 @@ extension CoinageCoinsView {
 
             let batches = CoinageScene.batches(
                 for: field,
-                frame: CoinageScene.Frame(
-                    dpr: view.contentScaleFactor,
-                    movingCoins: field.movingCoins
-                ),
+                frame: CoinageScene.Frame(dpr: view.contentScaleFactor),
                 designs: renderer.store.designs
             )
 
@@ -164,7 +162,7 @@ extension CoinageCoinsView {
                 in: view,
                 viewport: size,
                 dpr: view.contentScaleFactor,
-                lightYaw: tilt.yaw
+                light: tilt.angles
             )
 
             if !field.isMoving, !moved {
@@ -222,7 +220,13 @@ private extension CoinageCoinsView.Coordinator {
             stripHeight: stripHeight
         )
 
-        field.retarget(result.targets, spawningFrom: width)
+        field.retarget(
+            result.targets,
+            spawningFrom: width,
+            // Spreading out, the last coins have furthest to travel; gathering back in, the first
+            // ones do. Either way the long haul sets off first.
+            stagger: isExpanded ? .fromBack : .fromFront
+        )
         report(
             CoinageCoinsView.Metrics(
                 height: result.height,

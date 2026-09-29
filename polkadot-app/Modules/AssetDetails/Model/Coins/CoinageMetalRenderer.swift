@@ -44,13 +44,22 @@ final class CoinageMetalRenderer {
     private let sampler: MTLSamplerState
     private var instanceRing: [MTLBuffer]
     private var ringSlot = 0
+    /// Holds the CPU back when it is a whole ring ahead of the GPU. Without it the instances being
+    /// written are the ones a command buffer in flight is still reading.
+    private let framesAvailable = DispatchSemaphore(value: framesInFlight)
     private var hasGeneratedMipmaps = false
 
     /// Three frames in flight, so the CPU can write next frame's instances while the GPU reads this
     /// one's. `setVertexBytes` would cap a draw at sixty-four coins.
     private static let framesInFlight = 3
-    private static let maximumCoins = 1_200
-    static let sampleCount = 4
+
+    /// What the instance ring starts at. It grows to fit rather than dropping coins on the floor.
+    private static let initialCoins = 600
+
+    /// Multisampling, if the device has it. Asked once and used for both the pipeline and the view:
+    /// a pipeline built for four samples against a render pass with one is a validation failure at
+    /// the draw call, and nothing before it would say so.
+    private(set) var sampleCount = 1
 
     init(bundle: Bundle = .main) throws {
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
@@ -68,20 +77,43 @@ final class CoinageMetalRenderer {
             throw Failure.shaderMissing("coinVertex/coinFragment")
         }
 
-        pipeline = try Self.makePipeline(device: device, vertex: vertex, fragment: fragment)
+        sampleCount = device.supportsTextureSampleCount(4) ? 4 : 1
+        pipeline = try Self.makePipeline(
+            device: device,
+            vertex: vertex,
+            fragment: fragment,
+            sampleCount: sampleCount
+        )
         depthState = Self.makeDepthState(device: device)
         sampler = Self.makeSampler(device: device)
 
-        let stride = MemoryLayout<Instance>.stride
         instanceRing = (0 ..< Self.framesInFlight).compactMap {
-            let buffer = device.makeBuffer(
-                length: stride * Self.maximumCoins,
-                options: .storageModeShared
-            )
-            buffer?.label = "coin instances \($0)"
-
-            return buffer
+            Self.makeInstanceBuffer(device: device, coins: Self.initialCoins, slot: $0)
         }
+    }
+
+    /// Enough room for every coin, grown if a wallet outgrows it.
+    ///
+    /// A fixed ceiling meant a large enough wallet silently lost whatever did not fit, which is a
+    /// worse answer than a slightly larger allocation.
+    private func ensureCapacity(_ coins: Int) {
+        let needed = coins * MemoryLayout<Instance>.stride
+
+        guard let current = instanceRing.first, current.length < needed else { return }
+
+        instanceRing = (0 ..< Self.framesInFlight).compactMap {
+            Self.makeInstanceBuffer(device: device, coins: coins * 2, slot: $0)
+        }
+    }
+
+    private static func makeInstanceBuffer(device: MTLDevice, coins: Int, slot: Int) -> MTLBuffer? {
+        let buffer = device.makeBuffer(
+            length: MemoryLayout<Instance>.stride * max(coins, 1),
+            options: .storageModeShared
+        )
+        buffer?.label = "coin instances \(slot)"
+
+        return buffer
     }
 
     func draw(
@@ -89,14 +121,19 @@ final class CoinageMetalRenderer {
         in view: MTKView,
         viewport: CGSize,
         dpr: CGFloat,
-        lightYaw: CGFloat
+        light: CoinageTilt.Angles
     ) {
+        ensureCapacity(batches.reduce(0) { $0 + $1.instances.count })
+
         guard let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let command = queue.makeCommandBuffer()
         else {
             return
         }
+
+        framesAvailable.wait()
+        command.addCompletedHandler { [framesAvailable] _ in framesAvailable.signal() }
 
         // The atlas ships without mips, and the box filter has to be the GPU's, unnormalised.
         if !hasGeneratedMipmaps, let blit = command.makeBlitCommandEncoder() {
@@ -109,7 +146,8 @@ final class CoinageMetalRenderer {
         params.viewportWidth = Float(viewport.width)
         params.viewportHeight = Float(viewport.height)
         params.dpr = Float(dpr)
-        params.lightYaw = Float(lightYaw)
+        params.lightYaw = Float(light.yaw)
+        params.lightPitch = Float(light.pitch)
 
         let packed = params.packed()
         let metals = store.metalRows
@@ -152,8 +190,15 @@ private extension CoinageMetalRenderer {
         var offset = 0
 
         for batch in batches {
+            // The ring was sized for every coin in this frame, so a batch that does not fit means
+            // the sizing and the encoding disagree. Stopping is right: carrying on would write past
+            // the buffer, and dropping this one alone would leave a hole with no explanation.
+            guard offset + batch.instances.count * stride <= ring.length else {
+                assertionFailure("coin instances outgrew their buffer mid-frame")
+                break
+            }
+
             guard !batch.instances.isEmpty,
-                  offset + batch.instances.count * stride <= ring.length,
                   let mesh = try? store.mesh(
                       geometry: batch.geometry,
                       levelOfDetail: batch.levelOfDetail
@@ -189,7 +234,8 @@ private extension CoinageMetalRenderer {
     static func makePipeline(
         device: MTLDevice,
         vertex: MTLFunction,
-        fragment: MTLFunction
+        fragment: MTLFunction,
+        sampleCount: Int
     ) throws -> MTLRenderPipelineState {
         let layout = MTLVertexDescriptor()
 

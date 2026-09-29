@@ -34,7 +34,7 @@ final class CoinageAssetStore {
 
     private let bundle: Bundle
     private let meshCatalogue: [String: [String: MeshEntry]]
-    private var meshes: [String: Mesh] = [:]
+    private let meshes: [String: Mesh]
 
     init(device: MTLDevice, bundle: Bundle = .main) throws {
         self.device = device
@@ -51,6 +51,11 @@ final class CoinageAssetStore {
         metalRows = metals.flatMap { $0.reflectance + [$0.roughness] + $0.tone + [0] }
         designs = rawDesigns.map(Design.init(raw:))
         meshCatalogue = Dictionary(uniqueKeysWithValues: rawMeshes.map { ($0.id, $0.lods) })
+        meshes = try meshCatalogue.reduce(into: [:]) { loaded, entry in
+            for (lod, mesh) in entry.value {
+                loaded["\(entry.key)-\(lod)"] = try Self.load(mesh, device: device, bundle: bundle)
+            }
+        }
         reliefAtlas = try Self.loadReliefAtlas(device: device, bundle: bundle)
         environment = try Self.loadEnvironment(
             device: device,
@@ -59,22 +64,22 @@ final class CoinageAssetStore {
         )
     }
 
-    /// Meshes are loaded on first use and kept: there are at most seven shapes times four levels of
-    /// detail, and a strip typically touches five to ten of them.
+    /// Every mesh, already loaded. A lookup, never a read.
+    ///
+    /// They used to load on first use, which put a file read and four buffer allocations inside a
+    /// draw. That is invisible while a coin keeps the same mesh and brutal when a field of them
+    /// changes level of detail at once: coins fly out, the in-flight detail cap relaxes as they
+    /// land, and two megabytes of high meshes are read in the middle of a frame. Every coin freezes
+    /// for as long as it takes, including the ones already moving.
+    ///
+    /// All twenty-eight come to about three megabytes, which is cheaper to hold than to fetch at
+    /// the wrong moment.
     func mesh(geometry: String, levelOfDetail: CoinageLevelOfDetail) throws -> Mesh {
-        let lod = Self.lodNames[levelOfDetail.rawValue]
-        let key = "\(geometry)-\(lod)"
+        let key = "\(geometry)-\(Self.lodNames[levelOfDetail.rawValue])"
 
-        if let loaded = meshes[key] { return loaded }
+        guard let loaded = meshes[key] else { throw Failure.missingAsset("mesh \(key)") }
 
-        guard let entry = meshCatalogue[geometry]?[lod] else {
-            throw Failure.missingAsset("mesh \(key)")
-        }
-
-        let mesh = try load(entry)
-        meshes[key] = mesh
-
-        return mesh
+        return loaded
     }
 
     private static let lodNames = ["high", "mid", "low", "sliver"]
@@ -92,6 +97,7 @@ extension CoinageAssetStore {
         let tilePixels: Float
         let environmentMaxLod: Float
         var lightYaw: Float = 0
+        var lightPitch: Float = 0
         let material: [Float]
         var backdrop: [Float] = [0, 0, 0]
         var debug: Int32 = 0
@@ -110,11 +116,26 @@ extension CoinageAssetStore {
             ]
         }
 
+        /// The struct's own alignment, from the `float2` it opens with.
+        ///
+        /// Metal rounds a struct's size up to its alignment, and on a device it refuses a bound
+        /// buffer smaller than the argument the shader declares — it fails at the draw call, with
+        /// nothing before it to say why. The simulator does not check, so the mismatch only shows
+        /// on hardware. Padding to the same rule the shader uses keeps the two the same size
+        /// however many fields are added.
+        static let alignment = MemoryLayout<Float>.size * 2
+
         func packed() -> [Float] {
-            var out: [Float] = [viewportWidth, viewportHeight, dpr, tilePixels, environmentMaxLod, lightYaw]
+            var out: [Float] = [
+                viewportWidth, viewportHeight, dpr, tilePixels, environmentMaxLod,
+                lightYaw, lightPitch
+            ]
             out += material
             out += backdrop
             out.append(Float(bitPattern: UInt32(bitPattern: debug)))
+
+            let stride = Self.alignment / MemoryLayout<Float>.size
+            out.append(contentsOf: Array(repeating: 0, count: out.count % stride))
 
             return out
         }
@@ -222,7 +243,7 @@ private extension CoinageAssetStore {
         return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
     }
 
-    func load(_ entry: MeshEntry) throws -> Mesh {
+    static func load(_ entry: MeshEntry, device: MTLDevice, bundle: Bundle) throws -> Mesh {
         let name = (entry.file as NSString).lastPathComponent
 
         guard let url = bundle.url(

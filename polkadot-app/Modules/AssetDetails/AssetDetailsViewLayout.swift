@@ -211,7 +211,19 @@ private struct CoinageBalanceBreakdownView: View {
     /// How the coins came out, reported by the view as it lays them out.
     @State private var coinMetrics = CoinageCoinsView.Metrics()
 
+    /// Anchors the card for the scroll that follows it down as it collapses.
+    private static let anchor = "coinageCard"
+
     var body: some View {
+        // Vends a proxy for the wallet's own scroll view rather than making one: collapsing the
+        // details shortens the page under the reader, and a scroll view already past the new bottom
+        // has to be walked down to it rather than dropped there.
+        ScrollViewReader { scroll in
+            card(scroll: scroll)
+        }
+    }
+
+    private func card(scroll: ScrollViewProxy) -> some View {
         VStack(spacing: DSSpacings.extraMedium) {
             // TODO: Remove along with `CoinageTestDataSwitch.swift`.
             CoinageTestDataSwitch(mode: $testDataMode)
@@ -234,7 +246,7 @@ private struct CoinageBalanceBreakdownView: View {
             // Above the coins rather than below them, so it stays on the same side whether they
             // are stacked into the strip or spread out one by one.
             Button {
-                withAnimation { showDetails.toggle() }
+                toggleDetails(scroll: scroll)
             } label: {
                 HStack(spacing: DSSpacings.extraSmall) {
                     Image(.iconArrowUp16)
@@ -253,17 +265,35 @@ private struct CoinageBalanceBreakdownView: View {
                 metrics: $coinMetrics
             )
             .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height))
-            // The coins report their own height once they have been laid out, which lands outside
-            // the toggle's animation. Without this the card resizes in one step: collapsing from a
-            // tall grid shortens the page under the reader, and a scroll view that was past the new
-            // bottom snaps to it. Animating the height instead lets the scroll view follow the
-            // content down, which is what it does for any other shrinking page.
-            .animation(.easeInOut(duration: 0.32), value: coinMetrics.height)
+            // Deliberately not animated. Expanding takes its full height at once, so the coins fly
+            // out into a box that is already the right size; animating it made the scroll view
+            // chase a growing content size and bounce against its own edge. Collapsing is animated,
+            // but from inside the toggle, where the scroll can be moved in the same breath.
             .overlay(alignment: .topLeading) { blockHeaders }
             .overlay(alignment: .topLeading) { pileCounts }
         }
         .padding(DSSpacings.mediumIncreased)
         .background(.bgSurfaceContainer, in: RoundedRectangle(cornerRadius: DSRadii.large))
+        .id(Self.anchor)
+    }
+
+    /// Collapsing has to shorten the card and move the scroll view in one animation.
+    ///
+    /// The coins report their height only after laying out, which lands outside any transaction, so
+    /// the card took the strip's height in a step of its own and the scroll view clamped to the new
+    /// bottom in one jump. Taking the strip's height here, and asking the scroll view for the card
+    /// in the same breath, makes the page shorten and the scroll follow it as one movement.
+    private func toggleDetails(scroll: ScrollViewProxy) {
+        let isCollapsing = showDetails
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            showDetails.toggle()
+
+            guard isCollapsing else { return }
+
+            coinMetrics.height = CoinageStripLayout.Options().height
+            scroll.scrollTo(Self.anchor, anchor: .bottom)
+        }
     }
 
     /// The Clearing and Ready headers over the grid. The layout leaves room for them above each

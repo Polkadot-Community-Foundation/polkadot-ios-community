@@ -10,6 +10,17 @@ enum CoinageArrangement {
     case strip
     case grid
 
+    /// How far in front of the strip the grid sits.
+    ///
+    /// A coin unturning from edge-on swings half of itself away from the viewer, so a coin that has
+    /// started moving used to cut through the neighbours still standing edge-on beside it. Carrying
+    /// it forward as it turns keeps it clear of them, and leaves the grid reading as the nearer of
+    /// the two arrangements. Comfortably more than the half-diameter a turning coin sweeps back.
+    ///
+    /// It costs nothing to look at: the projection is orthographic, so depth orders coins without
+    /// making the nearer ones larger.
+    static let gridLift: CGFloat = 40
+
     struct Result {
         let targets: [(coin: CoinageScene.Coin, target: CoinageCoinField.Target)]
         /// What the view needs to be tall enough for.
@@ -179,7 +190,7 @@ private extension CoinageArrangement {
                     wear: coin.wear,
                     luster: 1,
                     calm: 0,
-                    lift: -CGFloat(depth) * pile.depthStep,
+                    lift: CoinageArrangement.gridLift - CGFloat(depth) * pile.depthStep,
                     isHidden: position >= pile.shown
                 )
             )
@@ -223,7 +234,8 @@ private extension CoinageArrangement {
             thickness: 1,
             wear: coin.wear,
             luster: 1,
-            calm: 0
+            calm: 0,
+            lift: CoinageArrangement.gridLift
         )
     }
 }

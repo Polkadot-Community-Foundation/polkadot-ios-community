@@ -95,14 +95,4 @@ enum CoinageLevelOfDetail: Int, CaseIterable {
     ) -> CGFloat {
         height * (abs(cos(turn)) * faceWidth + abs(sin(turn)) * thickness)
     }
-
-    /// Motion hides mesh detail, so coins still travelling never take the finest one. Without the
-    /// cap a thousand-coin move between the strip and the grid drew millions of triangles a frame.
-    func capped(inFlight: Bool, movingCoins: Int) -> CoinageLevelOfDetail {
-        guard inFlight else { return self }
-
-        let ceiling: CoinageLevelOfDetail = movingCoins > 300 ? .low : .mid
-
-        return rawValue > ceiling.rawValue ? self : ceiling
-    }
 }

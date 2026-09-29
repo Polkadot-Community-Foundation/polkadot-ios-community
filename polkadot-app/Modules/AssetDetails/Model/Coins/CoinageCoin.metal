@@ -18,7 +18,8 @@ struct CoinParams {
   float dpr;             // device pixels per point
   float tilePx;          // atlas tile size (512)
   float envMaxLod;       // cube levels − 1 (6)
-  float lightYaw;        // 0
+  float lightYaw;        // studio turned about y, from the phone's own tilt
+  float lightPitch;      // and about x, from how far it is leaned back
   float exposure, luster, rimLuster, lusterMinPx, studioRadius, studioScale;
   float basin, rollGloss, rollReliefHaze, envSharpen, haze, polish, tone, grime;
   float engraveDark, frost, wallRough, aaVariance, aaThreshold, reliefBias;
@@ -165,6 +166,15 @@ static float3 yawDir(float3 d, float yaw) {
   return float3(d.x * c + d.z * s, d.y, d.z * c - d.x * s);
 }
 
+// Turns the studio with the phone: yaw about y swings the light sideways, pitch about x lifts it
+// over the coin or drops it below. Both are needed, because a phone is tilted in two directions and
+// a coin in the hand catches the light differently for each.
+static float3 tiltDir(float3 d, float yaw, float pitch) {
+  float3 turned = yawDir(d, yaw);
+  float c = cos(pitch), s = sin(pitch);
+  return float3(turned.x, turned.y * c - turned.z * s, turned.y * s + turned.z * c);
+}
+
 static float3 envBRDFApprox(float3 f0, float rough, float ndv) {
   float4 r = float4(-1.0, -0.0275, -0.572, 0.022) * rough + float4(1.0, 0.0425, 1.04, -0.04);
   float a004 = min(r.x * r.x, exp2(-9.28 * ndv)) * r.x + r.y;
@@ -190,7 +200,7 @@ static float3 srgbEncode(float3 c) {
 }
 
 static float3 envAt(texturecube<float> env, sampler s, constant CoinParams &P, float3 p, float pp, float3 Rw, float r) {
-  float3 R = yawDir(Rw, P.lightYaw);
+  float3 R = tiltDir(Rw, P.lightYaw, P.lightPitch);
   float b = dot(p, R);
   float t = -b + sqrt(max(b * b - pp, 0.0));
   float3 dir = normalize(p + R * t);
@@ -288,7 +298,7 @@ fragment float4 coinFragment(VertexOut in [[stage_in]],
   float roughness = sqrt(sqrt(a2));
   float3 v = float3(0.0, 0.0, 1.0);
   float ndv = max(dot(nW, v), 1e-4);
-  float3 p = yawDir(toWorld(in, lp * float3(1.0, 1.0, thick)) * P.studioScale, P.lightYaw);
+  float3 p = tiltDir(toWorld(in, lp * float3(1.0, 1.0, thick)) * P.studioScale, P.lightYaw, P.lightPitch);
   float pp = dot(p, p) - P.studioRadius * P.studioRadius;
 
   float3 prefiltered = float3(0.0);
