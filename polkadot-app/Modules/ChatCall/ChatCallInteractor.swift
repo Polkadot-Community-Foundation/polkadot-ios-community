@@ -324,11 +324,7 @@ private extension ChatCallInteractor {
     func ensureCallPermissions() async -> Bool {
         guard await permissionsService.ensurePermissions(for: callType) else {
             logger.warning("Microphone permission denied, ending the call")
-            // Decline through the shared end sequence so it never depends on the
-            // alert being dismissed (the alert can't present on a locked screen).
-            await performEndCall(notifiesCallKit: true, notifiesRemote: true) {
-                presenter?.didDenyMicrophonePermission()
-            }
+            await performEndCall(notifiesCallKit: true, notifiesRemote: true)
             return false
         }
 
