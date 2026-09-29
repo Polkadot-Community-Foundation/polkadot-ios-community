@@ -8,29 +8,42 @@ import Foundation
 /// Pure and free of the presenter's state, so the ordering and the value weighting can be
 /// exercised directly.
 enum CoinageBreakdownFactory {
+    /// Which half of the list a row belongs to. Holdings whose recycler we have no record of are
+    /// the least fungible thing we can say anything about, so they lead.
+    enum Standing: Int, Equatable {
+        case unknownHistory = 0
+        case knownLevel = 1
+    }
+
     /// A row before pricing: what it takes to order it and to draw it.
     struct Row: Equatable {
         let id: String
         let exponent: Int16
-        /// Tie-break within one value: spendable coins, then vouchers, then held-back coins.
-        let rank: Int
+        let standing: Standing
+        /// Descending within a standing: hop count for ``Standing/unknownHistory``, fungibility
+        /// bucket for ``Standing/knownLevel``. Both read "least fungible first".
+        let severity: Int
         let derivationIndex: CoinageKeyIndex
-        let status: CoinageHoldingViewModel.Status
+        let status: CoinageHoldingStatus
     }
 
-    /// Coins and vouchers interleaved into one list: by value descending, then by class, then by
-    /// derivation index so equal holdings keep a stable order across refreshes.
+    /// One list, ordered least fungible first: unknown histories lead, deepest first, then
+    /// everything whose level we know, by bucket. Value breaks ties, then derivation index so
+    /// equal holdings keep a stable order across refreshes.
     static func rows(from holdings: CoinageHoldings) -> [Row] {
         let coinRows = holdings.coins.map { holding in
-            Row(
+            let bucket = bucket(for: holding.coin)
+
+            return Row(
                 id: "coin-\(holding.coin.derivationIndex)",
                 exponent: holding.coin.exponent,
-                rank: holding.isAvailableNow ? 0 : 2,
+                standing: bucket == nil ? .unknownHistory : .knownLevel,
+                severity: bucket ?? holding.coin.hops.count,
                 derivationIndex: holding.coin.derivationIndex,
                 status: .coin(
                     CoinStatusView.Model(
                         hopDots: holding.coin.hops.map(innerDots(for:)),
-                        fungibility: holding.coin.recyclerFungibility,
+                        bucket: bucket,
                         isSpendable: holding.isAvailableNow
                     )
                 )
@@ -38,15 +51,20 @@ enum CoinageBreakdownFactory {
         }
 
         let voucherRows = holdings.vouchers.map { holding in
-            Row(
+            let bucket = CoinageStatusMetrics.bucket(forScore: holding.voucher.recyclerFungibility)
+
+            return Row(
                 id: "voucher-\(holding.voucher.derivationIndex)",
                 exponent: holding.voucher.exponent,
-                rank: 1,
+                standing: .knownLevel,
+                severity: bucket,
                 derivationIndex: holding.voucher.derivationIndex,
                 status: .voucher(
                     VoucherStatusView.Model(
-                        maxFungibility: holding.voucher.maxRecyclerFungibility,
-                        fungibility: holding.voucher.recyclerFungibility,
+                        maxBucket: CoinageStatusMetrics.bucket(
+                            forScore: holding.voucher.maxRecyclerFungibility
+                        ),
+                        bucket: bucket,
                         isUnloadable: holding.isAvailableNow
                     )
                 )
@@ -55,16 +73,93 @@ enum CoinageBreakdownFactory {
 
         // Value is `unit * 2^exponent`, so ordering by exponent is exactly ordering by value.
         return (coinRows + voucherRows).sorted { lhs, rhs in
+            if lhs.standing != rhs.standing {
+                return lhs.standing.rawValue < rhs.standing.rawValue
+            }
+
+            if lhs.severity != rhs.severity {
+                return lhs.severity > rhs.severity
+            }
+
             if lhs.exponent != rhs.exponent {
                 return lhs.exponent > rhs.exponent
             }
 
-            if lhs.rank != rhs.rank {
-                return lhs.rank < rhs.rank
-            }
-
             return lhs.derivationIndex < rhs.derivationIndex
         }
+    }
+
+    /// One depiction and the holdings that share it.
+    struct Group: Equatable {
+        let id: String
+        let status: CoinageHoldingStatus
+        /// Exponents in display order, one per holding, so a caller can price them and total them.
+        let exponents: [Int16]
+    }
+
+    /// Folds runs of identical depictions. Rows arrive ordered, so anything that draws the same is
+    /// already adjacent and this is a scan. Two rows merge exactly when their status compares
+    /// equal, which is the condition under which they would otherwise draw the same row twice.
+    static func group(_ rows: [Row]) -> [Group] {
+        rows.reduce(into: [Group]()) { groups, row in
+            if let last = groups.last, last.status == row.status {
+                groups[groups.count - 1] = Group(
+                    id: last.id,
+                    status: last.status,
+                    exponents: last.exponents + [row.exponent]
+                )
+            } else {
+                groups.append(Group(id: row.id, status: row.status, exponents: [row.exponent]))
+            }
+        }
+    }
+
+    /// One coin per holding, in the list's own order, for the table depiction.
+    static func tableCoins(_ rows: [Row]) -> [CoinageTableView.Coin] {
+        rows.map { row in
+            switch row.status {
+            case let .coin(model):
+                CoinageTableView.Coin(
+                    id: row.id,
+                    exponent: row.exponent,
+                    dents: model.hopDots.count,
+                    bucket: model.bucket
+                )
+            case let .voucher(model):
+                CoinageTableView.Coin(
+                    id: row.id,
+                    exponent: row.exponent,
+                    dents: 0,
+                    bucket: model.bucket
+                )
+            }
+        }
+    }
+
+    /// Where a depiction sits on the fungibility ladder.
+    static func band(for status: CoinageHoldingStatus) -> Int {
+        switch status {
+        case let .coin(model):
+            model.bucket ?? CoinageFungibilityDistribution.unknownBand
+        case let .voucher(model):
+            model.bucket
+        }
+    }
+
+    /// The bucket a coin's bar is drawn at, or `nil` when we have no record of its recycler.
+    ///
+    /// A coin that left in a batch is linked to everything that left with it, which the recycler's
+    /// own score knows nothing about, so it is pushed down the ladder. The batch is not recorded,
+    /// but it is identifiable: the chain only hands out age 1 on a batch unload, and a single
+    /// unload leaves age 0.
+    static func bucket(for coin: Coin) -> Int? {
+        guard let fungibility = coin.recyclerFungibility else { return nil }
+
+        let base = CoinageStatusMetrics.bucket(forScore: fungibility)
+
+        guard coin.hops.isEmpty, coin.age == 1 else { return base }
+
+        return min(base + CoinageStatusMetrics.batchUnloadPenalty, CoinageStatusMetrics.maximumBucket)
     }
 
     /// Value-weighted split for the summary bar, bucketed exactly as the figures above it are:

@@ -313,7 +313,33 @@ private extension AssetDetailsPresenter {
             return formatted(from: context.amount(forExponent: exponent), includeSymbol: false)
         }
 
-        let rows = CoinageBreakdownFactory.rows(from: holdings).map { row in
+        /// Counts consecutive repeats rather than tallying the whole run, so the values stay in
+        /// the order the ordering put them in.
+        func folded(_ values: [String]) -> String {
+            var parts: [(value: String, count: Int)] = []
+
+            for value in values {
+                if let last = parts.last, last.value == value {
+                    parts[parts.count - 1].count += 1
+                } else {
+                    parts.append((value, 1))
+                }
+            }
+
+            return parts
+                .map { $0.count > 1 ? "\($0.value) ×\($0.count)" : $0.value }
+                .joined(separator: "   ")
+        }
+
+        let groups = CoinageBreakdownFactory.group(CoinageBreakdownFactory.rows(from: holdings))
+        let groupValues = groups.map { group in
+            context.map { context in
+                group.exponents.reduce(Decimal.zero) { $0 + context.amount(forExponent: $1) }
+            } ?? 0
+        }
+        let peak = groupValues.max() ?? 0
+
+        let holdingRows = CoinageBreakdownFactory.rows(from: holdings).map { row in
             CoinageHoldingViewModel(
                 id: row.id,
                 amount: amount(forExponent: row.exponent),
@@ -321,7 +347,29 @@ private extension AssetDetailsPresenter {
             )
         }
 
+        let rows = zip(groups, groupValues).map { group, value in
+            CoinageHoldingGroupViewModel(
+                id: group.id,
+                status: group.status,
+                amounts: folded(group.exponents.map { amount(forExponent: $0) ?? "—" }),
+                count: group.exponents.count,
+                share: peak > 0 ? NSDecimalNumber(decimal: value / peak).doubleValue : 0,
+                total: context.map { _ in formatted(from: value, includeSymbol: false) }
+            )
+        }
+
         let amounts = coinageAmounts ?? .zero
+
+        let bands = context.map { context in
+            distribution(
+                of: CoinageBreakdownFactory.group(CoinageBreakdownFactory.rows(from: holdings)),
+                value: { context.amount(forExponent: $0) },
+                formatted: { formatted(from: $0, includeSymbol: false) }
+            )
+        } ?? .empty
+
+        let matrix = matrix(of: groups, amount: amount(forExponent:))
+        let table = CoinageBreakdownFactory.tableCoins(CoinageBreakdownFactory.rows(from: holdings))
 
         let breakdown = CoinageBalanceBreakdownViewModel(
             totalBalance: formatted(from: amounts.total, includeSymbol: false),
@@ -331,9 +379,74 @@ private extension AssetDetailsPresenter {
             composition: context.map {
                 CoinageBreakdownFactory.composition(of: holdings, context: $0)
             } ?? .empty,
-            holdings: rows
+            holdings: holdingRows,
+            groups: rows,
+            distribution: bands,
+            matrix: matrix,
+            table: table
         )
         view?.didReceive(coinageBreakdown: breakdown)
+    }
+
+    /// Counts holdings per denomination and band. Denominations descend by value; every band is a
+    /// column whether or not anything stands in it, so the columns line up across rows.
+    func matrix(
+        of groups: [CoinageBreakdownFactory.Group],
+        amount: (Int16) -> String?
+    ) -> CoinageHoldingMatrix {
+        let ladder = [CoinageFungibilityDistribution.unknownBand]
+            + (0 ... CoinageStatusMetrics.maximumBucket).reversed()
+
+        var counts: [Int16: [Int: Int]] = [:]
+
+        for group in groups {
+            let band = CoinageBreakdownFactory.band(for: group.status)
+
+            for exponent in group.exponents {
+                counts[exponent, default: [:]][band, default: 0] += 1
+            }
+        }
+
+        let rows = counts.keys.sorted(by: >).map { exponent in
+            CoinageHoldingMatrix.Row(
+                id: exponent,
+                amount: amount(exponent) ?? "—",
+                counts: ladder.map { counts[exponent]?[$0] ?? 0 }
+            )
+        }
+
+        return CoinageHoldingMatrix(bands: ladder, rows: rows)
+    }
+
+    /// Totals every band on the ladder, empty ones included, and scales them against the fullest
+    /// so the tallest band always reaches the top of the chart whatever the balance is.
+    func distribution(
+        of groups: [CoinageBreakdownFactory.Group],
+        value: (Int16) -> Decimal,
+        formatted: (Decimal) -> String
+    ) -> CoinageFungibilityDistribution {
+        var totals: [Int: Decimal] = [:]
+
+        for group in groups {
+            let band = CoinageBreakdownFactory.band(for: group.status)
+            totals[band, default: 0] += group.exponents.reduce(Decimal.zero) { $0 + value($1) }
+        }
+
+        let ladder = [CoinageFungibilityDistribution.unknownBand]
+            + (0 ... CoinageStatusMetrics.maximumBucket).reversed()
+        let peak = totals.values.max() ?? 0
+
+        return CoinageFungibilityDistribution(
+            bands: ladder.map { band in
+                let total = totals[band] ?? 0
+
+                return .init(
+                    id: band,
+                    share: peak > 0 ? NSDecimalNumber(decimal: total / peak).doubleValue : 0,
+                    total: total > 0 ? formatted(total) : nil
+                )
+            }
+        )
     }
 }
 
