@@ -23,7 +23,6 @@ struct CoinageCoinsView: UIViewRepresentable {
         struct Block: Equatable, Identifiable {
             let partition: CoinageStripLayout.Partition
             let top: CGFloat
-            let count: Int
 
             var id: String { partition.rawValue }
         }
@@ -169,11 +168,7 @@ extension CoinageCoinsView {
 
             let moved = advance()
 
-            let batches = CoinageScene.batches(
-                for: field,
-                frame: CoinageScene.Frame(dpr: view.contentScaleFactor),
-                designs: renderer.store.designs
-            )
+            let batches = CoinageScene.batches(for: field, designs: renderer.store.designs)
 
             renderer.draw(
                 batches,
@@ -249,11 +244,7 @@ private extension CoinageCoinsView.Coordinator {
             CoinageCoinsView.Metrics(
                 height: result.height,
                 blocks: result.blocks.map {
-                    CoinageCoinsView.Metrics.Block(
-                        partition: $0.partition,
-                        top: $0.top,
-                        count: $0.count
-                    )
+                    CoinageCoinsView.Metrics.Block(partition: $0.partition, top: $0.top)
                 },
                 runs: result.runs
             )

@@ -77,8 +77,6 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
         subscribeToRecoveryState()
         subscribeToRecoveredBalance()
         subscribeToAccountBackupStatus()
-
-        provideDenominationContext()
     }
 
     func triggerSync() {
@@ -138,19 +136,6 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
             }
         }
     #endif
-
-    /// Needed to price individual holdings, so a failure here degrades to amount-less rows rather
-    /// than to no rows.
-    private func provideDenominationContext() {
-        Task { [weak presenter, coinageService] in
-            do {
-                let context = try await coinageService.denominationContext()
-                await presenter?.didReceive(denominationContext: context)
-            } catch {
-                Logger.shared.error("Denomination context unavailable: \(error)")
-            }
-        }
-    }
 
     /// Reads the balance and the holdings behind it as one value. Two subscriptions would let the
     /// figures and the rows come from different evaluations, so the breakdown would briefly show

@@ -1,6 +1,5 @@
 import Metal
 import MetalKit
-import simd
 
 /// Draws coins with the reference's own material: measured-optics metals lit against a prefiltered
 /// studio, relief from a baked normal atlas, wear that hazes the fields and leaves grime in the
@@ -26,7 +25,6 @@ final class CoinageMetalRenderer {
     /// A run of instances sharing a mesh, which is what an instanced draw needs.
     struct Batch {
         let geometry: String
-        let levelOfDetail: CoinageLevelOfDetail
         var instances: [Instance]
     }
 
@@ -198,10 +196,7 @@ private extension CoinageMetalRenderer {
             }
 
             guard !batch.instances.isEmpty,
-                  let mesh = try? store.mesh(
-                      geometry: batch.geometry,
-                      levelOfDetail: batch.levelOfDetail
-                  )
+                  let mesh = try? store.mesh(geometry: batch.geometry)
             else {
                 continue
             }

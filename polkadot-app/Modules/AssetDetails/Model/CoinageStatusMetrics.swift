@@ -26,16 +26,6 @@ enum CoinageStatusMetrics {
         return bucketFloors.firstIndex { clamped >= $0 } ?? maximumBucket
     }
 
-    /// Fraction of the column a bucket occupies.
-    ///
-    /// Inverted on purpose — a highly fungible holding draws a *short* bar, and a poorly fungible
-    /// one stretches across the column.
-    static func fraction(forBucket bucket: Int) -> CGFloat {
-        let clamped = min(max(bucket, 0), maximumBucket)
-
-        return CGFloat(clamped) / CGFloat(maximumBucket)
-    }
-
     /// Penalty for a coin unloaded as one of a batch: the batch links it to the others that came
     /// out with it, which the recycler's own score does not account for.
     ///

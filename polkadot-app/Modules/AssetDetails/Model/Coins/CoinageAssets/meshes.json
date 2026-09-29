@@ -1,1153 +1,212 @@
 [
  {
   "id": "g0",
-  "key": "round:{}:0",
-  "kind": "round",
-  "dials": {},
-  "bimetal": false,
   "lods": {
-   "high": {
-    "file": "meshes/g0-high.bin",
-    "vertexCount": 4901,
-    "triangleCount": 9408,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 4901,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 58812,
-      "count": 4901,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 117624,
-      "count": 4901,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 196040,
-      "count": 28224,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g0-mid.bin",
-    "vertexCount": 915,
-    "triangleCount": 1680,
     "layout": {
      "position": {
       "offset": 0,
       "count": 915,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 10980,
       "count": 915,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 21960,
       "count": 915,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 36600,
       "count": 5040,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g0-low.bin",
-    "vertexCount": 341,
-    "triangleCount": 600,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 341,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 4092,
-      "count": 341,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 8184,
-      "count": 341,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 13640,
-      "count": 1800,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g0-sliver.bin",
-    "vertexCount": 147,
-    "triangleCount": 240,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 1764,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 3528,
-      "count": 147,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 5880,
-      "count": 720,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 0.999999,
-  "centerY": 0,
-  "bounds": {
-   "xmin": -0.5,
-   "xmax": 0.5,
-   "ymin": -0.5,
-   "ymax": 0.5
   }
  },
  {
   "id": "g1",
-  "key": "flower:{\"notches\":7,\"depth\":0.04,\"width\":0.15,\"round\":0.055}:0",
-  "kind": "flower",
-  "dials": {
-   "notches": 7,
-   "depth": 0.04,
-   "width": 0.15,
-   "round": 0.055
-  },
-  "bimetal": false,
   "lods": {
-   "high": {
-    "file": "meshes/g1-high.bin",
-    "vertexCount": 4698,
-    "triangleCount": 9016,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 4698,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 56376,
-      "count": 4698,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 112752,
-      "count": 4698,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 187920,
-      "count": 27048,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g1-mid.bin",
-    "vertexCount": 960,
-    "triangleCount": 1764,
     "layout": {
      "position": {
       "offset": 0,
       "count": 960,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 11520,
       "count": 960,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 23040,
       "count": 960,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 38400,
       "count": 5292,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g1-low.bin",
-    "vertexCount": 319,
-    "triangleCount": 560,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 319,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 3828,
-      "count": 319,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 7656,
-      "count": 319,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 12760,
-      "count": 1680,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g1-sliver.bin",
-    "vertexCount": 203,
-    "triangleCount": 336,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 203,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 2436,
-      "count": 203,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 4872,
-      "count": 203,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 8120,
-      "count": 1008,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 1.012238,
-  "centerY": 0.00614,
-  "bounds": {
-   "xmin": -0.506119,
-   "xmax": 0.506119,
-   "ymin": -0.49386,
-   "ymax": 0.50614
   }
  },
  {
   "id": "g2",
-  "key": "reuleaux:{\"sides\":7,\"round\":0.035}:0",
-  "kind": "reuleaux",
-  "dials": {
-   "sides": 7,
-   "round": 0.035
-  },
-  "bimetal": false,
   "lods": {
-   "high": {
-    "file": "meshes/g2-high.bin",
-    "vertexCount": 4901,
-    "triangleCount": 9408,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 4901,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 58812,
-      "count": 4901,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 117624,
-      "count": 4901,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 196040,
-      "count": 28224,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g2-mid.bin",
-    "vertexCount": 855,
-    "triangleCount": 1568,
     "layout": {
      "position": {
       "offset": 0,
       "count": 855,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 10260,
       "count": 855,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 20520,
       "count": 855,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 34200,
       "count": 4704,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g2-low.bin",
-    "vertexCount": 319,
-    "triangleCount": 560,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 319,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 3828,
-      "count": 319,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 7656,
-      "count": 319,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 12760,
-      "count": 1680,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g2-sliver.bin",
-    "vertexCount": 154,
-    "triangleCount": 252,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 154,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 1848,
-      "count": 154,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 3696,
-      "count": 154,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 6160,
-      "count": 756,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 1,
-  "centerY": 0.011958,
-  "bounds": {
-   "xmin": -0.5,
-   "xmax": 0.5,
-   "ymin": -0.488042,
-   "ymax": 0.511958
   }
  },
  {
   "id": "g3",
-  "key": "round:{}:1",
-  "kind": "round",
-  "dials": {},
-  "bimetal": true,
   "lods": {
-   "high": {
-    "file": "meshes/g3-high.bin",
-    "vertexCount": 6253,
-    "triangleCount": 12096,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 75036,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 150072,
-      "count": 6253,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 250120,
-      "count": 36288,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g3-mid.bin",
-    "vertexCount": 1403,
-    "triangleCount": 2640,
     "layout": {
      "position": {
       "offset": 0,
       "count": 1403,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 16836,
       "count": 1403,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 33672,
       "count": 1403,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 56120,
       "count": 7920,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g3-low.bin",
-    "vertexCount": 589,
-    "triangleCount": 1080,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 589,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 7068,
-      "count": 589,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 14136,
-      "count": 589,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 23560,
-      "count": 3240,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g3-sliver.bin",
-    "vertexCount": 147,
-    "triangleCount": 240,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 1764,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 3528,
-      "count": 147,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 5880,
-      "count": 720,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 0.999999,
-  "centerY": 0,
-  "bounds": {
-   "xmin": -0.5,
-   "xmax": 0.5,
-   "ymin": -0.5,
-   "ymax": 0.5
-  }
- },
- {
-  "id": "g4",
-  "key": "polygon:{\"sides\":12,\"round\":0.06}:1",
-  "kind": "polygon",
-  "dials": {
-   "sides": 12,
-   "round": 0.06
-  },
-  "bimetal": true,
-  "lods": {
-   "high": {
-    "file": "meshes/g4-high.bin",
-    "vertexCount": 6253,
-    "triangleCount": 12096,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 75036,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 150072,
-      "count": 6253,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 250120,
-      "count": 36288,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "mid": {
-    "file": "meshes/g4-mid.bin",
-    "vertexCount": 1403,
-    "triangleCount": 2640,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 1403,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 16836,
-      "count": 1403,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 33672,
-      "count": 1403,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 56120,
-      "count": 7920,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g4-low.bin",
-    "vertexCount": 475,
-    "triangleCount": 864,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 475,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 5700,
-      "count": 475,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 11400,
-      "count": 475,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 19000,
-      "count": 2592,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g4-sliver.bin",
-    "vertexCount": 175,
-    "triangleCount": 288,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 175,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 2100,
-      "count": 175,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 4200,
-      "count": 175,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 7000,
-      "count": 864,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   }
-  },
-  "width": 1,
-  "centerY": 0,
-  "bounds": {
-   "xmin": -0.5,
-   "xmax": 0.5,
-   "ymin": -0.5,
-   "ymax": 0.5
   }
  },
  {
   "id": "g5",
-  "key": "reuleaux:{\"sides\":7,\"round\":0.035}:1",
-  "kind": "reuleaux",
-  "dials": {
-   "sides": 7,
-   "round": 0.035
-  },
-  "bimetal": true,
   "lods": {
-   "high": {
-    "file": "meshes/g5-high.bin",
-    "vertexCount": 6253,
-    "triangleCount": 12096,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 75036,
-      "count": 6253,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 150072,
-      "count": 6253,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 250120,
-      "count": 36288,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g5-mid.bin",
-    "vertexCount": 1311,
-    "triangleCount": 2464,
     "layout": {
      "position": {
       "offset": 0,
       "count": 1311,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 15732,
       "count": 1311,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 31464,
       "count": 1311,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 52440,
       "count": 7392,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g5-low.bin",
-    "vertexCount": 551,
-    "triangleCount": 1008,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 551,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 6612,
-      "count": 551,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 13224,
-      "count": 551,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 22040,
-      "count": 3024,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g5-sliver.bin",
-    "vertexCount": 154,
-    "triangleCount": 252,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 154,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 1848,
-      "count": 154,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 3696,
-      "count": 154,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 6160,
-      "count": 756,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 1,
-  "centerY": 0.011958,
-  "bounds": {
-   "xmin": -0.5,
-   "xmax": 0.5,
-   "ymin": -0.488042,
-   "ymax": 0.511958
   }
  },
  {
   "id": "g6",
-  "key": "scalloped:{\"lobes\":10,\"lobe\":0.15,\"round\":0.012}:0",
-  "kind": "scalloped",
-  "dials": {
-   "lobes": 10,
-   "lobe": 0.15,
-   "round": 0.012
-  },
-  "bimetal": false,
   "lods": {
-   "high": {
-    "file": "meshes/g6-high.bin",
-    "vertexCount": 4959,
-    "triangleCount": 9520,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 4959,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 59508,
-      "count": 4959,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 119016,
-      "count": 4959,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 198360,
-      "count": 28560,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g6-mid.bin",
-    "vertexCount": 915,
-    "triangleCount": 1680,
     "layout": {
      "position": {
       "offset": 0,
       "count": 915,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 10980,
       "count": 915,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 21960,
       "count": 915,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 36600,
       "count": 5040,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g6-low.bin",
-    "vertexCount": 341,
-    "triangleCount": 600,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 341,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 4092,
-      "count": 341,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 8184,
-      "count": 341,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 13640,
-      "count": 1800,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g6-sliver.bin",
-    "vertexCount": 147,
-    "triangleCount": 240,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 1764,
-      "count": 147,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 3528,
-      "count": 147,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 5880,
-      "count": 720,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 0.96574,
-  "centerY": 0,
-  "bounds": {
-   "xmin": -0.48287,
-   "xmax": 0.48287,
-   "ymin": -0.5,
-   "ymax": 0.5
   }
  },
  {
   "id": "g7",
-  "key": "flower:{\"notches\":7,\"depth\":0.04,\"width\":0.15,\"round\":0.055}:1",
-  "kind": "flower",
-  "dials": {
-   "notches": 7,
-   "depth": 0.04,
-   "width": 0.15,
-   "round": 0.055
-  },
-  "bimetal": true,
   "lods": {
-   "high": {
-    "file": "meshes/g7-high.bin",
-    "vertexCount": 5994,
-    "triangleCount": 11592,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 5994,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 71928,
-      "count": 5994,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 143856,
-      "count": 5994,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 239760,
-      "count": 34776,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
    "mid": {
     "file": "meshes/g7-mid.bin",
-    "vertexCount": 1472,
-    "triangleCount": 2772,
     "layout": {
      "position": {
       "offset": 0,
       "count": 1472,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "normal": {
       "offset": 17664,
       "count": 1472,
-      "components": 3,
-      "type": "f32"
+      "components": 3
      },
      "surf": {
       "offset": 35328,
       "count": 1472,
-      "components": 4,
-      "type": "f32"
+      "components": 4
      },
      "index": {
       "offset": 58880,
       "count": 8316,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "low": {
-    "file": "meshes/g7-low.bin",
-    "vertexCount": 551,
-    "triangleCount": 1008,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 551,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 6612,
-      "count": 551,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 13224,
-      "count": 551,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 22040,
-      "count": 3024,
-      "components": 1,
-      "type": "u32"
-     }
-    }
-   },
-   "sliver": {
-    "file": "meshes/g7-sliver.bin",
-    "vertexCount": 203,
-    "triangleCount": 336,
-    "layout": {
-     "position": {
-      "offset": 0,
-      "count": 203,
-      "components": 3,
-      "type": "f32"
-     },
-     "normal": {
-      "offset": 2436,
-      "count": 203,
-      "components": 3,
-      "type": "f32"
-     },
-     "surf": {
-      "offset": 4872,
-      "count": 203,
-      "components": 4,
-      "type": "f32"
-     },
-     "index": {
-      "offset": 8120,
-      "count": 1008,
-      "components": 1,
-      "type": "u32"
+      "components": 1
      }
     }
    }
-  },
-  "width": 1.012238,
-  "centerY": 0.00614,
-  "bounds": {
-   "xmin": -0.506119,
-   "xmax": 0.506119,
-   "ymin": -0.49386,
-   "ymax": 0.50614
   }
  }
 ]

@@ -90,7 +90,7 @@ private extension DSBarberPole {
             .offset(x: offset)
         }
         // Leading, not the default centre: the stripe layer is deliberately wider than the frame,
-        // and centring it would shift it half its overdraw before the offset below even applies —
+        // and centring it would shift it half its overdraw before the offset above has applied —
         // which starves the right edge partway through each slide.
         .frame(width: size.width, height: size.height, alignment: .leading)
         .clipped()

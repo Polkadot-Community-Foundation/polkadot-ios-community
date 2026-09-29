@@ -56,37 +56,27 @@ final class CoinageAssetStore {
         case deviceRefused(String)
     }
 
-    let device: MTLDevice
     let params: Params
     let metalRows: [Float]
     let designs: [Design]
     let reliefAtlas: MTLTexture
     let environment: MTLTexture
-    let environmentLevels: Int
 
-    private let bundle: Bundle
-    private let meshCatalogue: [String: [String: MeshEntry]]
     private let meshes: [String: Mesh]
 
     init(device: MTLDevice, bundle: Bundle = .main) throws {
-        self.device = device
-        self.bundle = bundle
-
         let manifest: Manifest = try Self.decode("manifest", in: bundle)
         let raw: RawParams = try Self.decode("params", in: bundle)
         let metals: [RawMetal] = try Self.decode("metals", in: bundle)
         let rawDesigns: [RawDesign] = try Self.decode("designs", in: bundle)
         let rawMeshes: [RawMesh] = try Self.decode("meshes", in: bundle)
 
-        environmentLevels = manifest.env.cube.levels.count
+        let environmentLevels = manifest.env.cube.levels.count
         params = Params(raw: raw, levels: environmentLevels)
         metalRows = metals.flatMap { $0.reflectance + [$0.roughness] + $0.tone + [0] }
         designs = rawDesigns.map(Design.init(raw:))
-        meshCatalogue = Dictionary(uniqueKeysWithValues: rawMeshes.map { ($0.id, $0.lods) })
-        meshes = try meshCatalogue.reduce(into: [:]) { loaded, entry in
-            for (lod, mesh) in entry.value {
-                loaded["\(entry.key)-\(lod)"] = try Self.load(mesh, device: device, bundle: bundle)
-            }
+        meshes = try rawMeshes.reduce(into: [:]) { loaded, entry in
+            loaded[entry.id] = try Self.load(entry.mesh, device: device, bundle: bundle)
         }
         guard let atlas = manifest.atlases["cash"] else {
             throw Failure.malformed("manifest has no cash atlas")
@@ -103,22 +93,17 @@ final class CoinageAssetStore {
     /// Every mesh, already loaded. A lookup, never a read.
     ///
     /// They used to load on first use, which put a file read and four buffer allocations inside a
-    /// draw. That is invisible while a coin keeps the same mesh and brutal when a field of them
-    /// changes level of detail at once: coins fly out, the in-flight detail cap relaxes as they
-    /// land, and two megabytes of high meshes are read in the middle of a frame. Every coin freezes
-    /// for as long as it takes, including the ones already moving.
+    /// draw, and that is brutal when a field of coins all reach for one at once: every coin freezes
+    /// while it is read, including the ones already moving.
     ///
-    /// All thirty-two come to about three and a half megabytes, which is cheaper to hold than to
-    /// fetch at the wrong moment.
-    func mesh(geometry: String, levelOfDetail: CoinageLevelOfDetail) throws -> Mesh {
-        let key = "\(geometry)-\(Self.lodNames[levelOfDetail.rawValue])"
-
-        guard let loaded = meshes[key] else { throw Failure.missingAsset("mesh \(key)") }
+    /// The seven come to under half a megabyte, which is cheaper to hold than to fetch at the wrong
+    /// moment. The reference exports four levels of detail per shape; at the sizes drawn here the
+    /// finest is a tenth of a pixel from the coarsest on the largest coin, so only one is shipped.
+    func mesh(geometry: String) throws -> Mesh {
+        guard let loaded = meshes[geometry] else { throw Failure.missingAsset("mesh \(geometry)") }
 
         return loaded
     }
-
-    private static let lodNames = ["high", "mid", "low", "sliver"]
 }
 
 // MARK: - Shader constants
@@ -180,14 +165,10 @@ extension CoinageAssetStore {
     /// reference's own choices are deliberately not read.
     struct Design {
         let thickness: Float
-        let width: Float
-        let reeds: Float
         let tile: Float
 
         fileprivate init(raw: RawDesign) {
             thickness = raw.thickness
-            width = raw.width
-            reeds = raw.reeds
             tile = Float(raw.tile)
         }
     }
@@ -209,7 +190,26 @@ private extension CoinageAssetStore {
 
     struct RawMesh: Decodable {
         let id: String
-        let lods: [String: MeshEntry]
+        /// One level of detail per shape, which is all that is shipped.
+        let mesh: MeshEntry
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case lods
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+
+            let lods = try container.decode([String: MeshEntry].self, forKey: .lods)
+
+            guard let only = lods["mid"] else {
+                throw Failure.malformed("mesh \(id) has no mid level")
+            }
+
+            mesh = only
+        }
     }
 
     struct RawMetal: Decodable {
@@ -227,8 +227,6 @@ private extension CoinageAssetStore {
 
     struct RawDesign: Decodable {
         let thickness: Float
-        let width: Float
-        let reeds: Float
         let tile: Int
     }
 

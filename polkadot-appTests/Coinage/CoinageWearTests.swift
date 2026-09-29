@@ -12,14 +12,14 @@ struct CoinageWearTests {
         #expect(CoinageWear.level(hiddenAmong: 2) == 2)
         #expect(CoinageWear.level(hiddenAmong: 3) == 2)
         #expect(CoinageWear.level(hiddenAmong: 4) == 3)
-        #expect(CoinageWear.level(hiddenAmong: CoinageWear.ringCapacity - 1) == CoinageWear.maximumLevel)
+        // A ring holds 767 keys, so the deepest a coin can hide is among 766: 2^9 < 766 < 2^10.
+        #expect(CoinageWear.level(hiddenAmong: CoinageWear.ringCapacity - 1) == 10)
     }
 
     @Test("Wear runs from untouched at a full ring to total with no crowd at all")
     func wearSpansTheLadder() {
         #expect(CoinageWear.amount(forLevel: CoinageWear.maximumLevel) == 0)
         #expect(CoinageWear.amount(forLevel: 0) == 1)
-        #expect(CoinageWear.unknown == 1)
     }
 
     @Test("Wear never rises as a coin becomes harder to follow")

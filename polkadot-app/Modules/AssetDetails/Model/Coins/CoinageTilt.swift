@@ -92,8 +92,6 @@ final class CoinageTilt {
     /// attitude again and the light would stay where the field last settled.
     var onMove: (() -> Void)?
 
-    var isAvailable: Bool { motion.isDeviceMotionAvailable }
-
     func start() {
         guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
 

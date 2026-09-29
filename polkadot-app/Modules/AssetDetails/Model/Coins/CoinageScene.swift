@@ -36,10 +36,9 @@ enum CoinageScene {
     }
 
     /// Indices into `metals.json`, which the shader reads directly.
+    /// Indices into `metals.json`. The reference bands its own denominations differently and uses
+    /// all six rows; ours reaches only these three, plus silver as the twin band's core.
     enum Metal: Float {
-        case copper = 0
-        case nickel = 1
-        case brass = 2
         case silver = 3
         case gold = 4
         case bronze = 5
@@ -82,8 +81,6 @@ enum CoinageScene {
         /// `0` untraceable, `1` fully traceable.
         let wear: CGFloat
         let partition: CoinageStripLayout.Partition
-        /// What keeps two clearing holdings apart: recycling now, or still to be recycled.
-        let status: String
         /// How hidden the coin is, on the doubling ladder, which is how the order breaks a tie
         /// between two coins of the same denomination.
         let level: Int
@@ -91,29 +88,10 @@ enum CoinageScene {
         let hops: Int
     }
 
-    /// The one mesh every coin is drawn with.
-    ///
-    /// The reference picks between four by how many pixels a coin covers, and caps the choice while
-    /// coins are moving. At the sizes drawn here that buys nothing: a sixty-sample outline is a
-    /// tenth of a pixel off a true circle on the largest coin in the grid, where the finest mesh is
-    /// also five times the triangles. Picking per coin only earned a mesh change partway through
-    /// every flight.
-    ///
-    /// Worth revisiting for a detail view, where one coin fills the screen and sixty samples would
-    /// start to show at about two thirds of a pixel. ``CoinageLevelOfDetail`` keeps the reference's
-    /// rule and its vectors for that day.
-    static let levelOfDetail = CoinageLevelOfDetail.mid
-
-    /// Everything that is true of the whole frame rather than of one coin.
-    struct Frame {
-        let dpr: CGFloat
-    }
-
     /// Reads the field's live spring values rather than the layout's targets, so what is drawn is
     /// wherever each coin has actually got to.
     static func batches(
         for field: CoinageCoinField,
-        frame _: Frame,
         designs: [CoinageAssetStore.Design]
     ) -> [CoinageMetalRenderer.Batch] {
         var batches: [String: CoinageMetalRenderer.Batch] = [:]
@@ -126,14 +104,10 @@ enum CoinageScene {
 
             let geometry = geometry(forExponent: member.coin.exponent)
             let distance = field.distanceToTarget(member)
-            let key = "\(geometry.rawValue)|\(Self.levelOfDetail.rawValue)"
+            let key = geometry.rawValue
 
             if batches[key] == nil {
-                batches[key] = CoinageMetalRenderer.Batch(
-                    geometry: geometry.rawValue,
-                    levelOfDetail: Self.levelOfDetail,
-                    instances: []
-                )
+                batches[key] = CoinageMetalRenderer.Batch(geometry: key, instances: [])
                 order.append(key)
             }
 

@@ -24,13 +24,12 @@ final class AssetDetailsPresenter {
 
     private let chainAsset: ChainAsset
     private var balance: Decimal = 0
-    /// Classified alongside the balance figures, so the rows and the bar always account for
+    /// Classified alongside the balance figures, so the coins and the figures always account for
     /// exactly the total shown above them.
     private var holdings: CoinageHoldings = .empty
-    /// The domain's three buckets for the real holdings, totalled by the balance service.
+    /// Ready and Clearing for the real holdings, totalled by the balance service.
     private var coinageAmounts: CoinageAmounts?
-    /// Loaded from chain state; needed to price individual holdings.
-    private var denominationContext: DenominationBreakdownContext?
+    /// Loaded from chain state; the balance is shown against it.
     private var price: PriceData?
     let logger: LoggerProtocol
 
@@ -151,11 +150,6 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
         case let .failure(error):
             wireframe.present(error: error, from: view)
         }
-    }
-
-    func didReceive(denominationContext: DenominationBreakdownContext) {
-        self.denominationContext = denominationContext
-        provideCoinageBreakdown()
     }
 
     func didReceive(coinageAmounts: CoinageAmounts, holdings: CoinageHoldings) {
@@ -302,8 +296,6 @@ private extension AssetDetailsPresenter {
             .value(for: .current)
             .amount
         }
-
-        let holdings = holdings
 
         let amounts = coinageAmounts ?? .zero
         let strip = CoinageBreakdownFactory.stripCoins(CoinageBreakdownFactory.rows(from: holdings))

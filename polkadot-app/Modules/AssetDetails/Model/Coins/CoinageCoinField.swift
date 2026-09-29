@@ -32,7 +32,6 @@ final class CoinageCoinField {
         var calm: CGFloat
         /// Toward the viewer.
         var lift: CGFloat = 0
-        /// Buried under the coins on top of it, so it is never drawn.
     }
 
     struct Member {
@@ -61,8 +60,6 @@ final class CoinageCoinField {
     }
 
     /// Beyond this a coin counts as in flight, which caps its mesh detail and holds back its
-    /// luster. Half a point, as the reference has it.
-    static let settled: CGFloat = 0.5
 
     /// Which end of the field sets off first.
     ///

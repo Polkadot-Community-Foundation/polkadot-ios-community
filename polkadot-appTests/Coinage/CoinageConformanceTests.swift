@@ -84,29 +84,19 @@ struct CoinageConformanceTests {
         for sample in vectors.edgeCalm {
             expect(CoinageStripLayout.edgeCalm(turn: sample.turn), sample.calm, "edgeCalm", "calm")
         }
-
-        for sample in vectors.lodFor {
-            let level = CoinageLevelOfDetail.forCoin(
-                heightPixels: sample.heightPx,
-                visibleWidthPixels: sample.visibleWidthPx
-            )
-
-            #expect(level.rawValue == sample.lod, "lod for \(sample.heightPx)×\(sample.visibleWidthPx)")
-        }
     }
 
-    /// Only the cases that fit without stacking. The reference answers an overfull grid by piling
-    /// runs of alike coins, which this app does not draw, so a case whose expected cells hold more
-    /// than one coin describes a layout we deliberately do not produce. Filtered rather than
-    /// listed, so re-exported vectors need no edit here.
+    /// The reference answers an overfull grid by piling runs of alike coins, which this app does
+    /// not draw. Its vectors for that — two of its three scenarios, and its pile and band samples —
+    /// describe a layout we deliberately do not produce, and are not vendored. What is left is the
+    /// one scenario that lays every coin out singly, which is what this app always does.
     @Test("The grid packs and blocks as the reference does")
     func gridMatchesTheReference() throws {
         let vectors: GridVectors = try load("grid")
-        let unstacked = vectors.cases.filter { $0.output.cells.allSatisfy { $0.ids.count == 1 } }
 
-        #expect(!unstacked.isEmpty, "no grid vector fits without stacking")
+        #expect(!vectors.cases.isEmpty, "no grid vectors")
 
-        for testCase in unstacked {
+        for testCase in vectors.cases {
             var options = CoinageGridLayout.Options()
             options.maxDiameter = testCase.options.maxDiameter
             options.minDiameter = testCase.options.minDiameter
@@ -119,9 +109,7 @@ struct CoinageConformanceTests {
                     CoinageGridLayout.Item(
                         id: String($0.id),
                         exponent: $0.exponent,
-                        partition: $0.partition == "clearing" ? .clearing : .ready,
-                        status: $0.status,
-                        level: $0.level
+                        partition: $0.partition == "clearing" ? .clearing : .ready
                     )
                 },
                 area: CGSize(width: testCase.area.width, height: testCase.area.height),
@@ -250,15 +238,8 @@ private extension CoinageConformanceTests {
             let calm: CGFloat
         }
 
-        struct Detail: Decodable {
-            let heightPx: CGFloat
-            let visibleWidthPx: CGFloat
-            let lod: Int
-        }
-
         let spring: [Spring]
         let edgeCalm: [Calm]
-        let lodFor: [Detail]
     }
 
     struct GridVectors: Decodable {
@@ -279,13 +260,10 @@ private extension CoinageConformanceTests {
             let id: Int
             let exponent: Int16
             let partition: String
-            let status: String
-            let level: Int
         }
 
         struct Cell: Decodable {
             let ids: [Int]
-            let count: Int
             let x: CGFloat
             let y: CGFloat
         }

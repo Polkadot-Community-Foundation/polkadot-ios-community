@@ -70,42 +70,5 @@
    "turn": 1.5708,
    "calm": 1
   }
- ],
- "lodFor": [
-  {
-   "heightPx": 180,
-   "visibleWidthPx": 180,
-   "lod": 0
-  },
-  {
-   "heightPx": 120,
-   "visibleWidthPx": 30,
-   "lod": 0
-  },
-  {
-   "heightPx": 100,
-   "visibleWidthPx": 100,
-   "lod": 1
-  },
-  {
-   "heightPx": 60,
-   "visibleWidthPx": 10,
-   "lod": 1
-  },
-  {
-   "heightPx": 40,
-   "visibleWidthPx": 6,
-   "lod": 2
-  },
-  {
-   "heightPx": 30,
-   "visibleWidthPx": 30,
-   "lod": 2
-  },
-  {
-   "heightPx": 180,
-   "visibleWidthPx": 3,
-   "lod": 3
-  }
  ]
 }

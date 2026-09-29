@@ -1,4 +1,4 @@
-import SwiftUI
+import CoreGraphics
 
 /// What a denomination looks like as a coin: its metal, its outline and its size.
 ///
@@ -20,9 +20,6 @@ enum CoinageCoinDesign {
 
     struct Design: Equatable {
         let shape: Shape
-        let outer: CoinageMetal
-        /// Inner disc of a bimetallic coin; `nil` for a single-metal one.
-        let core: CoinageMetal?
         /// Diameter as a fraction of the largest denomination's.
         let size: CGFloat
         /// Whether the edge is milled.
@@ -36,17 +33,6 @@ enum CoinageCoinDesign {
         case silver = 1
         case gold = 2
         case twin = 3
-
-        var outer: CoinageMetal {
-            switch self {
-            case .bronze: .bronze
-            case .silver: .silver
-            case .gold,
-                 .twin: .gold
-            }
-        }
-
-        var core: CoinageMetal? { self == .twin ? .silver : nil }
     }
 
     /// Exponents `0...14`, four to a band. The top band is one short, which is the chain's doing.
@@ -66,8 +52,6 @@ enum CoinageCoinDesign {
 
         return Design(
             shape: shape,
-            outer: band.outer,
-            core: band.core,
             size: size(forExponent: clamped),
             // Milling is what a mint adds to coins worth protecting, so the coppers go without.
             isReeded: band != .bronze && shape == .round
@@ -86,81 +70,6 @@ enum CoinageCoinDesign {
         let progress = CGFloat(exponent) / CGFloat(highestExponent)
 
         return 0.82 + 0.18 * progress
-    }
-}
-
-/// A coinage metal.
-///
-/// The three are meant to be told apart at a glance and across the whole wear range, so they differ
-/// in how bright they are, how far apart their lit and shaded edges sit, and what colour they drift
-/// toward as they dull. Bronze is deliberately the dullest: a copper coin in the hand has almost no
-/// sheen, and it keeps the low denominations quiet.
-enum CoinageMetal: Equatable {
-    case bronze
-    case silver
-    case gold
-
-    /// How far the lit edge of the face sits above the shaded one. The single strongest cue for
-    /// telling one metal from another at coin size.
-    var sheen: CGFloat {
-        switch self {
-        case .bronze: 0.30
-        case .silver: 0.72
-        case .gold: 1.0
-        }
-    }
-
-    /// Face colours from the lit edge to the shaded one, already darkened and drawn toward the
-    /// metal's own tone by `wear`.
-    func faceTones(wear: CGFloat) -> [Color] {
-        let worn = min(max(wear, 0), 1)
-        // Sheen narrows as a coin dulls: the gap between the lit and shaded edge closes, which is
-        // what makes a worn coin read as flat rather than merely dark.
-        let spread = sheen * (1 - 0.55 * worn)
-        let body = mix(rgb.base, toward: rgb.tone, by: worn)
-
-        return [colour(of: body, scaledBy: 1 + 0.30 * spread), colour(of: body, scaledBy: 1 - 0.28 * spread)]
-    }
-
-    /// The rim is the same metal seen edge-on: always a shade under the face, so the coin reads as
-    /// a solid object rather than a sticker.
-    func rimTone(wear: CGFloat) -> Color {
-        colour(of: mix(rgb.base, toward: rgb.tone, by: min(max(wear, 0), 1)), scaledBy: 0.6)
-    }
-
-    /// A scratch shows bare metal, which is brighter than a dull face and darker than a bright one.
-    func scuffTone(wear: CGFloat) -> Color {
-        isBright ? .black.opacity(0.22) : .white.opacity(0.18 + 0.16 * wear)
-    }
-
-    /// What an engraved figure is cut into. Dark in the cut, with a lit lower lip.
-    func engravingTones(wear: CGFloat) -> (cut: Color, lip: Color) {
-        (
-            colour(of: mix(rgb.base, toward: rgb.tone, by: min(max(wear, 0), 1)), scaledBy: 0.3),
-            .white.opacity(isBright ? 0.38 : 0.26)
-        )
-    }
-
-    private var isBright: Bool { rgb.base.reduce(0, +) / 3 > 0.7 }
-
-    private var rgb: (base: [CGFloat], tone: [CGFloat]) {
-        switch self {
-        case .bronze: ([0.64, 0.41, 0.24], [0.33, 0.23, 0.16])
-        case .silver: ([0.87, 0.89, 0.92], [0.48, 0.50, 0.53])
-        case .gold: ([1.0, 0.80, 0.30], [0.52, 0.42, 0.20])
-        }
-    }
-
-    private func mix(_ from: [CGFloat], toward: [CGFloat], by amount: CGFloat) -> [CGFloat] {
-        zip(from, toward).map { $0 + ($1 - $0) * amount }
-    }
-
-    private func colour(of rgb: [CGFloat], scaledBy scale: CGFloat = 1) -> Color {
-        Color(
-            red: Double(min(max(rgb[0] * scale, 0), 1)),
-            green: Double(min(max(rgb[1] * scale, 0), 1)),
-            blue: Double(min(max(rgb[2] * scale, 0), 1))
-        )
     }
 }
 

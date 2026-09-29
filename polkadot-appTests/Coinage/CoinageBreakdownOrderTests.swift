@@ -12,8 +12,6 @@ struct CoinageBreakdownOrderTests {
     func ladderEnds() {
         #expect(CoinageStatusMetrics.bucket(forScore: 100) == 0)
         #expect(CoinageStatusMetrics.bucket(forScore: 0) == CoinageStatusMetrics.maximumBucket)
-        #expect(CoinageStatusMetrics.fraction(forBucket: 0) == 0)
-        #expect(CoinageStatusMetrics.fraction(forBucket: CoinageStatusMetrics.maximumBucket) == 1)
     }
 
     @Test("Buckets widen as fungibility falls", arguments: [
@@ -166,7 +164,7 @@ struct CoinageBreakdownOrderTests {
         let coins = (0 ..< 6).map {
             CoinageScene.Coin(
                 id: "coin-\($0)", exponent: Int16($0 % 2), wear: 0,
-                partition: .ready, status: "ready", level: 0, hops: 0
+                partition: .ready, level: 0, hops: 0
             )
         }
 
@@ -182,15 +180,15 @@ struct CoinageBreakdownOrderTests {
         let coins = [
             CoinageScene.Coin(
                 id: "small-clearing", exponent: 2, wear: 1,
-                partition: .clearing, status: "clearing", level: 0, hops: 0
+                partition: .clearing, level: 0, hops: 0
             ),
             CoinageScene.Coin(
                 id: "large-ready", exponent: 9, wear: 0,
-                partition: .ready, status: "ready", level: 8, hops: 0
+                partition: .ready, level: 8, hops: 0
             ),
             CoinageScene.Coin(
                 id: "large-clearing", exponent: 8, wear: 1,
-                partition: .clearing, status: "clearing", level: 0, hops: 0
+                partition: .clearing, level: 0, hops: 0
             )
         ]
 
@@ -252,7 +250,6 @@ private extension CoinageBreakdownOrderTests {
             exponent: exponent,
             wear: CoinageWear.amount(forLevel: level),
             partition: isReady ? .ready : .clearing,
-            status: isReady ? "ready" : "clearing",
             level: level,
             hops: hops
         )
@@ -264,7 +261,6 @@ private extension CoinageBreakdownOrderTests {
             exponent: exponent,
             wear: CoinageWear.amount(forLevel: level),
             partition: .ready,
-            status: "ready",
             level: level,
             hops: hops
         )

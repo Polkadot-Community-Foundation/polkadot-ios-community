@@ -53,7 +53,6 @@ struct CoinageSpring: Equatable {
         static let position: CGFloat = 13
         static let rotation: CGFloat = 9
         static let thickness: CGFloat = 10
-        static let recede: CGFloat = 8
         static let luster: CGFloat = 7
         static let wear: CGFloat = 2.2
     }
@@ -61,38 +60,4 @@ struct CoinageSpring: Equatable {
     /// Strip and grid moves stagger their starts across this long, in display order, so the field
     /// unfolds rather than jumping as one block.
     static let stagger: CGFloat = 0.18
-}
-
-/// Which mesh a coin is drawn with, coarsest last.
-///
-/// Picked from what the coin actually covers in device pixels rather than from its arrangement, so
-/// a coin turned nearly edge-on drops to a sliver however large its face would have been.
-enum CoinageLevelOfDetail: Int, CaseIterable {
-    case high = 0
-    case mid = 1
-    case low = 2
-    case sliver = 3
-
-    static func forCoin(heightPixels: CGFloat, visibleWidthPixels: CGFloat) -> CoinageLevelOfDetail {
-        if visibleWidthPixels < 3.5 {
-            .sliver
-        } else if heightPixels < 34 || visibleWidthPixels < 7 {
-            .low
-        } else if heightPixels < 110 {
-            .mid
-        } else {
-            .high
-        }
-    }
-
-    /// What a coin covers horizontally, which is the face and the edge in whatever mix its turn
-    /// gives.
-    static func visibleWidth(
-        height: CGFloat,
-        faceWidth: CGFloat,
-        thickness: CGFloat,
-        turn: CGFloat
-    ) -> CGFloat {
-        height * (abs(cos(turn)) * faceWidth + abs(sin(turn)) * thickness)
-    }
 }

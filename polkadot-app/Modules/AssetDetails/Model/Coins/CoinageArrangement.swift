@@ -117,9 +117,7 @@ private extension CoinageArrangement {
                 CoinageGridLayout.Item(
                     id: $0.id,
                     exponent: $0.exponent,
-                    partition: $0.partition,
-                    status: $0.status,
-                    level: $0.level
+                    partition: $0.partition
                 )
             },
             area: area

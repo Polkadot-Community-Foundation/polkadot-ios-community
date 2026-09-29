@@ -31,10 +31,6 @@ enum CoinageGridLayout {
         let id: String
         let exponent: Int16
         let partition: CoinageStripLayout.Partition
-        /// What keeps two clearing coins apart: recycling now, or still to be recycled.
-        let status: String
-        /// How hidden the coin is, on the doubling ladder.
-        let level: Int
     }
 
     struct Cell: Equatable {

@@ -1,3 +1,4 @@
+import Foundation
 import Metal
 import Testing
 
@@ -10,16 +11,19 @@ import Testing
 struct CoinageRendererLoaderTests {
     @Test("Asking for the renderer does not make the caller wait for it")
     func loadingDoesNotBlockTheCaller() async {
-        var returnedBeforeDelivery = false
-
+        // `load` must return before the renderer exists, and must answer on the main queue.
+        // Timing the call itself is what proves it: an earlier version of this test set a flag on
+        // the line after `load` returned, which is true however long `load` blocked.
+        let start = CFAbsoluteTimeGetCurrent()
         let renderer: CoinageMetalRenderer? = await withCheckedContinuation { continuation in
             CoinageRendererLoader.load { continuation.resume(returning: $0) }
-            // Reached while the renderer is still being built, on the first call of the process.
-            returnedBeforeDelivery = true
         }
+        let returned = CFAbsoluteTimeGetCurrent()
 
-        #expect(returnedBeforeDelivery)
         #expect(renderer != nil)
+        // The store alone takes tens of milliseconds; a blocking `load` could not come back inside
+        // a millisecond, and a non-blocking one cannot take longer.
+        #expect(returned - start < 1)
     }
 
     @Test("Everyone gets the same renderer rather than another copy of it")

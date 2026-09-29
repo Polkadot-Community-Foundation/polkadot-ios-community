@@ -1,13 +1,11 @@
-import BigInt
 import Coinage
 import CoreGraphics
 import Foundation
 
-/// Turns a classified ``CoinageHoldings`` snapshot into what the breakdown draws: the ordered
-/// rows and the summary bar's three shares.
+/// Turns a classified ``CoinageHoldings`` snapshot into the coins the card draws, in the order it
+/// draws them.
 ///
-/// Pure and free of the presenter's state, so the ordering and the value weighting can be
-/// exercised directly.
+/// Pure and free of the presenter's state, so the ordering can be exercised directly.
 enum CoinageBreakdownFactory {
     /// Which half of a denomination's run a row belongs to. Holdings whose recycler we have no
     /// record of are the least fungible thing we can say anything about, so they lead.
@@ -123,7 +121,6 @@ enum CoinageBreakdownFactory {
                     exponent: $0.exponent,
                     wear: $0.wear,
                     partition: $0.isReady ? .ready : .clearing,
-                    status: $0.isReady ? "ready" : "clearing",
                     level: CoinageWear.level(forAmount: $0.wear),
                     hops: $0.hops
                 )
@@ -191,43 +188,9 @@ enum CoinageBreakdownFactory {
 
         return min(base + CoinageStatusMetrics.batchUnloadPenalty, CoinageStatusMetrics.maximumBucket)
     }
-
-    /// Plank totals per bucket. A named type rather than a tuple, so the two stay labelled
-    /// wherever they travel.
-    private struct BucketPlanks {
-        var availableNow = BigUInt(0)
-        var gainingPrivacy = BigUInt(0)
-
-        var total: BigUInt { availableNow + gainingPrivacy }
-    }
-
-    private static func planksByAvailability(
-        of holdings: CoinageHoldings,
-        value: (Int16) -> BigUInt
-    ) -> BucketPlanks {
-        var planks = BucketPlanks()
-
-        func add(_ availability: CoinageAvailability, _ amount: BigUInt) {
-            switch availability.displayBucket {
-            case .ready: planks.availableNow += amount
-            case .clearing: planks.gainingPrivacy += amount
-            }
-        }
-
-        for holding in holdings.coins {
-            add(holding.availability, value(holding.coin.exponent))
-        }
-
-        for holding in holdings.vouchers {
-            add(holding.availability, value(holding.voucher.exponent))
-        }
-
-        return planks
-    }
 }
 
-/// The amounts shown above the summary bar. The bar draws two of them: available now and gaining
-/// privacy. Pending is money that has not arrived yet and cannot be spent.
+/// The two figures the card shows, and the total they add up to.
 struct CoinageAmounts: Equatable {
     let total: Decimal
     let availableNow: Decimal
