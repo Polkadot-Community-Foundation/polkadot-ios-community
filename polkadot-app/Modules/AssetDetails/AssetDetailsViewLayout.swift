@@ -202,9 +202,14 @@ private struct CoinageBalanceBreakdownView: View {
     @State private var coinMetrics = CoinageCoinsView.Metrics()
     /// How tall the coins are actually drawn, as opposed to how much room the card gives them.
     @State private var drawHeight = CoinageStripLayout.Options().height
+    /// Cancelled if the coins are asked to expand again before the last collapse has finished.
+    @State private var shrink: Task<Void, Never>?
 
     /// Anchors the card for the scroll that follows it down as it collapses.
     private static let anchor = "coinageCard"
+    /// How long the card takes to close. The coins' own springs are still settling for a moment
+    /// after it, which is why giving the drawable back waits a little longer than this.
+    private static let collapse: TimeInterval = 0.35
 
     var body: some View {
         // Vends a proxy for the wallet's own scroll view rather than making one: collapsing the
@@ -267,7 +272,7 @@ private struct CoinageBalanceBreakdownView: View {
                 .frame(height: max(coinMetrics.height, CoinageStripLayout.Options().height), alignment: .top)
                 .clipped()
                 .onChange(of: coinMetrics.height) { _, height in
-                    drawHeight = max(drawHeight, height)
+                    grow(to: height)
                 }
 
                 if !showDetails {
@@ -281,6 +286,31 @@ private struct CoinageBalanceBreakdownView: View {
         .id(Self.anchor)
     }
 
+    /// Grows the drawing surface to fit an arrangement, and gives the room back once the coins
+    /// have settled into a smaller one.
+    ///
+    /// It cannot simply follow the card, because resizing a Metal layer while anything is
+    /// animating shows the last frame mapped into the new bounds. Waiting until the movement is
+    /// over leaves one resize with nothing animating over it, which is the case that has always
+    /// been fine, and the surface stops holding a grid's worth of drawable for a strip.
+    private func grow(to height: CGFloat) {
+        shrink?.cancel()
+        shrink = nil
+
+        guard height < drawHeight else {
+            drawHeight = max(drawHeight, height)
+            return
+        }
+
+        shrink = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Self.collapse + 0.1))
+
+            guard !Task.isCancelled else { return }
+
+            drawHeight = height
+        }
+    }
+
     /// Collapsing has to shorten the card and move the scroll view in one animation.
     ///
     /// The coins report their height only after laying out, which lands outside any transaction, so
@@ -290,7 +320,7 @@ private struct CoinageBalanceBreakdownView: View {
     private func toggleDetails(scroll: ScrollViewProxy) {
         let isCollapsing = showDetails
 
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(.easeInOut(duration: Self.collapse)) {
             showDetails.toggle()
 
             guard isCollapsing else { return }
