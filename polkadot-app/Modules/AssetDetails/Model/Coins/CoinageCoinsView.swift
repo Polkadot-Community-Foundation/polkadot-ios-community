@@ -1,5 +1,5 @@
-import CoreMotion
 import MetalKit
+import PolkadotUI
 import SwiftUI
 
 /// Every holding, as real coins, in one of two arrangements.
@@ -37,7 +37,7 @@ struct CoinageCoinsView: UIViewRepresentable {
     /// this view is built from is state and callbacks and threading a renderer and a sensor
     /// through it would put more in the wrong place than it took out. A test passes its own.
     var loader: CoinageRendererLoading = CoinageRendererLoader.shared
-    var motion: CMMotionManager = CoinageMotionManager.shared
+    var motion: DeviceMotionObservable = DeviceMotionSource.shared
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -122,7 +122,7 @@ extension CoinageCoinsView {
             isExpanded: Bool,
             stripHeight: CGFloat,
             loader: CoinageRendererLoading,
-            motion: CMMotionManager,
+            motion: DeviceMotionObservable,
             report: @escaping (Metrics) -> Void
         ) {
             self.coins = coins

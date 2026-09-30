@@ -1,5 +1,6 @@
 import CoreMotion
 import Foundation
+import PolkadotUI
 import simd
 
 /// Turns the studio with the phone, so the light behaves as though it were fixed in the room.
@@ -30,23 +31,10 @@ import simd
 /// directly. Only `CMMotionActivityManager`, which classifies walking and driving, requires
 /// `NSMotionUsageDescription` and asks the user. This reads attitude only.
 ///
-/// The manager is handed in rather than made here, because Apple asks for one per process and
-/// because whoever owns it can then stop it for a view that is no longer worth lighting. It
-/// assumes a single consumer at a time: ``stop`` stops the manager outright, so two of these
-/// sharing one manager would switch each other off. One coin field exists at a time, and if that
-/// ever stops being true this needs to count its subscribers instead.
-/// The one motion manager the coins read.
-///
-/// Apple asks for a single instance per process, and several managers mean several copies of the
-/// same sensor pipeline delivering the same readings. This is not yet the app's only one:
-/// `CardEffectMotionEngine` in PolkadotUI owns another for the card shine, and both run while this
-/// screen is open. Folding the two together needs a shared source they can both read, and the two
-/// want different update rates (this one 60Hz, the shine 40Hz) whose smoothing is applied per
-/// reading, so unifying them retunes the shine. That belongs in a change of its own.
-enum CoinageMotionManager {
-    static let shared = CMMotionManager()
-}
-
+/// Readings come from the app's shared source rather than a manager of this view's own. The card
+/// effects read the same one, and this screen shows both at once, so a manager each meant two
+/// copies of the same sensor pipeline. Watching it is a subscription: dropping it releases the
+/// sensor if nothing else is watching, and cannot switch off somebody else's.
 final class CoinageTilt {
     /// Where the studio is turned to: an axis scaled by the angle turned about it, in radians.
     ///
@@ -95,9 +83,9 @@ final class CoinageTilt {
     static let smoothing: Double = 8
 
     private static let epsilon: Double = 0.0008
-    private static let interval: TimeInterval = 1.0 / 60
 
-    private let motion: CMMotionManager
+    private let motion: DeviceMotionObservable
+    private var subscription: DeviceMotionToken?
     private var neutral: Pose?
     private var previous: Pose?
     private var stillFor: TimeInterval = 0
@@ -105,7 +93,7 @@ final class CoinageTilt {
 
     private(set) var turn = Turn()
 
-    init(motion: CMMotionManager) {
+    init(motion: DeviceMotionObservable = DeviceMotionSource.shared) {
         self.motion = motion
     }
 
@@ -115,20 +103,18 @@ final class CoinageTilt {
     var onMove: (() -> Void)?
 
     func start() {
-        guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
+        guard subscription == nil else { return }
 
-        motion.deviceMotionUpdateInterval = Self.interval
-        motion.startDeviceMotionUpdates(to: .main) { [weak self] update, _ in
-            guard let self, let gravity = update?.gravity else { return }
-
-            absorb(Pose(gravity: gravity), after: Self.interval)
+        let interval = motion.updateInterval
+        subscription = motion.observe { [weak self] gravity in
+            self?.absorb(Pose(gravity: gravity), after: interval)
         }
     }
 
     func stop() {
-        guard motion.isDeviceMotionActive else { return }
+        guard subscription != nil else { return }
 
-        motion.stopDeviceMotionUpdates()
+        subscription = nil
         neutral = nil
         previous = nil
         stillFor = 0
