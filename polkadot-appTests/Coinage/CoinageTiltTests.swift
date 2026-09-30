@@ -71,7 +71,7 @@ struct CoinageTiltTests {
     @Test("However the phone is first picked up, the light starts square")
     func firstReadingIsNeutral() {
         for start in [rolled(0), rolled(.pi / 5), gravity(lean: 1.1)] {
-            let tilt = CoinageTilt()
+            let tilt = CoinageTilt(motion: CMMotionManager())
             tilt.absorb(pose(start), after: 1.0 / 60)
             tilt.advance(by: 1)
 
@@ -134,7 +134,7 @@ struct CoinageTiltTests {
 
     @Test("Held at a new angle, the light is square again within a couple of seconds")
     func heldBecomesSquare() {
-        let tilt = CoinageTilt()
+        let tilt = CoinageTilt(motion: CMMotionManager())
         tilt.absorb(pose(gravity(lean: 0)), after: 1.0 / 60)
         sweep(tilt, from: 0, to: .pi / 6, over: 0.4) { gravity(lean: $0) }
         tilt.advance(by: 1)
@@ -149,7 +149,7 @@ struct CoinageTiltTests {
 
     @Test("Going away and coming back leaves the resting position square")
     func returningIsSquareAgain() {
-        let tilt = CoinageTilt()
+        let tilt = CoinageTilt(motion: CMMotionManager())
         hold(tilt, at: rolled(0), for: 1)
 
         sweep(tilt, from: 0, to: -.pi / 4, over: 0.4) { rolled($0) }
@@ -164,7 +164,7 @@ struct CoinageTiltTests {
 
     @Test("A deliberate tilt reads in full rather than being followed")
     func movementIsNotChased() {
-        let tilt = CoinageTilt()
+        let tilt = CoinageTilt(motion: CMMotionManager())
         hold(tilt, at: gravity(lean: 0), for: 1)
         sweep(tilt, from: 0, to: .pi / 4, over: 0.5) { gravity(lean: $0) }
         tilt.advance(by: 1)
@@ -175,7 +175,7 @@ struct CoinageTiltTests {
     @Test("A tilt reaches the ends of the travel and goes no further")
     func travelIsBounded() {
         for angle in [CoinageTilt.range, .pi / 3, .pi / 2] {
-            let tilt = CoinageTilt()
+            let tilt = CoinageTilt(motion: CMMotionManager())
             hold(tilt, at: gravity(lean: 0), for: 1)
             sweep(tilt, from: 0, to: angle, over: 0.4) { gravity(lean: $0) }
             tilt.advance(by: 1)

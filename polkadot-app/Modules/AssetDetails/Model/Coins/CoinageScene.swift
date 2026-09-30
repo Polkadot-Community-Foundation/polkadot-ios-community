@@ -177,9 +177,3 @@ private extension CoinageScene {
         return Float((60 + 70 * CoinageCoinDesign.design(forExponent: exponent).size).rounded())
     }
 }
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}

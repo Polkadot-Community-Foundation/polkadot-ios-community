@@ -1,3 +1,4 @@
+import CoreMotion
 import MetalKit
 import SwiftUI
 
@@ -32,9 +33,20 @@ struct CoinageCoinsView: UIViewRepresentable {
     let isExpanded: Bool
     @Binding var metrics: Metrics
     var stripHeight: CGFloat = CoinageStripLayout.Options().height
+    /// Both default to the one instance each of these is meant to have, because the view model
+    /// this view is built from is state and callbacks and threading a renderer and a sensor
+    /// through it would put more in the wrong place than it took out. A test passes its own.
+    var loader: CoinageRendererLoading = CoinageRendererLoader.shared
+    var motion: CMMotionManager = CoinageMotionManager.shared
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(coins: coins, isExpanded: isExpanded, stripHeight: stripHeight) { measured in
+        Coordinator(
+            coins: coins,
+            isExpanded: isExpanded,
+            stripHeight: stripHeight,
+            loader: loader,
+            motion: motion
+        ) { measured in
             metrics = measured
         }
     }
@@ -96,7 +108,7 @@ extension CoinageCoinsView {
 
         private var renderer: CoinageMetalRenderer?
         private let field = CoinageCoinField()
-        private let tilt = CoinageTilt()
+        private let tilt: CoinageTilt
         private let report: (Metrics) -> Void
         private let stripHeight: CGFloat
         private var coins: [CoinageScene.Coin]
@@ -109,16 +121,19 @@ extension CoinageCoinsView {
             coins: [CoinageScene.Coin],
             isExpanded: Bool,
             stripHeight: CGFloat,
+            loader: CoinageRendererLoading,
+            motion: CMMotionManager,
             report: @escaping (Metrics) -> Void
         ) {
             self.coins = coins
             self.isExpanded = isExpanded
             self.stripHeight = stripHeight
             self.report = report
-            sampleCount = CoinageRendererLoader.sampleCount(for: device)
+            tilt = CoinageTilt(motion: motion)
+            sampleCount = loader.sampleCount(for: device)
             super.init()
 
-            CoinageRendererLoader.load { [weak self] renderer in
+            loader.load { [weak self] renderer in
                 guard let self else { return }
 
                 self.renderer = renderer

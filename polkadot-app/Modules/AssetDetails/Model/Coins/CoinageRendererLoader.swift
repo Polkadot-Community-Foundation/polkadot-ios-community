@@ -1,4 +1,18 @@
+import Foundation_iOS
 import Metal
+import os
+
+protocol CoinageRendererLoading: AnyObject, Sendable {
+    /// What ``CoinageMetalRenderer/sampleCount(for:)`` will answer, for a view that has to be
+    /// configured before there is a renderer to ask.
+    func sampleCount(for device: MTLDevice?) -> Int
+
+    /// Hands over the renderer, building it first if nobody has yet.
+    ///
+    /// Always answers on the main queue and never inline, so a caller has the same shape of life
+    /// whether it is the first to ask or the hundredth.
+    func load(_ deliver: @escaping (CoinageMetalRenderer?) -> Void)
+}
 
 /// Builds the one renderer, once, away from the main thread.
 ///
@@ -11,37 +25,11 @@ import Metal
 ///
 /// Callers get the renderer when it is ready and draw nothing until then, which is a frame or two
 /// of an empty strip rather than a frozen tap.
-enum CoinageRendererLoader {
-    /// The samples the pipeline will be built for, before there is a pipeline to ask.
-    ///
-    /// The view has to be configured the moment it is made, and a view and a pipeline that
-    /// disagree on samples fail validation at the draw call with nothing to say why. Asked of the
-    /// device rather than remembered, so the two answers cannot drift apart.
-    static func sampleCount(for device: MTLDevice?) -> Int {
-        device?.supportsTextureSampleCount(4) == true ? 4 : 1
-    }
-
-    /// Hands over the renderer, building it first if nobody has yet.
-    ///
-    /// Always answers on the main queue and never inline, so a caller has the same shape of life
-    /// whether it is the first to ask or the hundredth.
-    static func load(_ deliver: @escaping (CoinageMetalRenderer?) -> Void) {
-        let work: (() -> Void)? = state.withLock { current in
-            switch current {
-            case let .ready(renderer):
-                return { DispatchQueue.main.async { deliver(renderer) } }
-            case .loading:
-                waiting.withLock { $0.append(deliver) }
-                return nil
-            case .idle:
-                current = .loading
-                waiting.withLock { $0.append(deliver) }
-                return build
-            }
-        }
-
-        work?()
-    }
+///
+/// One instance per process is the point, so views take ``shared`` unless a test hands them
+/// something else. An instance built per module assembly would be the original stall again.
+final class CoinageRendererLoader: CoinageRendererLoading, @unchecked Sendable {
+    static let shared = CoinageRendererLoader()
 
     private enum State {
         case idle
@@ -49,16 +37,45 @@ enum CoinageRendererLoader {
         case ready(CoinageMetalRenderer?)
     }
 
-    private static let state = Guarded(State.idle)
-    private static let waiting = Guarded([(CoinageMetalRenderer?) -> Void]())
+    private let logger: LoggerProtocol
+    private let state = OSAllocatedUnfairLock(initialState: State.idle)
+    private let waiting = OSAllocatedUnfairLock(initialState: [(CoinageMetalRenderer?) -> Void]())
 
-    private static func build() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let renderer = try? CoinageMetalRenderer()
+    init(logger: LoggerProtocol = Logger.shared) {
+        self.logger = logger
+    }
 
-            state.withLock { $0 = .ready(renderer) }
+    func sampleCount(for device: MTLDevice?) -> Int {
+        CoinageMetalRenderer.sampleCount(for: device)
+    }
 
-            let deliveries = waiting.withLock { waiting -> [(CoinageMetalRenderer?) -> Void] in
+    func load(_ deliver: @escaping (CoinageMetalRenderer?) -> Void) {
+        let work: (() -> Void)? = state.withLockUnchecked { current in
+            switch current {
+            case let .ready(renderer):
+                return { DispatchQueue.main.async { deliver(renderer) } }
+            case .loading:
+                waiting.withLockUnchecked { $0.append(deliver) }
+                return nil
+            case .idle:
+                current = .loading
+                waiting.withLockUnchecked { $0.append(deliver) }
+                return build
+            }
+        }
+
+        work?()
+    }
+}
+
+private extension CoinageRendererLoader {
+    func build() {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let renderer = makeRenderer()
+
+            state.withLockUnchecked { $0 = .ready(renderer) }
+
+            let deliveries = waiting.withLockUnchecked { waiting -> [(CoinageMetalRenderer?) -> Void] in
                 defer { waiting = [] }
 
                 return waiting
@@ -71,22 +88,18 @@ enum CoinageRendererLoader {
             }
         }
     }
-}
 
-/// A value only one thread touches at a time. `NSLock` rather than a queue: every critical section
-/// here is a field read or a field write.
-private final class Guarded<Value>: @unchecked Sendable {
-    private var value: Value
-    private let lock = NSLock()
+    /// Nothing can be drawn without a renderer, and nothing on this screen can recover from that,
+    /// so the failure is reported rather than raised: the card keeps its figures and shows no
+    /// coins. Worth a line in the log, because the causes (a device without Metal, an asset that
+    /// did not ship, a shader that did not compile) are all things we would want to know about.
+    func makeRenderer() -> CoinageMetalRenderer? {
+        do {
+            return try CoinageMetalRenderer()
+        } catch {
+            logger.error("Coin renderer unavailable, drawing no coins: \(error)")
 
-    init(_ value: Value) {
-        self.value = value
-    }
-
-    func withLock<Result>(_ body: (inout Value) -> Result) -> Result {
-        lock.lock()
-        defer { lock.unlock() }
-
-        return body(&value)
+            return nil
+        }
     }
 }

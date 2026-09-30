@@ -75,7 +75,7 @@ final class CoinageMetalRenderer {
             throw Failure.shaderMissing("coinVertex/coinFragment")
         }
 
-        sampleCount = CoinageRendererLoader.sampleCount(for: device)
+        sampleCount = Self.sampleCount(for: device)
         pipeline = try Self.makePipeline(
             device: device,
             vertex: vertex,
@@ -162,6 +162,18 @@ final class CoinageMetalRenderer {
 }
 
 // MARK: - Encoding
+
+extension CoinageMetalRenderer {
+    /// The samples to build the pipeline for.
+    ///
+    /// Also asked before there is a renderer, because the view has to be configured the moment it
+    /// is made and a view and a pipeline that disagree on samples fail validation at the draw call
+    /// with nothing to say why. Asked of the device both times rather than remembered, so the two
+    /// answers cannot drift apart.
+    static func sampleCount(for device: MTLDevice?) -> Int {
+        device?.supportsTextureSampleCount(4) == true ? 4 : 1
+    }
+}
 
 private extension CoinageMetalRenderer {
     func encode(
@@ -285,11 +297,5 @@ private extension CoinageMetalRenderer {
         descriptor.rAddressMode = .clampToEdge
 
         return device.makeSamplerState(descriptor: descriptor)!
-    }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }

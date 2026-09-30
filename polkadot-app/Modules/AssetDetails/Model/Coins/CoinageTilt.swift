@@ -29,6 +29,24 @@ import simd
 /// Device motion needs no permission prompt: `CMMotionManager` reads the accelerometer and gyro
 /// directly. Only `CMMotionActivityManager`, which classifies walking and driving, requires
 /// `NSMotionUsageDescription` and asks the user. This reads attitude only.
+///
+/// The manager is handed in rather than made here, because Apple asks for one per process and
+/// because whoever owns it can then stop it for a view that is no longer worth lighting. It
+/// assumes a single consumer at a time: ``stop`` stops the manager outright, so two of these
+/// sharing one manager would switch each other off. One coin field exists at a time, and if that
+/// ever stops being true this needs to count its subscribers instead.
+/// The one motion manager the coins read.
+///
+/// Apple asks for a single instance per process, and several managers mean several copies of the
+/// same sensor pipeline delivering the same readings. This is not yet the app's only one:
+/// `CardEffectMotionEngine` in PolkadotUI owns another for the card shine, and both run while this
+/// screen is open. Folding the two together needs a shared source they can both read, and the two
+/// want different update rates (this one 60Hz, the shine 40Hz) whose smoothing is applied per
+/// reading, so unifying them retunes the shine. That belongs in a change of its own.
+enum CoinageMotionManager {
+    static let shared = CMMotionManager()
+}
+
 final class CoinageTilt {
     /// Where the studio is turned to: an axis scaled by the angle turned about it, in radians.
     ///
@@ -79,13 +97,17 @@ final class CoinageTilt {
     private static let epsilon: Double = 0.0008
     private static let interval: TimeInterval = 1.0 / 60
 
-    private let motion = CMMotionManager()
+    private let motion: CMMotionManager
     private var neutral: Pose?
     private var previous: Pose?
     private var stillFor: TimeInterval = 0
     private var target = Turn()
 
     private(set) var turn = Turn()
+
+    init(motion: CMMotionManager) {
+        self.motion = motion
+    }
 
     /// Called when the phone has moved enough that the studio needs to catch up. The view pauses
     /// itself whenever nothing is moving, so without a push from outside it would never look at the

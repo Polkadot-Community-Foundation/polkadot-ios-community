@@ -9,6 +9,10 @@ import Testing
 /// second with the main thread held, which was the whole of the pause on opening the view.
 @Suite("Coin renderer loader", .serialized)
 struct CoinageRendererLoaderTests {
+    /// The process-wide one, deliberately: these check that it hands everybody the same renderer,
+    /// which a fresh instance per test could not show.
+    private var loader: CoinageRendererLoader { .shared }
+
     @Test("Asking for the renderer does not make the caller wait for it")
     func loadingDoesNotBlockTheCaller() async {
         // How long `load` itself takes to come back, clocked inside the closure that calls it.
@@ -19,7 +23,7 @@ struct CoinageRendererLoaderTests {
 
         let start = CFAbsoluteTimeGetCurrent()
         let renderer: CoinageMetalRenderer? = await withCheckedContinuation { continuation in
-            CoinageRendererLoader.load { continuation.resume(returning: $0) }
+            loader.load { continuation.resume(returning: $0) }
             returned = CFAbsoluteTimeGetCurrent() - start
         }
 
@@ -32,10 +36,10 @@ struct CoinageRendererLoaderTests {
     @Test("Everyone gets the same renderer rather than another copy of it")
     func theRendererIsSharedAcrossCallers() async {
         let first: CoinageMetalRenderer? = await withCheckedContinuation { continuation in
-            CoinageRendererLoader.load { continuation.resume(returning: $0) }
+            loader.load { continuation.resume(returning: $0) }
         }
         let second: CoinageMetalRenderer? = await withCheckedContinuation { continuation in
-            CoinageRendererLoader.load { continuation.resume(returning: $0) }
+            loader.load { continuation.resume(returning: $0) }
         }
 
         #expect(first != nil)
@@ -48,7 +52,7 @@ struct CoinageRendererLoaderTests {
             for _ in 0 ..< 8 {
                 group.addTask {
                     await withCheckedContinuation { continuation in
-                        CoinageRendererLoader.load { continuation.resume(returning: $0 != nil) }
+                        loader.load { continuation.resume(returning: $0 != nil) }
                     }
                 }
             }
@@ -63,11 +67,11 @@ struct CoinageRendererLoaderTests {
     func sampleCountAgreesWithTheRenderer() async throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let renderer: CoinageMetalRenderer? = await withCheckedContinuation { continuation in
-            CoinageRendererLoader.load { continuation.resume(returning: $0) }
+            loader.load { continuation.resume(returning: $0) }
         }
 
         // A view and a pipeline that disagree here fail validation at the draw call, with nothing
         // before it to say why.
-        #expect(CoinageRendererLoader.sampleCount(for: device) == renderer?.sampleCount)
+        #expect(loader.sampleCount(for: device) == renderer?.sampleCount)
     }
 }
