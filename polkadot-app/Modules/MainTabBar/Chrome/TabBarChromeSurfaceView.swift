@@ -45,6 +45,10 @@ final class TabBarChromeSurfaceView: UIView {
         return windowInset
     }
 
+    var panelHeight: CGFloat {
+        appliedGlassContainerHeight
+    }
+
     var onChipTapped: ((UUID) -> Void)?
     var onChipCloseRequested: ((UUID) -> Void)?
 
@@ -117,6 +121,14 @@ final class TabBarChromeSurfaceView: UIView {
         }
 
         return true
+    }
+
+    /// Sets the panel height for interactive drag. Keeps `appliedGlassContainerHeight` in step
+    /// so a later `updateHeight` still sees a change.
+    func setPanelHeight(_ height: CGFloat) {
+        appliedGlassContainerHeight = height
+        glassContainerHeightConstraint?.update(offset: height)
+        layoutIfNeeded()
     }
 
     func setChips(_ chips: [DSTabBarChip], selected: UUID?, closeActionTitle: String) {

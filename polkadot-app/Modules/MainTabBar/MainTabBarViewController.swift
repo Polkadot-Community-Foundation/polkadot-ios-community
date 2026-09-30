@@ -344,6 +344,14 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         let controller = viewFactory.makeScanController()
         chromeController.setContentController(controller, for: .scan)
 
+        controller?.onPanelDragChanged = { [weak self] translation in
+            self?.chromeController.panelDragChanged(translation: translation)
+        }
+
+        controller?.onPanelDragEnded = { [weak self] translation in
+            self?.chromeController.panelDragEnded(translation: translation)
+        }
+
         #if FEATURE_INPUT
             // Opening the chat selects its tab, and tab selection closes the panel. A second close
             // here would cancel that animation in place and leave the backdrop and panel frozen

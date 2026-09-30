@@ -19,6 +19,9 @@ public final class DSPanelGrabberView: UIView {
         return view
     }()
 
+    public var onDragChanged: ((CGFloat) -> Void)?
+    public var onDragEnded: ((CGFloat) -> Void)?
+
     override public init(frame: CGRect) {
         super.init(frame: frame)
 
@@ -29,6 +32,9 @@ public final class DSPanelGrabberView: UIView {
             make.height.equalTo(Constants.pillHeight)
             make.center.equalToSuperview()
         }
+
+        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        addGestureRecognizer(panGesture)
     }
 
     @available(*, unavailable)
@@ -38,5 +44,25 @@ public final class DSPanelGrabberView: UIView {
 
     override public var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: Constants.stripHeight)
+    }
+}
+
+private extension DSPanelGrabberView {
+    @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+        guard let superview else { return }
+        let translation = recognizer.translation(in: superview).y
+
+        switch recognizer.state {
+        case .began,
+             .changed:
+            onDragChanged?(translation)
+        case .ended:
+            onDragEnded?(translation)
+        case .cancelled,
+             .failed:
+            onDragEnded?(0)
+        default:
+            break
+        }
     }
 }
