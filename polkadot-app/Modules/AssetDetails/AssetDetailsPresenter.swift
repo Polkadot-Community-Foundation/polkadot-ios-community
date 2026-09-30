@@ -57,16 +57,14 @@ final class AssetDetailsPresenter {
     }
 
     private func provideAssetBalance() {
+        // One configuration for every figure this screen shows: the fiat symbol in front, and the
+        // asset symbol left to whoever sets the figure, since only some of them name it.
         let balanceViewModelFactory = PrimitiveBalanceViewModelFactory(
-            targetAssetInfo: chainAsset.asset.digitalDollarDisplayInfo.withoutSymbol,
-            formatterFactory: balanceFormatterFactory
-        )
-
-        let balanceViewModel = PrimitiveBalanceViewModelFactory(
             targetAssetInfo: chainAsset.asset.digitalDollarFigureDisplayInfo,
             formatterFactory: balanceFormatterFactory
         )
-        .balanceFromPrice(
+
+        let balanceViewModel = balanceViewModelFactory.balanceFromPrice(
             balance,
             priceData: price
         )
@@ -301,9 +299,8 @@ private extension AssetDetailsPresenter {
         }
 
         let amounts = coinageAmounts ?? .zero
-        // Every figure here carries the fiat symbol. Only the headline names the asset after it;
-        // the run markers set their amount beside a label on one small line, where the headline
-        // above has already said what is being counted.
+        // Only the headline names the asset after its figure; the run markers set an amount beside
+        // a label on one small line, where the headline above has already said what is counted.
         let figureInfo = chainAsset.asset.digitalDollarFigureDisplayInfo
         let strip = CoinageBreakdownFactory.stripCoins(CoinageBreakdownFactory.rows(from: holdings))
 
