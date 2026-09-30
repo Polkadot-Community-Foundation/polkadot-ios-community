@@ -80,13 +80,15 @@ final class TabBarBottomChromeController: UIViewController {
 
     private lazy var panelDragController = TabBarPanelDragController(
         surface: chromeSurface,
-        panelController: panelController
+        panelController: panelController,
+        dismissSearch: { [weak self] in self?.onPanelDragCommitted?() }
     )
 
     var onSelect: ((_ index: Int, _ isReselection: Bool) -> Void)?
     var onChipTapped: ((UUID) -> Void)?
     var onChipCloseRequested: ((UUID) -> Void)?
     var onPanelChanged: ((TabBarPanelKind?) -> Void)?
+    var onPanelDragCommitted: (() -> Void)?
 
     /// The chain-status strip is installed by `MainTabBarViewController`, not by the chrome,
     /// so its tip anchor is handed down rather than reached for.

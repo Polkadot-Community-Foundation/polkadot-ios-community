@@ -42,6 +42,13 @@ final class ScanPanelViewController: UIViewController, ViewHolder {
         setupHandlers()
         presenter.setup()
     }
+
+    func cancelSearch() {
+        let searchField = rootView.searchRow.searchField
+        searchField.text = nil
+        presenter.search(username: "")
+        searchField.resignFirstResponder()
+    }
 }
 
 // MARK: - Private
@@ -67,13 +74,6 @@ private extension ScanPanelViewController {
         rootView.grabber.onDragEnded = { [weak self] translation in
             self?.onPanelDragEnded?(translation)
         }
-    }
-
-    func cancelSearch() {
-        let searchField = rootView.searchRow.searchField
-        searchField.text = nil
-        presenter.search(username: "")
-        searchField.resignFirstResponder()
     }
 }
 

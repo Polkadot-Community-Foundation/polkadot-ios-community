@@ -12,11 +12,18 @@ final class TabBarPanelDragController {
 
     private unowned let surface: TabBarChromeSurfaceView
     private unowned let panelController: TabBarPanelController
+    /// Clears the panel's search. Runs on commit only, so the keyboard stays put while dragging.
+    private let dismissSearch: () -> Void
     private var openHeight: CGFloat?
 
-    init(surface: TabBarChromeSurfaceView, panelController: TabBarPanelController) {
+    init(
+        surface: TabBarChromeSurfaceView,
+        panelController: TabBarPanelController,
+        dismissSearch: @escaping () -> Void
+    ) {
         self.surface = surface
         self.panelController = panelController
+        self.dismissSearch = dismissSearch
     }
 
     func dragChanged(translation: CGFloat) {
@@ -47,6 +54,7 @@ final class TabBarPanelDragController {
         )
 
         if translation >= closeThreshold {
+            dismissSearch()
             panelController.setPanel(nil, animated: true)
         } else {
             panelController.restoreOpenHeight()

@@ -363,6 +363,10 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
             controller?.onContentHeightChanged = { [weak self] in
                 self?.chromeController.resizeContentPanel()
             }
+
+            chromeController.onPanelDragCommitted = { [weak controller] in
+                controller?.cancelSearch()
+            }
         #else
             controller?.onSearchTap = { [weak self] in
                 self?.chromeController.setPanel(nil, animated: true)
