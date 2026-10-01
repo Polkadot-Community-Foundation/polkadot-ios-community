@@ -125,6 +125,17 @@
         }
       }
     },
+    "accountSearch.globalFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't search all users"
+          }
+        }
+      }
+    },
     "action.send.cash" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2486,17 +2497,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This is taking longer than usual"
-          }
-        }
-      }
-    },
-    "searchContact.loading.long" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search is taking longer than usual"
           }
         }
       }
