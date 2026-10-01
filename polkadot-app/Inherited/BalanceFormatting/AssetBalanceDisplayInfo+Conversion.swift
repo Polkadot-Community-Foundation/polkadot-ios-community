@@ -24,8 +24,14 @@ extension AssetModel {
             icon: nil
         )
     }
+}
 
-    var digitalDollarFiatDisplayInfo: AssetBalanceDisplayInfo {
+extension AssetModel {
+    /// The digital dollar figure alone: fiat symbol in front, no asset symbol after it.
+    ///
+    /// The asset symbol is set separately and more quietly beside the figure (see `DSAmount`), so
+    /// it must not be part of the formatted number.
+    var digitalDollarFigureDisplayInfo: AssetBalanceDisplayInfo {
         AssetBalanceDisplayInfo(
             displayPrecision: 2,
             assetPrecision: Int16(bitPattern: precision),
@@ -50,6 +56,17 @@ extension AssetBalanceDisplayInfo {
             symbolValueSeparator: "",
             symbolPosition: .prefix,
             icon: nil
+        )
+    }
+
+    var withFiatSymbol: AssetBalanceDisplayInfo {
+        AssetBalanceDisplayInfo(
+            displayPrecision: displayPrecision,
+            assetPrecision: assetPrecision,
+            symbol: AppConfig.Brand.fiatSymbol,
+            symbolValueSeparator: "",
+            symbolPosition: .prefix,
+            icon: icon
         )
     }
 
