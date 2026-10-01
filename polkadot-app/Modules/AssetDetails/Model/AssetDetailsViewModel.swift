@@ -11,22 +11,8 @@ struct CoinageBalanceBreakdownViewModel {
     let availableNowBalance: String
     let gainingPrivacyBalance: String
     let symbol: String
-    let composition: CoinageCompositionBar.Model
-    /// Coins and vouchers in one list, already ordered for display.
-    let holdings: [CoinageHoldingViewModel]
-}
-
-/// A single coin or voucher row: its value, and a number-free status depiction.
-struct CoinageHoldingViewModel: Identifiable {
-    let id: String
-    /// The bare value, no currency symbol. Nil until the denomination context is known.
-    let amount: String?
-    let status: Status
-
-    enum Status: Equatable {
-        case coin(CoinStatusView.Model)
-        case voucher(VoucherStatusView.Model)
-    }
+    /// Every holding, in display order, drawn as coins. Clearing leads.
+    let strip: [CoinageScene.Coin]
 }
 
 protocol AssetDetailsViewModelProtocol: Observation.Observable {
