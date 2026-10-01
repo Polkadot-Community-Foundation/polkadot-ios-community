@@ -62,8 +62,6 @@ public struct AssetDetailsBalanceCard: View {
                             .frame(height: Constants.logoHeight)
                     } else {
                         Image(.iconCashLogo)
-                        Text(viewModel.symbol ?? String(localized: .walletCardTitle))
-                            .textStyle(.title18SemiBold())
                     }
 
                     Spacer()

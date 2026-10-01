@@ -27,13 +27,9 @@ public struct DSAmount: View {
 }
 
 private extension DSAmount {
-    /// The symbol's size, as a fraction of the figure's.
-    static let symbolScale: CGFloat = 0.6
-
-    /// The lightest weight the bundled families carry. Anything thinner falls through to the
-    /// system font, which beside the figure reads as a different typeface rather than a lighter
-    /// one.
-    static let symbolWeight: TypographyFontWeight = .regular
+    /// The symbol is set in the small caps face at the figure's size, so it stays quieter than
+    /// the figure through its lighter weight and lower glyph height rather than through scaling.
+    static let symbolWeight: TypographyFontWeight = .light
 
     var text: Text {
         guard let symbol, !symbol.isEmpty else { return Text(amount) }
@@ -44,9 +40,9 @@ private extension DSAmount {
     var symbolFont: Font {
         let spec = typography.resolvedSpec
         let font = TypographyManager.shared.family.font(
-            family: spec.family,
+            family: .smallCaps,
             weight: Self.symbolWeight,
-            size: (spec.size * Self.symbolScale).rounded()
+            size: spec.size
         )
 
         return Font(font)
