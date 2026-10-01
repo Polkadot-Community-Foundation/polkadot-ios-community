@@ -21,6 +21,7 @@ struct SearchRunnerTests {
         #expect(!context.subscription.isSubscribed)
 
         await clock.advance(by: .milliseconds(1))
+        await context.subscription.waitUntilSubscribed()
 
         #expect(context.subscription.isSubscribed)
     }
@@ -84,7 +85,7 @@ struct SearchRunnerTests {
 
         context.continuation.yield(1)
         context.continuation.finish()
-        await context.contentProbe.checked(atLeast: 1)
+        await waitForRegisteredSleep(on: clock)
 
         #expect(await context.recorder.markers == [.started, .waiting])
 
@@ -161,43 +162,42 @@ private actor MarkerRecorder {
     }
 }
 
-/// Signals that the runner dequeued an element: `hasContent` runs before the loader floor wait,
-/// so awaiting it parks the test exactly where the runner is blocked on the clock.
-private actor ContentProbe {
-    private var count = 0
-
-    private var pendingCount: Int?
-    private var pendingContinuation: CheckedContinuation<Void, Never>?
-
-    func record() {
-        count += 1
-
-        guard let pendingCount, count >= pendingCount else { return }
-
-        let continuation = pendingContinuation
-        self.pendingCount = nil
-        pendingContinuation = nil
-        continuation?.resume()
-    }
-
-    func checked(atLeast count: Int) async {
-        guard self.count < count else { return }
-
-        await withCheckedContinuation { continuation in
-            pendingCount = count
-            pendingContinuation = continuation
-        }
-    }
-}
-
 private final class SubscriptionFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
+    private var pending: CheckedContinuation<Void, Never>?
 
     var isSubscribed: Bool { lock.withLock { value } }
 
+    /// Resolved synchronously from `markSubscribed`, so no scheduling hop stands between
+    /// the runner subscribing and this returning.
+    func waitUntilSubscribed() async {
+        await withCheckedContinuation { continuation in
+            let isSubscribed: Bool = lock.withLock {
+                guard !value else { return true }
+
+                pending = continuation
+
+                return false
+            }
+
+            if isSubscribed {
+                continuation.resume()
+            }
+        }
+    }
+
     func markSubscribed() {
-        lock.withLock { value = true }
+        let continuation: CheckedContinuation<Void, Never>? = lock.withLock {
+            value = true
+
+            let continuation = pending
+            pending = nil
+
+            return continuation
+        }
+
+        continuation?.resume()
     }
 }
 
@@ -205,7 +205,6 @@ private struct TestContext {
     let continuation: AsyncStream<Int>.Continuation
     let subscription = SubscriptionFlag()
     let recorder = MarkerRecorder()
-    let contentProbe = ContentProbe()
 
     private let consumingTask: Task<Void, Never>
 
@@ -216,17 +215,12 @@ private struct TestContext {
         let runner = SearchRunner(clock: clock)
         let subscription = subscription
         let recorder = recorder
-        let contentProbe = contentProbe
 
         consumingTask = Task {
-            let states = runner.run {
+            let states = runner.run({
                 subscription.markSubscribed()
                 return stream
-            } hasContent: { element in
-                Task { await contentProbe.record() }
-
-                return hasContent(element)
-            }
+            }, hasContent: hasContent)
 
             for await state in states {
                 await recorder.append(Marker(state: state))
@@ -238,4 +232,12 @@ private struct TestContext {
         continuation.finish()
         consumingTask.cancel()
     }
+}
+
+/// Waits until a sleep is registered on the clock. `checkSuspension` throws once one is, so the
+/// loop exits on that condition rather than on a yield count, which a loaded CI host can exhaust
+/// before the sleeping task is ever scheduled. Advancing past an unregistered sleep would set its
+/// deadline beyond the advance and hang the test.
+private func waitForRegisteredSleep(on clock: TestClock<Duration>) async {
+    while await (try? clock.checkSuspension()) != nil {}
 }
