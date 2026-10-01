@@ -130,8 +130,9 @@ public final class DSTabBarContentPanelView: UIView {
         // then race a reopen during the fade. Interaction can flip immediately instead.
         isUserInteractionEnabled = open
 
+        // A drag that ended in a close leaves the content clipped behind it.
         if open {
-            container.clipsToBounds = false
+            setContentClipped(false)
         }
 
         let apply = { [self] in

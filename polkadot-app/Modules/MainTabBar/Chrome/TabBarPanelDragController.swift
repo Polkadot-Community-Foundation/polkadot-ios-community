@@ -29,15 +29,7 @@ final class TabBarPanelDragController {
     func dragChanged(translation: CGFloat) {
         guard panelController.open != nil else { return }
 
-        if self.openHeight == nil {
-            panelController.cancelHeightAnimation()
-            // The hosted content keeps its own height, so a shrinking panel lets it spill over
-            // the capsule until the drag settles.
-            surface.setPanelContentClipped(true)
-        }
-
-        let openHeight = openHeight ?? surface.panelHeight
-        self.openHeight = openHeight
+        let openHeight = openHeight ?? beginDrag()
 
         let newHeight = max(
             min(openHeight - translation, openHeight),
@@ -64,5 +56,21 @@ final class TabBarPanelDragController {
                 surface.setPanelContentClipped(false)
             }
         }
+    }
+}
+
+private extension TabBarPanelDragController {
+    /// Takes the panel over from any running animation and latches the height to drag from.
+    func beginDrag() -> CGFloat {
+        panelController.cancelHeightAnimation()
+
+        // The hosted content keeps its own height, so a shrinking panel lets it spill over
+        // the capsule until the drag settles.
+        surface.setPanelContentClipped(true)
+
+        let height = surface.panelHeight
+        openHeight = height
+
+        return height
     }
 }
