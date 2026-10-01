@@ -166,14 +166,19 @@ final class TabBarPanelController {
     }
 
     /// Animates the container back to the open panel's height after an interrupted interactive drag.
-    func restoreOpenHeight() {
+    func restoreOpenHeight(completion: (() -> Void)? = nil) {
         let animator = makePanelAnimator()
 
         // An animator with no animation blocks never completes, so it would block every later
         // resize behind a completion that never fires.
         guard surface.updateHeight(for: open, animator: animator) else {
             panelAnimator = nil
+            completion?()
             return
+        }
+
+        if let completion {
+            animator.addCompletion { _ in completion() }
         }
 
         animator.startAnimation()

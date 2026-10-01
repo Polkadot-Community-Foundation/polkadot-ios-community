@@ -131,6 +131,10 @@ final class TabBarChromeSurfaceView: UIView {
         layoutIfNeeded()
     }
 
+    func setPanelContentClipped(_ clipped: Bool) {
+        contentPanelView.setContentClipped(clipped)
+    }
+
     func setChips(_ chips: [DSTabBarChip], selected: UUID?, closeActionTitle: String) {
         tabsPanelView.setChips(chips, selected: selected)
         tabsPanelView.closeActionTitle = closeActionTitle

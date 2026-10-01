@@ -130,6 +130,10 @@ public final class DSTabBarContentPanelView: UIView {
         // then race a reopen during the fade. Interaction can flip immediately instead.
         isUserInteractionEnabled = open
 
+        if open {
+            container.clipsToBounds = false
+        }
+
         let apply = { [self] in
             container.alpha = open ? 1 : 0
         }
@@ -140,6 +144,14 @@ public final class DSTabBarContentPanelView: UIView {
         }
 
         animator.addAnimations(apply)
+    }
+
+    /// Clips the hosted content while an interactive drag shrinks the panel. The content keeps
+    /// its own height, so without this it spills past the panel's bottom edge and shows through
+    /// the capsule. Clipping stays off at rest, where it would cut the content's soft glass edge
+    /// into a seam along the bottom.
+    public func setContentClipped(_ clipped: Bool) {
+        container.clipsToBounds = clipped
     }
 
     override public func layoutSubviews() {

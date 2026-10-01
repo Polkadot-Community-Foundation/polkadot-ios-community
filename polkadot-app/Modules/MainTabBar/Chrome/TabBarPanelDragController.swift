@@ -31,6 +31,9 @@ final class TabBarPanelDragController {
 
         if self.openHeight == nil {
             panelController.cancelHeightAnimation()
+            // The hosted content keeps its own height, so a shrinking panel lets it spill over
+            // the capsule until the drag settles.
+            surface.setPanelContentClipped(true)
         }
 
         let openHeight = openHeight ?? surface.panelHeight
@@ -57,7 +60,9 @@ final class TabBarPanelDragController {
             dismissSearch()
             panelController.setPanel(nil, animated: true)
         } else {
-            panelController.restoreOpenHeight()
+            panelController.restoreOpenHeight { [surface] in
+                surface.setPanelContentClipped(false)
+            }
         }
     }
 }
