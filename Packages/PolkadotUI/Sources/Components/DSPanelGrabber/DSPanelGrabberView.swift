@@ -9,6 +9,7 @@ public final class DSPanelGrabberView: UIView {
         static let stripHeight: CGFloat = 20
         static let pillWidth: CGFloat = 36
         static let pillHeight: CGFloat = 4
+        static let touchHeight: CGFloat = 44
     }
 
     private let pill: UIView = {
@@ -44,6 +45,21 @@ public final class DSPanelGrabberView: UIView {
 
     override public var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: Constants.stripHeight)
+    }
+
+    /// Extends the touch target downward to 44pt for reliable grabbability.
+    ///
+    /// The rendered strip stays 20pt (`intrinsicContentSize`) so the panel's content
+    /// doesn't shift, but the drag target spans 44pt total - extending 24pt below the
+    /// pill. This extra area overlaps the results list (drag-only by design).
+    override public func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        let touchRect = CGRect(
+            x: bounds.minX,
+            y: bounds.minY,
+            width: bounds.width,
+            height: Constants.touchHeight
+        )
+        return touchRect.contains(point)
     }
 }
 
