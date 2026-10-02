@@ -2,10 +2,7 @@ import Foundation
 import os
 import Testing
 
-/// A clock whose sleeps finish only when the test resumes them, addressed by requested duration.
-/// Unlike `TestClock`, nothing here depends on a sleep being registered before time moves: the test
-/// waits for the registration itself. `now` never moves, so a deadline equals its requested duration
-/// and code measuring elapsed time through `now` always sees zero.
+/// Sleeps finish only when the test resumes them by duration; `now` stays zero, so elapsed-time reads see none.
 final class ManualClock: Clock, Sendable {
     struct Instant: InstantProtocol {
         let offset: Duration
@@ -31,6 +28,7 @@ final class ManualClock: Clock, Sendable {
 
     fileprivate struct Waiter {
         let duration: Duration
+        let count: Int
         let continuation: CheckedContinuation<Void, Never>
     }
 
@@ -60,11 +58,16 @@ final class ManualClock: Clock, Sendable {
 
     /// Suspends until a sleep of `duration` is pending, without finishing it.
     func waitForSleep(for duration: Duration) async {
+        await waitForSleeps(for: duration, count: 1)
+    }
+
+    /// Suspends until at least `count` sleeps of `duration` are pending, without finishing them.
+    func waitForSleeps(for duration: Duration, count: Int) async {
         await withCheckedContinuation { continuation in
             let isPending = state.withLock { state in
-                guard !state.sleepers.contains(where: { $0.duration == duration }) else { return true }
+                guard state.pendingCount(of: duration) < count else { return true }
 
-                state.waiters.append(Waiter(duration: duration, continuation: continuation))
+                state.waiters.append(Waiter(duration: duration, count: count, continuation: continuation))
 
                 return false
             }
@@ -80,23 +83,33 @@ final class ManualClock: Clock, Sendable {
         for duration: Duration,
         sourceLocation: SourceLocation = #_sourceLocation
     ) async {
-        await waitForSleep(for: duration)
+        await resumeSleeps(for: duration, count: 1, sourceLocation: sourceLocation)
+    }
 
-        let sleeper: Sleeper? = state.withLock { state in
-            guard let index = state.sleepers.firstIndex(where: { $0.duration == duration }) else { return nil }
+    /// Waits for `count` sleeps of `duration` to be pending, then finishes them together.
+    func resumeSleeps(
+        for duration: Duration,
+        count: Int,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        await waitForSleeps(for: duration, count: count)
 
-            return state.sleepers.remove(at: index)
+        let sleepers: [Sleeper] = state.withLock { state in
+            let matching = state.sleepers.filter { $0.duration == duration }.prefix(count)
+            let ids = Set(matching.map(\.id))
+            state.sleepers.removeAll { ids.contains($0.id) }
+
+            return Array(matching)
         }
 
-        guard let sleeper else {
+        if sleepers.count < count {
             Issue.record(
-                "The \(duration) sleep was cancelled before it could be resumed",
+                "\(count - sleepers.count) of \(count) \(duration) sleeps were cancelled before they could be resumed",
                 sourceLocation: sourceLocation
             )
-            return
         }
 
-        sleeper.continuation.resume()
+        sleepers.forEach { $0.continuation.resume() }
     }
 }
 
@@ -107,8 +120,10 @@ private extension ManualClock {
 
             state.sleepers.append(sleeper)
 
-            let ready = state.waiters.filter { $0.duration == sleeper.duration }
-            state.waiters.removeAll { $0.duration == sleeper.duration }
+            let pendingCount = state.pendingCount(of: sleeper.duration)
+            let isReady: (Waiter) -> Bool = { $0.duration == sleeper.duration && $0.count <= pendingCount }
+            let ready = state.waiters.filter(isReady)
+            state.waiters.removeAll(where: isReady)
 
             return (false, ready)
         }
@@ -132,5 +147,11 @@ private extension ManualClock {
         }
 
         sleeper?.continuation.resume(throwing: CancellationError())
+    }
+}
+
+private extension ManualClock.State {
+    func pendingCount(of duration: Duration) -> Int {
+        sleepers.filter { $0.duration == duration }.count
     }
 }
