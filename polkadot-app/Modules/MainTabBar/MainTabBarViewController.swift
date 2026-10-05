@@ -4,7 +4,6 @@ import PolkadotUI
 import SnapKit
 import DesignSystem
 import UIKitExt
-import Products
 
 final class MainTabBarViewController: UIViewController {
     let presenter: MainTabBarPresenterProtocol
@@ -12,7 +11,7 @@ final class MainTabBarViewController: UIViewController {
     let browserCoordinator: SPABrowserCoordinating
     let flowStateProvider: any SPAFlowStateProviding
 
-    private let chromeController = TabBarBottomChromeController()
+    let chromeController = TabBarBottomChromeController()
 
     private lazy var statusBarHost = UIHostingController(rootView: ChainConnectionStatusBarView(models: []))
 
@@ -25,12 +24,12 @@ final class MainTabBarViewController: UIViewController {
 
     private var chainStatusAnchorWidth: Constraint?
 
-    private lazy var container = TabBarContainer(hostController: self)
+    lazy var container = TabBarContainer(hostController: self)
 
     private var tabs: [TabBarItem] = []
     private var badges: [TabBarItem: TabBarBadge] = [:]
     private var controllerByItem: [TabBarItem: UIViewController] = [:]
-    private var spaChipViewModels: [SPATabChipViewModel] = []
+    var spaChipViewModels: [SPATabChipViewModel] = []
 
     init(
         presenter: MainTabBarPresenterProtocol,
@@ -145,11 +144,6 @@ private extension MainTabBarViewController {
             make.edges.equalToSuperview()
         }
         chromeController.didMove(toParent: self)
-    }
-
-    func reconcileChromeWithSelectedTab() {
-        chromeController.apply(chromeContext(for: container.selectedController))
-        applyChips()
     }
 
     func chromeContext(for controller: UIViewController?) -> TabBarChromeContext {
@@ -270,9 +264,7 @@ extension MainTabBarViewController {
     func handleSelection(index: Int, isReselection: Bool) {
         chromeController.setPanel(nil, animated: true)
 
-        guard tabs.indices.contains(index) else {
-            return
-        }
+        guard tabs.indices.contains(index) else { return }
 
         guard !isReselection || container.selection.isSPA else {
             handleReselection()
@@ -280,7 +272,7 @@ extension MainTabBarViewController {
         }
 
         container.select(index: index)
-        reconcileChromeWithSelectedTab()
+        refreshChrome()
     }
 }
 
@@ -304,18 +296,17 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         chromeController.setSelectedIndex(index)
         badges.forEach { setBadge($0.value, for: $0.key) }
         container.setControllers(content.map(\.controller), selecting: index)
-        reconcileChromeWithSelectedTab()
+        refreshChrome()
     }
 
     func select(tab: TabBarItem) {
         chromeController.setPanel(nil, animated: true)
 
-        guard let index = tabs.firstIndex(of: tab) else {
-            return
-        }
+        guard let index = tabs.firstIndex(of: tab) else { return }
+
         chromeController.setSelectedIndex(index)
         container.select(index: index)
-        reconcileChromeWithSelectedTab()
+        refreshChrome()
     }
 
     func setBadge(_ badge: TabBarBadge?, for tab: TabBarItem) {
@@ -344,11 +335,38 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
     }
 
     func showScanPanel() {
-        let controller = viewFactory.makeScanController { [weak self] in
-            self?.chromeController.setPanel(nil, animated: true)
-            self?.presenter.didRequestContactSearch()
-        }
+        let controller = viewFactory.makeScanController()
         chromeController.setContentController(controller, for: .scan)
+
+        controller?.onPanelDragChanged = { [weak self] translation in
+            self?.chromeController.panelDragChanged(translation: translation)
+        }
+
+        controller?.onPanelDragEnded = { [weak self] translation in
+            self?.chromeController.panelDragEnded(translation: translation)
+        }
+
+        #if FEATURE_INPUT
+            // Opening the chat selects its tab, and tab selection closes the panel. A second close
+            // here would cancel that animation in place and leave the backdrop and panel frozen
+            // mid-way.
+            controller?.onChatFound = { [weak self] model in
+                self?.presenter.didFindChat(model)
+            }
+
+            controller?.onContentHeightChanged = { [weak self] in
+                self?.chromeController.resizeContentPanel()
+            }
+
+            chromeController.onPanelDragCommitted = { [weak controller] in
+                controller?.cancelSearch()
+            }
+        #else
+            controller?.onSearchTap = { [weak self] in
+                self?.chromeController.setPanel(nil, animated: true)
+                self?.presenter.didRequestContactSearch()
+            }
+        #endif
     }
 
     func showChainStatus(_ models: [ChainConnectionStatusViewModel]) {
@@ -398,89 +416,16 @@ extension MainTabBarViewController: TopmostChildProviding {
 }
 
 extension MainTabBarViewController {
+    func refreshChrome() {
+        chromeController.apply(chromeContext(for: container.selectedController))
+        applyChips()
+    }
+
     func attachWidget(_ configuration: any HashableContentConfiguration, for id: AppWidgetID) {
         chromeController.attachWidget(configuration, for: id)
     }
 
     func detachWidget(for id: AppWidgetID) {
         chromeController.detachWidget(for: id)
-    }
-}
-
-// MARK: - SPAHosting
-
-extension MainTabBarViewController: SPAHosting {
-    func openProduct(page: ProductPage) {
-        #if FEATURE_PRODUCTS
-            let tab = browserCoordinator.findOrCreateTab(for: page)
-            mountSPA(for: tab)
-        #else
-            presentProduct(page: page)
-        #endif
-    }
-
-    func minimizeSPA() {
-        container.unmountSPA()
-        reconcileChromeWithSelectedTab()
-    }
-
-    func closeSPA(tabId: UUID) {
-        let wasMounted = container.selection == .spa(tabId)
-        browserCoordinator.close(tabId: tabId)
-
-        guard wasMounted else {
-            return
-        }
-        minimizeSPA()
-    }
-}
-
-private extension MainTabBarViewController {
-    #if !FEATURE_PRODUCTS
-        /// Without the browse tab a product is a one-shot rather than a peer of the tabs: it is
-        /// presented over the container, so it never enters the tab store and closing it leaves
-        /// no chip behind.
-        func presentProduct(page: ProductPage) {
-            guard let view = SPAViewFactory.createView(
-                page: page,
-                flowState: flowStateProvider.flowState(),
-                isBrowserTab: true
-            ) else {
-                return
-            }
-
-            view.controller.modalPresentationStyle = .pageSheet
-            view.controller.sheetPresentationController?.detents = [
-                .custom { $0.maximumDetentValue * 0.92 }
-            ]
-            view.controller.sheetPresentationController?.prefersGrabberVisible = true
-
-            let host = UIWindow.keyWindow?.topmostViewController ?? self
-            host.present(view.controller, animated: true)
-        }
-    #endif
-
-    func mountSPA(for tab: SPATab) {
-        guard let controller = browserCoordinator.controller(for: tab) else {
-            closeSPA(tabId: tab.id)
-            return
-        }
-        container.mountSPA(controller, for: tab.id)
-        chromeController.apply(.spa(controller))
-        applyChips()
-    }
-
-    func applyChips() {
-        let chips = spaChipViewModels.map {
-            DSTabBarChip(id: $0.id, name: $0.name, icon: $0.icon)
-        }
-        chromeController.setSPATabs(chips, selected: mountedSPATabId)
-    }
-
-    var mountedSPATabId: UUID? {
-        guard case let .spa(id) = container.selection else {
-            return nil
-        }
-        return id
     }
 }

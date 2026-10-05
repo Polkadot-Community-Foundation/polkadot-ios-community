@@ -72,7 +72,7 @@ jobs:
   # does NOT hand the build to testers any more — that moved to `distribute` below, which
   # sits behind a required-reviewer approval.
   testflight:
-    runs-on: macos-15
+    runs-on: macos-26
     outputs:
       changelog: ${{ steps.channel.outputs.changelog }}
       date: ${{ steps.channel.outputs.date }}
@@ -89,7 +89,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.4.1'
 
       - name: Provide GoogleService-Info.plist (.dev Firebase app)
         env:
@@ -243,7 +243,7 @@ jobs:
   # Settings → Environments → required reviewers.
   distribute:
     needs: testflight
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write   # softprops/action-gh-release (release records) — the gate is the environment
     environment:
