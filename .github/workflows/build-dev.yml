@@ -205,17 +205,18 @@ jobs:
   # this proves the v36 -> v42 Core Data migration actually works, which is the fork's central
   # claim about the upgrade path and cannot be established by reading source.
   storage-migration-tests:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       RUN_IN_CI: 'true'
     steps:
       - uses: actions/checkout@v4
 
+      # Matches upstream's test toolchain (.github/actions/install).
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.4.1'
 
       - name: Provide GoogleService-Info.plist (.dev Firebase app)
         env:
