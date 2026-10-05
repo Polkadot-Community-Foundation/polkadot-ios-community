@@ -50,11 +50,13 @@ struct BrandConfigTests {
         #expect(AppConfig.DeepLink.scheme.hasPrefix(AppConfig.Brand.deeplinkBase))
     }
 
-    @Test("App group and bundle identifier came from one expansion")
-    func appGroupAgreesWithBundleIdentifier() throws {
-        let bundleIdentifier = try #require(Bundle.main.bundleIdentifier)
-
-        #expect(SharedContainerGroup.name == "group." + bundleIdentifier)
+    /// The App Group is set by its own `APP_GROUP` build setting, not derived from the bundle id.
+    @Test("App group resolves from one expansion and is well formed")
+    func appGroupResolvesConsistently() {
+        #expect(SharedContainerGroup.name == AppConfig.Brand.appGroup)
+        #expect(SharedContainerGroup.name.hasPrefix("group."))
+        #expect(!SharedContainerGroup.name.hasSuffix("."))
+        #expect(!SharedContainerGroup.name.contains("$"))
     }
 
     @Test("URL accessors parse as https hosts")
