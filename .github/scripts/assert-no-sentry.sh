@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Fails when Sentry is present in a built .app. The production lane never sets ISSUE_MONITORING, so
-# Packages/IssueMonitoring leaves sentry-cocoa out of the package graph; this proves it on the product,
-# so a sync cannot quietly bring it back.
+# Fails when Sentry is present in a built .app. The production lane never sets ISSUE_MONITORING,
+# so Sentry must not be linked; this checks the product itself.
 #
 #   assert-no-sentry.sh <path to .app>
 set -euo pipefail
