@@ -13,19 +13,6 @@
   },
   "testTargets" : [
     {
-      "skippedTests" : {
-        "suites" : [
-          {
-            "name" : "ChainSyncServiceTests"
-          },
-          {
-            "name" : "FiatOnrampTransactionTrackingTests"
-          },
-          {
-            "name" : "IdentityProfileServiceTests"
-          }
-        ]
-      },
       "target" : {
         "containerPath" : "container:polkadot-app.xcodeproj",
         "identifier" : "A5EDAAE22E93ECB0005DDA62",
@@ -85,13 +72,6 @@
       }
     },
     {
-      "skippedTests" : {
-        "suites" : [
-          {
-            "name" : "ClaimAssetServiceTests"
-          }
-        ]
-      },
       "target" : {
         "containerPath" : "container:Packages\/Coinage",
         "identifier" : "CoinageTests",

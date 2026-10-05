@@ -68,7 +68,7 @@ needs the Remote Config parameters from §3.
 
 | Variable | Used for | If empty |
 |----------|----------|----------|
-| `SENTRY_DSN` | Sentry crash/issue reporting DSN (`TESTNET_FEATURE` builds only) | Issue monitoring disabled |
+| `SENTRY_DSN` | Sentry crash/issue reporting DSN (ignored unless the build links Sentry — see §9) | Issue monitoring disabled |
 | `MELD_BASIC_AUTH_TOKEN` | Meld fiat on-ramp basic auth (`<key>:<secret>`, base64) | Fiat on-ramp auth unset |
 
 ### Signing & distribution — GitHub Actions secrets (not needed for local simulator runs)
@@ -98,7 +98,6 @@ Required only by the distribution target you actually use:
 |--------|----------|---------|
 | `CREDENTIAL_FILE_CONTENT` | Google service-account JSON for App Distribution | `firebase_debug_distribution.yml` |
 | `FIREBASE_APP_ID` | Firebase App Distribution app ID (`1:…:ios:…`) | `firebase_debug_distribution.yml` |
-| `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` | Credentials for the S3 artifact bucket | every workflow that uploads an `.ipa` |
 | `SENTRY_AUTH_TOKEN` | Uploading dSYMs to Sentry (the build phase skips when `sentry-cli` is unconfigured — see §9) | signed builds |
 
 Optional — these gate reporting steps only, and a fork can leave them unset:
@@ -175,6 +174,7 @@ Optional — an absent key disables or degrades the feature it drives:
 | `payment_asset_config` | JSON object | `{"symbol": "CASH", "iconSquareUrl": "https://…/square.svg", "iconWideUrl": "https://…/wide.svg"}` — the payment asset's symbol and logos: a square mark for amounts and payment messages, a wide mark-plus-wordmark for the balance card, as absolute web URLs (SVG or PNG; an SVG must not set `fill="none"` on its root element, which the iOS renderer cannot draw). Each field is optional; anything missing or failing to load falls back to the bundled brand (`BRAND_CASH_SYMBOL` and the built-in mark). Logos are fetched as soon as the config is applied and kept cached by URL, so a change shows on the next config refresh without an app update; publish a changed logo under a new URL. Test assets live in `docs/assets/payment-asset/`. |
 | `collectibles_fallback_url` | string | Web URL used when the collectibles dApp cannot be resolved through DotNS. |
 | `game_results_fallback_url` | string | Web URL used when the game-results dApp cannot be resolved through DotNS. |
+| `app_sharing_url` | string | Download link included in the message the ID card's Share button composes ("Download it at {link} and add me – my username is {username}."). Without it the message is shared without the link sentence. |
 
 **Chain ids per environment.** `KnownChainId` (`polkadot-app/AppConfig/KnownChains.swift`)
 hardcodes the `chainId` strings the app looks up in `chains_v2`, and
@@ -328,11 +328,19 @@ service-account JSON, or `--service-credentials-file`).
 
 ## 9. Crash symbols (Sentry)
 
-Sentry is disabled for `Release` builds — the SDK is only compiled into
-`TESTNET_FEATURE` configurations (`Debug`/`DevCI`/`Nightly`). Accordingly, the
-**"Upload Debug Symbols to Sentry"** Xcode build phase uploads dSYMs on all
+Sentry is **linked only when the build environment sets `ISSUE_MONITORING=sentry`**.
+`Packages/IssueMonitoring/Package.swift` reads it at resolve time, so without it
+sentry-cocoa never enters the dependency graph.
+
+Fastlane sets the variable for every configuration except `Release`, caches
+resolved packages per flavour, and `verify_no_issue_monitoring` fails the build on
+any Sentry symbol or DSN found in the archive. Local `Debug` builds and the nightly
+simulator build also run without Sentry, since neither sets the variable.
+
+The **"Upload Debug Symbols to Sentry"** Xcode build phase uploads dSYMs on all
 configurations except `Debug` and `Release`, and only when `sentry-cli` is
-installed; otherwise it prints a warning and continues.
+installed; otherwise it prints a warning and continues. The `distribute_testflight`
+lane skips its `sentry_debug_files_upload` for `Release` on the same grounds.
 
 > The build phase currently hardcodes `SENTRY_ORG` and `SENTRY_PROJECT` (set to
 > the upstream project). **Change these to your own org/project** — or remove
