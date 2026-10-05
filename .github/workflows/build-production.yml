@@ -84,7 +84,7 @@ jobs:
   build:
     name: Build Release (unsigned)
     if: inputs.signing == 'none' || inputs.signing == 'production'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     # Public production CONFIGURATION only. Deliberately ungated, so a production build can run
     # without an approval click and therefore in parallel with a devnet build. Key material
@@ -129,7 +129,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.4.1'
 
       # polkadot-app/GoogleService-Info.plist is gitignored and absent from a fresh checkout.
       # The project uses Xcode synchronized folders, so the file is NOT a required build input
@@ -357,7 +357,7 @@ jobs:
     needs: build
     # !cancelled() is required: without a status function, a skipped `build` (validate mode) skips this job too.
     if: ${{ !cancelled() && (inputs.signing == 'validate' || inputs.signing == 'upload' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
     environment: production-distribution
     permissions:
@@ -451,7 +451,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.4.1'
 
       # production-distribution only: no fallback to the repo-level devnet plist.
       - name: Provide GoogleService-Info.plist (production Firebase app)
