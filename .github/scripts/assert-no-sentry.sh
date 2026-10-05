@@ -13,11 +13,14 @@ command -v strings >/dev/null || { echo "::error::strings is not available"; exi
 
 fail=0
 
-# 1. Nothing named after it: the framework, its PrivacyInfo, any resource bundle.
+# 1. None of what sentry-cocoa ships: its framework, dylib, resource bundle or privacy manifest.
+# Matched by artifact type, not by name alone: the app also carries package sources such as
+# SentryIssueMonitoringService.swift, which compile to nothing without SENTRY_ENABLED.
 while IFS= read -r path; do
   echo "::error::Sentry is bundled: ${path#"$app/"}"
   fail=1
-done < <(find "$app" -iname "*sentry*")
+done < <(find "$app" \( -iname "*sentry*.framework" -o -iname "*sentry*.bundle" \
+  -o -iname "*sentry*.dylib" -o -iname "*sentry*.xcprivacy" \) -prune -print)
 
 # 2. No code from it: linked Sentry leaves its type names in the binary with no call site.
 scanned=0
