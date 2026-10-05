@@ -1,47 +1,32 @@
 name: Build (Production)
 
-# PCF-231 / PCF-239. Builds the Release configuration (the production surface: no environment,
-# no feature flags) and asserts its identity. Dispatch-only.
+# Builds the Release configuration (no environment, no feature flags) and asserts its identity.
 #
-#   signing: none        unsigned compile proof; evidence goes to the private bucket only.
-#   signing: production  additionally archives, signs and uploads to TestFlight, available ONLY
-#                        to the INTERNAL group "Release Internal". Never an external group, never
-#                        App Store review. The `sign` job waits on `production-distribution`
-#                        (required reviewers).
+#   signing: none        unsigned build; evidence goes to the private bucket only.
+#   signing: production  also archives, signs and uploads to TestFlight for internal groups only,
+#                        after approval on `production-distribution`.
 #
-# Lane isolation (runnable alongside the devnet lane):
-#   concurrency group  build-production-*        (devnet: build-dev-*, release-dev)
-#   output             private bucket, prefix ios/; TestFlight internal group "Release Internal"
-#                      Never an Actions artifact: this repository is public.
-#   configuration      Release                   (devnet: Dev)
-#   build number       10000 + run number        (devnet: release-dev run number). Both lanes
-#                      upload to the same App Store record (io.pcf.polkadotapp), so the ranges
-#                      must never meet.
+# Outputs never become Actions artifacts: this repository is public. Build numbers are
+# 10000 + run number, so they never collide with the devnet lane in the shared App Store record.
 #
-# Environment `production` (no protection), the unsigned `build` job:
-#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  (optional) production Firebase plist. Falls back
-#       to the repo-level GOOGLESERVICE_INFO_PLIST_DEV_BASE64, which is the Firebase app registered
-#       for io.pcf.polkadotapp (the Dev build shares it), then to the committed placeholder.
-#   secret MELD_BASIC_AUTH_TOKEN   (optional) Meld on-ramp token. Absent => on-ramp inert.
-#   var    PRODUCTION_BUNDLE_ID    pins the id the unsigned Release build resolves to.
+# Environment `production` (ungated), `build` job:
+#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  optional; falls back to the repo-level
+#                                                io.pcf.polkadotapp plist, then to the placeholder
+#   secret MELD_BASIC_AUTH_TOKEN                 optional; absent leaves the Meld on-ramp inert
+#   var    PRODUCTION_BUNDLE_ID                  asserted against the resolved bundle id
 #
-# Environment `production-distribution` (REQUIRED REVIEWERS), the `sign` job. It cannot read
-# `production` secrets, and it never falls back to repo-level devnet material:
-#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  REQUIRED. Its BUNDLE_ID must be PRODUCTION_BUNDLE_ID.
-#   secret MELD_BASIC_AUTH_TOKEN     (optional) as above.
-#   var PRODUCTION_BUNDLE_ID         REQUIRED. The signed .ipa is asserted against it before upload.
-#   var IOS_SIGNING_SECRET           Secret Manager secret holding the App Store Connect key
-#                                    (key-id, issuer-id, team-id, private-key), read at run time.
-#   var IOS_SIGNING_SERVICE_ACCOUNT  the only identity allowed to read it; federated for this
-#                                    repository in this environment only.
-#   var GCP_WORKLOAD_IDENTITY_PROVIDER
-#   No GitHub secret holds Apple signing material for this lane.
+# Environment `production-distribution` (required reviewers), `sign` job. No fallback to
+# repo-level material, and no GitHub secret holds Apple signing material:
+#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  required; BUNDLE_ID must be PRODUCTION_BUNDLE_ID
+#   secret MELD_BASIC_AUTH_TOKEN                 optional
+#   var    PRODUCTION_BUNDLE_ID                  required; the signed .ipa is checked against it
+#   var    IOS_SIGNING_SECRET                    Secret Manager secret with the App Store Connect key
+#   var    IOS_SIGNING_SERVICE_ACCOUNT           the only identity allowed to read it
+#   var    GCP_WORKLOAD_IDENTITY_PROVIDER
 #
-# Signing runs only when dispatched on the `production` branch or a production/* tag, with `ref`
-# empty or a production/* tag: the built code's build phases run while the key is on disk. The
-# signing helper itself always comes from the dispatched commit, never from `ref`.
-#
-# SENTRY_* is deliberately not wired: Sentry is compiled only under TESTNET_FEATURE.
+# Signing runs only when dispatched on `production` or a production/* tag, because the built
+# code's build phases run while the key is on disk. The signing helper always comes from the
+# dispatched commit, never from `ref`.
 
 on:
   workflow_dispatch:
@@ -61,23 +46,21 @@ on:
         required: false
         default: ''
 
-# No `push`, no `pull_request`, no `tags`, no `schedule`. Dispatch-only is the strongest
-# guarantee that nothing ever ships by accident from this lane.
+# Dispatch-only: no push, pull_request, tag or schedule trigger.
 
 permissions:
   contents: read
 
 concurrency:
-  # Distinct from build-dev-${{ github.ref }} and from release-dev, so a production run can
-  # never cancel a devnet run and vice versa. Keyed on the ref actually being built.
+  # Separate from the devnet lanes so neither can cancel the other.
   group: build-production-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
 env:
-  # Sentry stays out of this lane's package graph: Packages/IssueMonitoring links it only when
-  # ISSUE_MONITORING=sentry, which this lane never sets. assert-no-sentry.sh proves it on the product.
-  # Uploads to the private bucket must not use parallel composite uploads: their temporary parts live outside
-  # this repository's prefix and need delete to clean up, which the build identity deliberately lacks.
+  # Packages/IssueMonitoring links Sentry only when ISSUE_MONITORING=sentry, which this lane never
+  # sets; assert-no-sentry.sh checks the product.
+  # Parallel composite uploads leave temporary parts outside this repository's bucket prefix, which
+  # the build identity cannot delete.
   CLOUDSDK_STORAGE_PARALLEL_COMPOSITE_UPLOAD_ENABLED: "False"
 
 jobs:
@@ -86,9 +69,8 @@ jobs:
     if: inputs.signing == 'none' || inputs.signing == 'production'
     runs-on: macos-26
     timeout-minutes: 90
-    # Public production CONFIGURATION only. Deliberately ungated, so a production build can run
-    # without an approval click and therefore in parallel with a devnet build. Key material
-    # lives in `production-distribution`, which the `sign` job declares.
+    # Configuration only, so ungated. Signing material lives in `production-distribution`,
+    # which only the `sign` job declares.
     environment: production
     permissions:
       contents: read
@@ -131,12 +113,7 @@ jobs:
         with:
           xcode-version: '26.4.1'
 
-      # polkadot-app/GoogleService-Info.plist is gitignored and absent from a fresh checkout.
-      # The project uses Xcode synchronized folders, so the file is NOT a required build input
-      # and its absence would not fail the compile — but a Release artifact with no Firebase
-      # configuration is a misleading artifact, and the copy build phase (which selects
-      # GoogleService-Info-Release.plist for the Release configuration) is skipped while
-      # RUN_IN_CI=true. Provide it here, exactly as build-dev.yml does for Dev.
+      # The plist is gitignored and the project's copy phase is skipped while RUN_IN_CI=true.
       - name: Provide GoogleService-Info.plist (production Firebase app)
         env:
           GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
@@ -156,9 +133,7 @@ jobs:
           bundle=$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' polkadot-app/GoogleService-Info.plist 2>/dev/null || true)
           echo "Firebase plist BUNDLE_ID: ${bundle:-<none>}"
 
-      # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
-      # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
-      # SENTRY_DSN is not passed: Sentry is compiled out of Release (TESTNET_FEATURE only).
+      # The in-Xcode "Generate Secrets" phase is skipped while RUN_IN_CI=true.
       - name: Generate build-time secrets
         env:
           MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
@@ -171,16 +146,8 @@ jobs:
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app -derivedDataPath "$RUNNER_TEMP/DerivedData"
 
-      # The production claim this lane exists to defend is "Release is the production surface".
-      # -showBuildSettings is the only thing that can prove which flags and which identity the
-      # Release configuration actually resolves to, so assert them rather than trusting the
-      # xcconfig chain to still say what it says after the next upstream sync.
-      #
-      # Resolution chain being asserted:
-      #   polkadot-app/Configs/polkadot-app.release.xcconfig  BUNDLE = $(APP_MAIN_BUNDLE)
-      #     -> Configs/base.release.xcconfig                  APP_MAIN_BUNDLE = $(BRAND_BUNDLE_ROOT)
-      #                                                       BASE_SWIFT_FLAGS =   (empty, on purpose)
-      #     -> Configs/brand.xcconfig                         BRAND_BUNDLE_ROOT = io.pcf.polkadotapp
+      # Assert what Release actually resolves to (flags, icon, identity) instead of trusting the
+      # xcconfig chain after an upstream sync.
       - name: Verify the Release configuration is the production surface
         run: |
           set -o pipefail
@@ -193,8 +160,7 @@ jobs:
           fail=0
 
           # --- feature axis -------------------------------------------------------------
-          # Release must carry NO environment and NO feature flag. Any of these appearing here
-          # means a devnet/testnet surface has leaked into the production configuration.
+          # Release must carry no environment and no feature flag.
           for flag in -DDEV -DNIGHTLY -DUNSTABLE -DTESTNET_FEATURE -DF_DEV -DE2E_TEST \
                       -DFEATURE_DIMS -DFEATURE_DIMS_FULL -DFEATURE_PRODUCTS -DFEATURE_SIGN_IN \
                       -DFEATURE_PRIZES -DDISABLE_AUTH; do
@@ -206,8 +172,7 @@ jobs:
           done
 
           # --- icon ---------------------------------------------------------------------
-          # Release ships the unsuffixed production icon. AppIconDev here means the Dev leaf's
-          # ICON_SUFFIX has leaked into the Release chain.
+          # Release ships the unsuffixed production icon.
           if grep -qxF "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon" build-settings.txt; then
             echo "ok: ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon"
           else
@@ -216,10 +181,8 @@ jobs:
             fail=1
           fi
 
-          # --- identity must at least be COMPLETE ---------------------------------------
-          # An empty expansion is the failure mode that builds green and breaks at launch:
-          # PRODUCT_BUNDLE_IDENTIFIER, APP_MAIN_BUNDLE and DEEPLINK all flow from brand.xcconfig
-          # through Info.plist and AppConfig.Brand, which traps at startup on an empty key.
+          # --- identity must be complete -------------------------------------------------
+          # An empty expansion builds green but traps at launch in AppConfig.Brand.
           for key in PRODUCT_BUNDLE_IDENTIFIER APP_MAIN_BUNDLE APP_GROUP DEEPLINK APP_NAME; do
             if grep -qE "^${key} = .+" build-settings.txt; then
               echo "ok: $(grep -m1 -E "^${key} = .+" build-settings.txt)"
@@ -228,15 +191,11 @@ jobs:
               fail=1
             fi
           done
-          # Info.plist (BrandAppGroup) and the entitlements read $(APP_GROUP); it must be the group the
-          # provisioning profile grants, or signing fails at the archive.
+          # Info.plist and the entitlements read $(APP_GROUP); it must match the provisioning profile.
           echo "app group: $(grep -m1 -E '^APP_GROUP = ' build-settings.txt | sed 's/^APP_GROUP = //')"
 
-          # --- identity OWNERSHIP -------------------------------------------------------
-          # Today Release resolves to Parity's identity, by design of the inherited
-          # brand.xcconfig. That is a blocker for shipping, NOT for compiling, so with
-          # signing=none it is a loud warning; it is a hard error the moment anyone tries to
-          # sign, because PCF must never publish under io.parity.*.
+          # --- identity ownership -------------------------------------------------------
+          # A Parity bundle id is a warning for an unsigned build and an error when signing.
           resolved=$(grep -m1 -E '^PRODUCT_BUNDLE_IDENTIFIER = ' build-settings.txt | sed 's/^PRODUCT_BUNDLE_IDENTIFIER = //')
           echo "Release bundle identifier resolves to: ${resolved}"
           if printf '%s' "$resolved" | grep -q '^io\.parity\.'; then
@@ -265,10 +224,7 @@ jobs:
 
           exit $fail
 
-      # Shape-identical to build-dev.yml's "Build (Dev, no code signing)" step except for
-      # -configuration Release. Unsigned, so it needs no Apple Developer portal registration,
-      # no provisioning profile and no App Store Connect key — which is the only reason this
-      # lane can run on this fork at all.
+      # Unsigned: needs no provisioning profile and no App Store Connect key.
       - name: Build (Release, no code signing)
         run: |
           set -o pipefail
@@ -293,9 +249,7 @@ jobs:
           [ -d "$app" ] || { echo "::error::no Release-iphoneos build to check"; exit 1; }
           _trusted/.github/scripts/assert-no-sentry.sh "$app"
 
-      # The artifact is the evidence, not a deliverable: an unsigned .app cannot be installed
-      # on a device and is not an .ipa. It exists so a human can inspect what the production
-      # configuration actually produced — Info.plist identity, linked binary, bundled resources.
+      # Evidence for inspection, not a deliverable: an unsigned .app cannot be installed.
       - name: Collect the built product
         if: always()
         continue-on-error: true
@@ -315,9 +269,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$app" production-evidence/polkadot-app-Release-unsigned.zip
           ls -la production-evidence/
 
-      # Private bucket ONLY (keyless sign-in, create and read under `ios/` only). No Actions
-      # artifact, no softprops/action-gh-release, no upload_to_testflight, no firebase
-      # appdistribution:distribute, no aws s3 cp.
+      # Private bucket only (keyless auth; create and read under `ios/`).
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         if: always()
         with:
@@ -346,12 +298,10 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Archive, sign and upload to TestFlight for the INTERNAL group "Release Internal" only.
-  # Runs after `build` has proved the Release identity, and waits for a reviewer on
-  # `production-distribution`. The gate lives in the ENVIRONMENT: if it is ever deleted, GitHub
-  # recreates it unprotected and this job runs straight through.
-  # Signing material is read from Secret Manager at run time by an identity federated for this
-  # repository in `production-distribution` only, written under $RUNNER_TEMP and removed at the end.
+  # Archive, sign and upload to TestFlight for internal groups only, after `build` succeeds.
+  # The approval gate is the `production-distribution` environment: if it is deleted, GitHub
+  # recreates it unprotected. Signing material is read from Secret Manager at run time, written
+  # under $RUNNER_TEMP and removed at the end.
   sign:
     name: Sign + TestFlight (Release Internal)
     needs: build
@@ -453,7 +403,7 @@ jobs:
         with:
           xcode-version: '26.4.1'
 
-      # production-distribution only: no fallback to the repo-level devnet plist.
+      # production-distribution only: no fallback to the repo-level plist.
       - name: Provide GoogleService-Info.plist (production Firebase app)
         env:
           GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
@@ -518,8 +468,8 @@ jobs:
         run: |
           "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py load-signing-material
 
-      # Apple's codesign signs only from a keychain, so import the stored certificate into a throwaway one.
-      # Nothing here touches the runner's default keychain, and both are discarded at the end.
+      # codesign signs only from a keychain: import the certificate into a temporary one,
+      # deleted at the end. The runner's default keychain is not touched.
       - name: Import the distribution certificate
         if: inputs.signing != 'upload'
         run: |
@@ -539,8 +489,7 @@ jobs:
           [ -n "$identity" ] || { echo "::error::no Apple Distribution identity in the imported certificate"; exit 1; }
           echo "signing identity: ${identity#*\"}"
 
-      # Manual signing per target, the way upstream does it: xcodebuild then never contacts Apple's portal,
-      # so it can neither create a certificate nor fail on the portal's flaky authentication.
+      # Manual signing per target, so xcodebuild never contacts Apple's portal.
       - name: Pin manual signing
         if: inputs.signing != 'upload'
         run: |
@@ -563,9 +512,8 @@ jobs:
         run: |
           "$RUNNER_TEMP/ascenv/bin/python" _trusted/.github/scripts/asc_signing.py preflight
 
-      # Everything that must hold before an archive is worth 25 minutes: the certificate is live at
-      # Apple (not revoked), each profile embeds THAT certificate, and every entitlement the targets
-      # ask for is granted. `signing: validate` stops here.
+      # Before the archive: the certificate is live, each profile embeds it, and every requested
+      # entitlement is granted. `signing: validate` stops here.
       - name: Verify the signing material
         if: inputs.signing != 'upload'
         env:
@@ -748,13 +696,9 @@ jobs:
               '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
               > "$api_key"
           )
-          # --app_identifier is required: fastlane otherwise reads fastlane/Appfile, which is upstream's
-          # and names Parity's bundle id.
-          #
-          # No --groups: Apple refuses to assign an INTERNAL group to a build ("Cannot add internal
-          # group to a build"), because internal groups receive every processed build automatically.
-          # Passing it made run 35816156803 fail after the build had already arrived and processed.
-          # The preflight is what guards the destination: it asserts the group exists and is internal.
+          # --app_identifier: fastlane otherwise reads upstream's fastlane/Appfile (Parity's bundle id).
+          # No --groups: Apple refuses to assign an internal group, which receives every build
+          # automatically. The preflight checks the group exists and is internal.
           fastlane pilot upload \
             --api_key_path "$api_key" \
             --app_identifier "$PRODUCTION_BUNDLE_ID" \
@@ -769,9 +713,8 @@ jobs:
             echo "Uploaded build ${BUILD_NUMBER}. Internal groups, including **${TESTFLIGHT_GROUP}**, receive it automatically once processed."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # What shipped, recorded at the commit it was built from: production/<version>-<build>, which is
-      # also a ref this lane accepts, so the same build can be rebuilt verbatim. Only after Apple has
-      # the build, and only in production mode - `upload` re-sends an .ipa built by an earlier run.
+      # Tag the built commit production/<version>-<build>, a ref this lane accepts for rebuilds.
+      # Production mode only: `upload` re-sends an .ipa built by an earlier run.
       - name: Tag the shipped commit
         if: inputs.signing == 'production'
         env:
@@ -794,8 +737,8 @@ jobs:
           fi
           echo "- Tagged \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # Automatic signing on a fresh runner creates a certificate every run; revoke the ones
-      # this runner created so the team account never fills up. Runs even when signing failed.
+      # Revoke development certificates created during this run so the team's certificate limit
+      # is never reached. Runs even when signing failed.
       - name: Revoke certificates created by this runner
         if: always()
         timeout-minutes: 10
