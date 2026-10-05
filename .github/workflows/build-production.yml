@@ -1,4 +1,4 @@
-name: Build (Production, unsigned)
+name: Build (Production)
 
 # PCF-231 / PCF-239. Compiles the **Release** configuration and proves the production feature
 # set builds. It produces an UNSIGNED artifact and distributes NOTHING — no TestFlight, no App
