@@ -74,8 +74,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Sentry is left out of this lane's package graph; assert-no-sentry.sh proves it on the product.
-  EXCLUDED_PACKAGES: sentry-cocoa
+  # Sentry stays out of this lane's package graph: Packages/IssueMonitoring links it only when
+  # ISSUE_MONITORING=sentry, which this lane never sets. assert-no-sentry.sh proves it on the product.
   # Uploads to the private bucket must not use parallel composite uploads: their temporary parts live outside
   # this repository's prefix and need delete to clean up, which the build identity deliberately lacks.
   CLOUDSDK_STORAGE_PARALLEL_COMPOSITE_UPLOAD_ENABLED: "False"
