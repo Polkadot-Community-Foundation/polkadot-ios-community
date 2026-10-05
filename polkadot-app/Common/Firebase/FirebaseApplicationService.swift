@@ -51,13 +51,18 @@ final class FirebaseApplicationService: RemoteConfigManaging {
     func fetchRemoteConfigValues() {
         Task {
             do {
-                try await remoteConfig.setCustomSignals(Self.customSignals)
-                let status = try await remoteConfig.fetchAndActivate()
-                handleRemoteConfigStatus(status)
+                try await fetchAndActivateRemoteConfig()
+                delegate?.remoteConfig(didFinishLoading: .success(()))
             } catch {
                 delegate?.remoteConfig(didFinishLoading: .failure(error))
             }
         }
+    }
+
+    func fetchAndActivateRemoteConfig() async throws {
+        try await remoteConfig.setCustomSignals(Self.customSignals)
+        let status = try await remoteConfig.fetchAndActivate()
+        handleRemoteConfigStatus(status)
     }
 
     func asyncWaitChainsForRemoteConfigValues() -> CompoundOperationWrapper<[RemoteChainModel]> {
@@ -110,7 +115,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             fundingUrl: fundingConfigValue(.onrampUrl),
             offrampUrl: fundingConfigValue(.offrampUrl),
             accountDataStoreContract: accountDataStoreContractAddress(),
-            paymentAsset: paymentAssetConfig()
+            paymentAsset: paymentAssetConfig(),
+            appSharingUrl: url(for: .appSharingUrl)
         )
     }
 
@@ -125,13 +131,11 @@ private extension FirebaseApplicationService {
     private func configurationRemoteConfigSettings() {
         let remoteConfigSettings = RemoteConfigSettings()
         remoteConfigSettings.minimumFetchInterval = .zero
+        remoteConfigSettings.fetchTimeout = 10
         remoteConfig.configSettings = remoteConfigSettings
     }
 
     private func handleRemoteConfigStatus(_ status: RemoteConfigFetchAndActivateStatus) {
-        defer {
-            delegate?.remoteConfig(didFinishLoading: .success(()))
-        }
         switch status {
         case .successFetchedFromRemote:
             logger.info("RemoteConfig fetched from remote and activated")
@@ -273,7 +277,7 @@ private extension FirebaseApplicationService {
                 #if UNSTABLE
                     "unstable"
                 #elseif NIGHTLY
-                    "nightly"
+                    "safetynet"
                 #else
                     "release"
                 #endif
@@ -307,4 +311,5 @@ private extension String {
     static let accountDataStoreConfig = "account_data_store_config"
     static let contractAddress = "contractAddress"
     static let paymentAssetConfig = "payment_asset_config"
+    static let appSharingUrl = "app_sharing_url"
 }
