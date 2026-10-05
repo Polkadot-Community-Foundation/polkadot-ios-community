@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fails when Sentry is present in a built .app. The production lane excludes sentry-cocoa from the
-# package graph; this proves it on the product, so a sync cannot quietly bring it back.
+# Fails when Sentry is present in a built .app. The production lane never sets ISSUE_MONITORING, so
+# Packages/IssueMonitoring leaves sentry-cocoa out of the package graph; this proves it on the product,
+# so a sync cannot quietly bring it back.
 #
 #   assert-no-sentry.sh <path to .app>
 set -euo pipefail
@@ -34,7 +35,7 @@ done < <(find "$app" -type f)   # not -perm -u+x: the exec bit need not survive 
 [ "$scanned" -gt 0 ] || { echo "::error::no Mach-O executable under $app"; exit 1; }
 
 if [ "$fail" -ne 0 ]; then
-  echo "::error::Sentry must not reach a production build; see EXCLUDED_PACKAGES in the workflow"
+  echo "::error::Sentry must not reach a production build; check ISSUE_MONITORING and Packages/IssueMonitoring"
   exit 1
 fi
 echo "no Sentry in $(basename "$app"): not bundled, no symbols in $scanned executables"
