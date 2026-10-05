@@ -1,8 +1,8 @@
 name: TestFlight prune (Dev)
 
 # Expire older TestFlight builds so only the latest N stay available to a beta
-# group. Scoped to a single external group (default "Products Devnet"); Nightly /
-# production builds that share the app record io.pcf.polkadotapp are never touched.
+# group. Scoped to a single external group (default "Polkadot Devnet Testers"); other
+# builds that share the app record io.pcf.polkadotapp.devnet are never touched.
 #
 # Dry-run by default: it only LISTS what would be expired. Expiry (irreversible —
 # Apple has no un-expire) runs only when dispatched with apply=true.
@@ -16,7 +16,7 @@ on:
     inputs:
       group:
         description: 'TestFlight beta group name'
-        default: 'Products Devnet'
+        default: 'Polkadot Devnet Testers'
       keep:
         description: 'How many most-recent builds to keep active'
         default: '1'
@@ -45,7 +45,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           ASC_KEY_B64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
-          BUNDLE_ID: io.pcf.polkadotapp
+          BUNDLE_ID: io.pcf.polkadotapp.devnet
           GROUP: ${{ inputs.group }}
           KEEP: ${{ inputs.keep }}
           APPLY: ${{ inputs.apply }}
