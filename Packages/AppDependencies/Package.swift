@@ -5,7 +5,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "extrinsic-service-ios",
         url: "https://github.com/novasamatech/extrinsic-service-ios",
-        version: .exact("1.18.0"),
+        version: .exact("1.20.0"),
         products: ["ExtrinsicService"]
     ),
     .init(
@@ -17,7 +17,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "firebase-ios-sdk",
         url: "https://github.com/firebase/firebase-ios-sdk",
-        version: .exact("12.5.0"),
+        version: .exact("12.6.0"),
         products: [
             "FirebaseCore",
             "FirebaseRemoteConfig"
@@ -56,7 +56,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "substrate-sdk-ios",
         url: "https://github.com/novasamatech/substrate-sdk-ios",
-        version: .exact("5.15.0"),
+        version: .exact("5.17.0"),
         products: [
             "SubstrateSdk",
             "SubstrateMetadataHash"
@@ -112,8 +112,8 @@ let dependencyConfigs: [DependencyConfig] = [
     ),
     .init(
         name: "AsyncExtensions",
-        url: "https://github.com/sideeffect-io/AsyncExtensions",
-        version: .exact("0.5.4"),
+        url: "https://github.com/paritytech/AsyncExtensions",
+        version: .exact("0.5.6"),
         products: ["AsyncExtensions"]
     ),
     .init(
@@ -145,32 +145,10 @@ let dependencyConfigs: [DependencyConfig] = [
         url: "https://github.com/pointfreeco/swift-custom-dump",
         version: .exact("1.4.1"),
         products: ["CustomDump"]
-    ),
-    .init(
-        name: "sentry-cocoa",
-        url: "https://github.com/getsentry/sentry-cocoa",
-        version: .upToNextMajor("8.0.0"),
-        products: ["Sentry"]
     )
 ]
 
 // MARK: - Config main
-
-// Packages left out of the graph, as a comma-separated EXCLUDED_PACKAGES of DependencyConfig names.
-// Set by the production build workflow; unset everywhere else.
-let excludedPackages = Set(
-    (Context.environment["EXCLUDED_PACKAGES"] ?? "")
-        .split(whereSeparator: { $0 == "," || $0.isWhitespace })
-        .map(String.init)
-)
-
-let activeDependencyConfigs = dependencyConfigs.filter { !excludedPackages.contains($0.name) }
-
-// A name that matches nothing would silently exclude nothing.
-let unknownExclusions = excludedPackages.subtracting(dependencyConfigs.map(\.name)).sorted()
-if !unknownExclusions.isEmpty {
-    fatalError("EXCLUDED_PACKAGES names no dependency: \(unknownExclusions.joined(separator: ", "))")
-}
 
 let package = Package(
     name: "AppDependencies",
@@ -183,11 +161,11 @@ let package = Package(
             targets: ["AppDependencies"]
         )
     ],
-    dependencies: activeDependencyConfigs.map(\.packageDependency),
+    dependencies: dependencyConfigs.map(\.packageDependency),
     targets: [
         .target(
             name: "AppDependencies",
-            dependencies: activeDependencyConfigs.flatMap(\.targetDependency),
+            dependencies: dependencyConfigs.flatMap(\.targetDependency),
             path: ""
         )
     ]
