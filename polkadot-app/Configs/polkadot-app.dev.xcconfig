@@ -16,11 +16,11 @@
 // -DW3S was dropped: upstream 2978516 removed the flag and every `#if W3S` site with it.
 //
 // -DDEV is fork-only and load-bearing: it selects the nightly-* chain ids, the devnet asset
-// set, the Remote Config `build_channel = dev` custom signal, and compiles out the jailbreak gate.
+// set and the Remote Config `build_channel = dev` custom signal.
 
 #include "../../Configs/base.release.xcconfig"
 
-OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN"
+OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN" "-DFEATURE_INPUT"
 
 // Icon. project.pbxproj resolves ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon$(ICON_SUFFIX),
 // and base.release.xcconfig leaves ICON_SUFFIX unset on purpose so Release ships "AppIcon".
