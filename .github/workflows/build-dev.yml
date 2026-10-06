@@ -20,8 +20,9 @@ name: Build (Dev, unsigned)
 # all — upstream's pr.yml cannot pass here (it wants secrets.FASTLANE_RO_PAT for Parity's Match
 # repo and a GoogleService-Info.plist pinned to io.parity.polkadotapp.develop).
 #
-# Required repository secrets (already used by release-dev.yml):
-#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64  base64 of the .dev Firebase app's GoogleService-Info.plist
+# Required repository secrets:
+#   GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64  plist of the io.pcf.polkadotapp.devnet Firebase iOS app (Dev build)
+#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64     plist of the io.pcf.polkadotapp Firebase iOS app (migration tests)
 #
 # W3S_AUTH_KEY is no longer used — see release-dev.yml.
 
@@ -59,7 +60,7 @@ jobs:
 
       - name: Provide GoogleService-Info.plist (.dev Firebase app)
         env:
-          GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
+          GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
       # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
@@ -97,10 +98,10 @@ jobs:
             fi
           }
 
-          expect "APP_MAIN_BUNDLE = io.pcf.polkadotapp"
-          expect "BUNDLE = io.pcf.polkadotapp"
-          expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp"
-          expect "APP_GROUP = group.pcf.polkadotapp"
+          expect "APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet"
+          expect "BUNDLE = io.pcf.polkadotapp.devnet"
+          expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp.devnet"
+          expect "APP_GROUP = group.pcf.polkadotapp.devnet"
 
           # The Dev leaf includes base.release.xcconfig, which leaves ICON_SUFFIX unset on purpose
           # so Release ships "AppIcon". Inheriting that empty default is exactly the bug this lane

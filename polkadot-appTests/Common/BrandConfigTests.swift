@@ -50,14 +50,7 @@ struct BrandConfigTests {
         #expect(AppConfig.DeepLink.scheme.hasPrefix(AppConfig.Brand.deeplinkBase))
     }
 
-    /// FORK DELTA. Upstream asserts `SharedContainerGroup.name == "group." + bundleIdentifier`,
-    /// i.e. that the App Group is a pure expansion of the bundle id. That invariant does not hold
-    /// for this fork on purpose: the registered PCF App Group (`group.pcf.polkadotapp`) predates
-    /// the Dev build's bundle id (`io.pcf.polkadotapp`) and cannot be renamed without orphaning
-    /// every installed tester's shared container. The App Group is therefore carried by its own
-    /// `APP_GROUP` xcconfig variable, and what this test pins is that the two sources that must
-    /// agree — the `BrandAppGroup` Info.plist key and `SharedContainerGroup` — still come from
-    /// one expansion, and that the value is a well-formed group identifier.
+    /// The App Group is set by its own `APP_GROUP` build setting, not derived from the bundle id.
     @Test("App group resolves from one expansion and is well formed")
     func appGroupResolvesConsistently() throws {
         _ = try #require(Bundle.main.bundleIdentifier)

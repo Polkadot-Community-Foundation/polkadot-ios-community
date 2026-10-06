@@ -29,10 +29,9 @@ OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-
 // Must stay AFTER the #include above, which is where the empty default comes from.
 ICON_SUFFIX     = Dev
 
-// PCF identity. APP_GROUP is deliberately NOT group.$(APP_MAIN_BUNDLE): the registered PCF
-// App Group predates the bundle id and must not change, or every installed tester loses the
-// shared container — keychain ids, UserDefaults suite and the Core Data store all live in it.
+// PCF devnet identity. APP_GROUP follows the bundle id because keychain-access-groups is
+// $(AppIdentifierPrefix)$(BUNDLE): the shared container and the keychain must move together.
 APP_NAME        = $(BRAND_DISPLAY_NAME)
-APP_MAIN_BUNDLE = io.pcf.polkadotapp
-APP_GROUP       = group.pcf.polkadotapp
+APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet
+APP_GROUP       = group.pcf.polkadotapp.devnet
 BUNDLE          = $(APP_MAIN_BUNDLE)
