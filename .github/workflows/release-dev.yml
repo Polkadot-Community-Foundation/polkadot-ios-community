@@ -249,7 +249,7 @@ jobs:
       contents: write   # softprops/action-gh-release (release records) — the gate is the environment
     environment:
       name: tester-distribution
-      url: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+      url: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
     steps:
       - name: Download the signed .ipa
         uses: actions/download-artifact@v4
@@ -310,7 +310,7 @@ jobs:
 
             Distribution is TestFlight-only:
 
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
 
       # ---------------------------------------------------------------- weekly track
       # Scheduled runs carry no tag, so mint a dated pre-release (behind the same approval). It exists to give the
@@ -330,7 +330,7 @@ jobs:
 
             Distribution is TestFlight-only:
 
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/tCzFysKq' }}
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
 
             This is a **devnet** build for testing only; state may be wiped. Found a
             problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
