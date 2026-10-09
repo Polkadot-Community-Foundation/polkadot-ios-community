@@ -81,6 +81,8 @@ jobs:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
       IS_WEEKLY: ${{ github.event_name == 'schedule' }}
+      TRUAPI_CORE_VERSION: '0.24.0'
+      TRUAPI_CORE_REVISION: 0c6f0f306f38bc088c122506f83ca31659910fbc
     steps:
       - name: Record the signing start
         run: echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
@@ -130,6 +132,51 @@ jobs:
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
+      # The TrUAPI core is the prebuilt xcframework of the trinity-user-agents SwiftPM tag.
+      # Trinity's Package.swift falls back to an older tag outside its monorepo, and without
+      # -DTRUAPI_RUNTIME_DEFAULT the Dev build quietly defaults to the native runtime.
+      - name: Verify the TrUAPI core pin and runtime default
+        run: |
+          set -o pipefail
+          fail=0
+
+          python3 - \
+            polkadot-app.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
+            Packages/AppDependencies/Package.resolved <<'PY' || fail=1
+          import json, os, sys
+
+          want = {"version": os.environ["TRUAPI_CORE_VERSION"],
+                  "revision": os.environ["TRUAPI_CORE_REVISION"]}
+          status = 0
+          for path in sys.argv[1:]:
+              pins = [p for p in json.load(open(path))["pins"]
+                      if p["identity"] == "trinity-user-agents"]
+              got = {k: pins[0]["state"].get(k) for k in want} if len(pins) == 1 else None
+              if got == want:
+                  print(f"ok: {path} pins trinity-user-agents {want['version']} @ {want['revision']}")
+              else:
+                  print(f"::error::{path} pins trinity-user-agents at {got}, expected {want}")
+                  status = 1
+          sys.exit(status)
+          PY
+
+          xcodebuild \
+            -project polkadot-app.xcodeproj \
+            -scheme polkadot-app \
+            -configuration Dev \
+            -showBuildSettings 2>/dev/null | sed -e 's/^[[:space:]]*//' > build-settings.txt
+          app_flags=$(awk '/^Build settings for action [a-z]+ and target /{target=$NF}
+            target == "polkadot-app:" && /^OTHER_SWIFT_FLAGS = /' build-settings.txt)
+          if printf '%s\n' "$app_flags" | grep -qE '(^| )-DTRUAPI_RUNTIME_DEFAULT( |$)'; then
+            echo "ok: polkadot-app OTHER_SWIFT_FLAGS carries -DTRUAPI_RUNTIME_DEFAULT"
+          else
+            echo "::error::the Dev configuration of polkadot-app does not set -DTRUAPI_RUNTIME_DEFAULT (polkadot-app/Configs/polkadot-app.dev.xcconfig)"
+            echo "  ${app_flags:-OTHER_SWIFT_FLAGS absent}"
+            fail=1
+          fi
+
+          exit $fail
+
       - name: Write ExportOptions.plist
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -169,6 +216,58 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             archive
+
+      # Package.resolved proves what SwiftPM fetched; this proves what was linked. The core
+      # markers are tracing span literals that only the 0.24 core carries (trinity 0.24.0
+      # rust/crates/truapi/src/runtime/capabilities/{game,scanner}.rs). The baseline marker is in
+      # every core since 0.16, so its absence means the scan itself is broken, not the core old.
+      # The wire schema hash is reported only: the core embeds it solely in the loopback debugger
+      # sink, which no mobile FFI entry point reaches, so link-time optimisation may drop it.
+      - name: Fingerprint the TrUAPI core in the archived app
+        env:
+          CORE_MARKERS: game.remind_next_game game.cancel_next_game scanner.scan
+          BASELINE_MARKER: chain_runtime.follow
+          SCHEMA_HASH: c130fa60ef495768
+        run: |
+          set -euo pipefail
+          app=$(find build/polkadot-app.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d | head -1)
+          [ -n "$app" ] || { echo "::error::no .app in build/polkadot-app.xcarchive"; exit 1; }
+          exe=$(plutil -extract CFBundleExecutable raw -o - "$app/Info.plist")
+
+          binaries=$(
+            { echo "$app/$exe"; find "$app/Frameworks" "$app/PlugIns" -type f 2>/dev/null || true; } |
+              while IFS= read -r f; do
+                case "$(file -b "$f")" in Mach-O*) echo "$f" ;; esac
+              done
+          )
+          echo "scanning:"; printf '%s\n' "$binaries" | sed 's/^/  /'
+
+          has() {
+            while IFS= read -r bin; do
+              LC_ALL=C grep -a -q -F -- "$1" "$bin" && return 0
+            done <<< "$binaries"
+            return 1
+          }
+
+          if ! has "$BASELINE_MARKER"; then
+            echo "::error::no TrUAPI core found in $app: '$BASELINE_MARKER', present in every core since 0.16, is missing from its binaries. The core is not linked, or this fingerprint no longer matches how the core is built."
+            exit 1
+          fi
+
+          missing=""
+          for marker in $CORE_MARKERS; do
+            if has "$marker"; then echo "ok: $marker"; else missing="$missing $marker"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::the archived app links a TrUAPI core older than ${TRUAPI_CORE_VERSION}: 0.24-only markers missing:${missing}. Expected trinity-user-agents ${TRUAPI_CORE_VERSION} @ ${TRUAPI_CORE_REVISION}; check Package.swift and Package.resolved."
+            exit 1
+          fi
+
+          if has "$SCHEMA_HASH"; then
+            echo "ok: wire schema hash $SCHEMA_HASH"
+          else
+            echo "::notice::wire schema hash $SCHEMA_HASH not in the binary (only the debugger sink embeds it)"
+          fi
 
       - name: Export signed .ipa
         run: |
