@@ -19,6 +19,7 @@ final class RustHostRuntimeBridge: HostBridge, @unchecked Sendable {
     private let chainRegistry: ChainRegistryProtocol
     private let chainConnections: TrUAPIChainConnecting
     private let confirmationPresenter: TrUAPIConfirmationPresenting
+    private let workerManager: (any TrUAPIWorkerManaging)?
     private let logger: LoggerProtocol
     private weak var runtime: TrUAPIHostRuntime?
 
@@ -27,11 +28,13 @@ final class RustHostRuntimeBridge: HostBridge, @unchecked Sendable {
         coreStorage: TrUAPILocalStoring,
         chainConnections: TrUAPIChainConnecting,
         confirmationPresenter: TrUAPIConfirmationPresenting,
+        workerManager: (any TrUAPIWorkerManaging)? = nil,
         logger: LoggerProtocol
     ) {
         self.chainRegistry = chainRegistry
         self.chainConnections = chainConnections
         self.confirmationPresenter = confirmationPresenter
+        self.workerManager = workerManager
         self.logger = logger
         self.coreStorage = CoreStorageBackend(storage: coreStorage)
         storage = EmptyHostStorageBackend()
@@ -48,16 +51,29 @@ final class RustHostRuntimeBridge: HostBridge, @unchecked Sendable {
         logger.debug("[truapi:host:\(marker)] \(detail)")
     }
 
+    /// Demand is runtime-wide, so it arrives here rather than on a product's
+    /// own bridge, and can arrive re-entrantly from inside `acquireWorker`,
+    /// the manager hands the transition off rather than acting on it here.
+    func workerDemandChanged(productId: String, transition: WorkerTransition) {
+        workerManager?.demandChanged(productId: productId, transition: transition)
+    }
+
     func navigateTo(url: String) async throws {
-        throw HostNavigateRejection.Navigate(.unknown(reason: "navigation unavailable at host level: \(url)"))
+        throw HostNavigateToError.Unknown(reason: "navigation unavailable at host level: \(url)")
     }
 
-    func devicePermission(request _: HostDevicePermissionRequest) async throws -> Bool {
-        false
+    func devicePermission(
+        product _: ProductExecutionConfig,
+        request _: HostDevicePermissionRequest
+    ) async throws -> TrUAPIPermissionDecision {
+        .deny
     }
 
-    func remotePermission(request _: RemotePermission) async throws -> Bool {
-        false
+    func remotePermission(
+        product _: ProductExecutionConfig,
+        request _: RemotePermission
+    ) async throws -> TrUAPIPermissionDecision {
+        .deny
     }
 
     func chainConnect(genesisHash: Data) throws -> UInt32? {
@@ -75,6 +91,10 @@ final class RustHostRuntimeBridge: HostBridge, @unchecked Sendable {
     func confirmUserAction(review: UserConfirmationReview) async throws -> Bool {
         // TODO: pass the real SSO host identity once it is available at host level.
         await confirmationPresenter.confirm(review: review, from: "host")
+    }
+
+    func confirmPermission(review: UserConfirmationReview) async throws -> TrUAPIPermissionDecision {
+        await confirmationPresenter.confirmPermission(review: review, from: "host")
     }
 
     func featureSupported(request: HostFeatureSupportedRequest) async throws -> Bool {

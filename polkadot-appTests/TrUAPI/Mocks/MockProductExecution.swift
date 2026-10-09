@@ -15,6 +15,25 @@ final class MockProductExecution: TrUAPIProductExecutionProtocol, @unchecked Sen
     var permissionStatus: PermissionAuthorizationStatus = .notDetermined
     private(set) var permissionRequests: [PermissionAuthorizationRequest] = []
 
+    /// Card lists pushed to the product, in order, so a test can assert the
+    /// worker was told what it holds rather than only that it started.
+    private(set) var pocketCardNotifications: [[PocketCard]] = []
+
+    private(set) var publishedChatActions: [HostChatActionSubscribeItem] = []
+    private(set) var publishedRendererActions: [HostRendererActionSubscribeItem] = []
+    /// Requests passed to `render`, in order, including ones that threw, so
+    /// `renderRequests.count` is the call count the retry tests assert on.
+    private(set) var renderRequests: [ProductRendererRenderRequest] = []
+    /// Errors thrown by successive `render` calls, consumed in order; once
+    /// empty the call succeeds. Lets tests drive the startup retry loop.
+    var renderErrors: [Error] = []
+    /// Nodes the render stream yields before finishing.
+    var renderNodes: [RendererNode] = []
+    /// Keeps the render stream open after those nodes, the way a live worker
+    /// does. A stream that finishes is reopened after a wall-clock backoff, so
+    /// a test counting `render` calls has to hold it open to be deterministic.
+    var keepsRenderStreamOpen = false
+
     func startWsBridge(bindPort _: UInt16) throws -> WsBridgeEndpoint {
         startWsBridgeCallCount += 1
         return WsBridgeEndpoint(port: 0, token: "test")
@@ -28,13 +47,27 @@ final class MockProductExecution: TrUAPIProductExecutionProtocol, @unchecked Sen
         closeCallCount += 1
     }
 
-    func publishChatAction(_: HostChatActionSubscribeItem) throws {}
-
-    func render(_: ProductRendererRenderRequest) throws -> AsyncThrowingStream<RendererNode, Error> {
-        AsyncThrowingStream { $0.finish() }
+    func publishChatAction(_ item: HostChatActionSubscribeItem) throws {
+        publishedChatActions.append(item)
     }
 
-    func publishRendererAction(_: HostRendererActionSubscribeItem) throws {}
+    func render(_ request: ProductRendererRenderRequest) throws -> AsyncThrowingStream<RendererNode, Error> {
+        renderRequests.append(request)
+        if !renderErrors.isEmpty {
+            throw renderErrors.removeFirst()
+        }
+
+        let nodes = renderNodes
+        let staysOpen = keepsRenderStreamOpen
+        return AsyncThrowingStream { continuation in
+            nodes.forEach { continuation.yield($0) }
+            if !staysOpen { continuation.finish() }
+        }
+    }
+
+    func publishRendererAction(_ item: HostRendererActionSubscribeItem) throws {
+        publishedRendererActions.append(item)
+    }
 
     func permissionAuthorizationStatus(
         request: PermissionAuthorizationRequest
@@ -50,6 +83,7 @@ final class MockProductExecution: TrUAPIProductExecutionProtocol, @unchecked Sen
 
     func notifyThemeChanged(theme _: HostThemeSubscribeItem) {}
     func notifyLocaleChanged(locale _: HostLocaleSubscribeItem) {}
+    func notifyStorageChanged(key _: String, value _: Data?) {}
     func notifyPreimageChanged(key _: Data, value _: Data?) {}
 
     func notifyChainResponse(connectionId: UInt32, json: String) {
@@ -64,5 +98,9 @@ final class MockProductExecution: TrUAPIProductExecutionProtocol, @unchecked Sen
 
     func sessionChatIdentityKey() throws -> Data? {
         nil
+    }
+
+    func notifyPocketCardsChanged(cards: [PocketCard]) {
+        pocketCardNotifications.append(cards)
     }
 }

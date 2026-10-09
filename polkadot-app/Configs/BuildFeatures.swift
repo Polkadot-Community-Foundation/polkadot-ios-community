@@ -3,15 +3,17 @@
 //
 // FEATURE_DIMS       — any DIM surface at all: the DIM2 weekly game chat
 //                      extension, its push routing, deeplinks, background
-//                      tasks, and chain sync services            (Debug, DevCI, Nightly).
+//                      tasks, and chain sync services            (Debug, DevCI).
 // FEATURE_DIMS_FULL  — MobRules, DIM1, PolkadotPeer, DIM2 person
 //                      actions, the extension-enable guard       (Debug, DevCI).
 // FEATURE_INPUT      — the scan panel's in-panel search field, its
 //                      results and keyboard-tracking panel; without it the
 //                      panel shows a search button that opens full-screen
 //                      search                                   (Debug, DevCI, Nightly).
-// FEATURE_PRIZES     — prize branding and the game reveal webview   (Nightly).
-// FEATURE_PRODUCTS   — the browse tab                            (Debug, DevCI, Nightly).
+// FEATURE_PRIZES     — prize branding and the game reveal webview   (none).
+// FEATURE_PRODUCTS   — the browse tab, and the Pocket: its cards on the
+//                      Wallet tab, its worker manager and its deeplinks
+//                                                               (Debug, DevCI, Nightly).
 // FEATURE_SIGN_IN    — sign in with Polkadot: the `pair` deeplink
 //                      and the linked-devices settings row       (Debug, DevCI, Nightly).
 //

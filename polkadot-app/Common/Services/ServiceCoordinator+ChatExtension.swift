@@ -8,6 +8,7 @@ import Operation_iOS
 import ChainRegistry
 
 extension ServiceCoordinator {
+    @MainActor
     // swiftlint:disable:next function_parameter_count
     static func createChatExtensionsRegistry(
         accountManager: ProductsAccountManaging,
@@ -17,15 +18,11 @@ extension ServiceCoordinator {
         syncService: DetermineStateSyncServicing,
         personhoodRegistrationService: PersonhoodRegistrationServicing,
         audioSessionManager: AudioSessionManaging,
-        spaFlowState: SPAFlowState
+        spaFlowState: SPAFlowState,
+        productFileProvider: any ChatProductFileProviding,
+        pocket: ProductPocketService?
     ) -> (registry: ChatExtensionsRegistering, workerFacade: ProductWorkerFacade) {
         let productRepositoryFactory = ProductRepositoryFactory()
-
-        let productFileProvider = CompositeProductFileProvider(
-            dotNsContentStorage: DotNsContentStorage(),
-            chatScriptStorage: FileChatScriptStorage(),
-            contentHashCache: ContentHashCache.shared
-        )
 
         // The builder gets the operations service (the worker's own JS uses it),
         // which lets the facade wire the factory into the manager in `init`.
@@ -44,9 +41,8 @@ extension ServiceCoordinator {
 
         let botFactory = ProductBotFactory(
             productFileProvider: productFileProvider,
-            chainRegistry: ChainRegistryFacade.sharedRegistry,
-            hostProvider: spaFlowState.hostProvider,
             runtimeProvider: truapiRuntimeProvider,
+            workers: { pocket?.workers },
             workerManager: workerFacade.manager
         )
 
@@ -67,6 +63,10 @@ extension ServiceCoordinator {
                 audioSessionManager: audioSessionManager
             )
         }
+
+        // Detached from the registry: the row is the host's own, drawn before the product runs.
+        // It gives up rather than waiting forever, so a second assembly leaves no task behind.
+        Task { await HostPlacedRoomPlacer().placeRooms() }
 
         return (registry, workerFacade)
     }

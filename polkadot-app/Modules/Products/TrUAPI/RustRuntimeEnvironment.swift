@@ -13,6 +13,7 @@ struct RustRuntimeEnvironment {
     let runtime: TrUAPIHostRuntime
     let chainRegistry: ChainRegistryProtocol
     let notificationScheduler: ProductNotificationScheduling
+    let gameReminders: ProductGameReminderScheduling?
     let ipfsFetcher: IpfsFetching
     let hostProvider: ProductHostProviding
     let logger: LoggerProtocol
@@ -22,20 +23,17 @@ struct RustRuntimeEnvironment {
     struct ExecutionModel {
         let execution: TrUAPIProductExecutionProtocol
         let chainConnections: TrUAPIChainConnecting
+        let osPermissionAsker: OSPermissionAsking
 
         /// Start the localhost ws-bridge and return the bootstrap script to
         /// inject. Called from the runtime's `start`; opening the execution
-        /// (``makeSPAExecution``/``makeChatExecution``) stays side-effect free.
+        /// (``makeSPAExecution``/``makeWorkerExecution``) stays side-effect free.
         /// The local session is activated once on the shared runtime, not here.
-        func startBridge() async throws -> String {
-            let webRtcAllowed = try await execution.permissionAuthorizationStatus(
-                request: .remote(RemotePermissionRequest(permission: .webRtc))
-            ) == .authorized
+        func startBridge() throws -> String {
             let endpoint = try execution.startWsBridge(bindPort: 0)
             return LocalhostBridgeBootstrap.script(
                 port: endpoint.port,
-                token: endpoint.token,
-                webRtcAllowed: webRtcAllowed
+                token: endpoint.token
             )
         }
     }
@@ -48,11 +46,24 @@ struct RustRuntimeEnvironment {
         try makeExecution(productId: productId, routers: routers, kind: .app)
     }
 
-    /// Open a chat execution for `productId`. Mirrors ``makeSPAExecution``.
-    /// TODO(chat PR): open with ``RustChatExecutionBridge`` and pass it as
-    /// `chat:` to wire the native chat surface once the integration lands.
-    func makeChatExecution(productId: ProductId, routers: ProductRoutersFacadeProtocol) throws -> ExecutionModel {
-        try makeExecution(productId: productId, routers: routers, kind: .worker)
+    /// Open `productId`'s one Worker execution. The core keeps a single Worker
+    /// execution per product and closes the previous one when another opens, so
+    /// every modality is served from this one: both bridges are handed over
+    /// here rather than attached afterwards, because the worker may list its
+    /// cards or post a chat message as soon as it connects.
+    func makeWorkerExecution(
+        productId: ProductId,
+        routers: ProductRoutersFacadeProtocol,
+        chatMessaging: any ProductChatMessaging,
+        pocket: any PocketHostBridge
+    ) throws -> ExecutionModel {
+        try makeExecution(
+            productId: productId,
+            routers: routers,
+            kind: .worker,
+            chatMessaging: chatMessaging,
+            pocket: pocket
+        )
     }
 }
 
@@ -60,7 +71,9 @@ private extension RustRuntimeEnvironment {
     func makeExecution(
         productId: ProductId,
         routers: ProductRoutersFacadeProtocol,
-        kind: ProductExecutionKind
+        kind: ProductExecutionKind,
+        chatMessaging: (any ProductChatMessaging)? = nil,
+        pocket: (any PocketHostBridge)? = nil
     ) throws -> ExecutionModel {
         let chainConnections = TrUAPIChainConnectionPool(
             engineResolver: { [chainRegistry] genesisHash in
@@ -71,35 +84,53 @@ private extension RustRuntimeEnvironment {
             logger: logger
         )
 
-        let bridge = RustProductExecutionBridge(dependencies: makeBridgeDependencies(
+        let osPermissionAsker = OSPermissionAsker()
+        let dependencies = makeBridgeDependencies(
             productId: productId,
             routers: routers,
-            chainConnections: chainConnections
-        ))
+            chainConnections: chainConnections,
+            osPermissionAsker: osPermissionAsker
+        )
+
+        let chatBridge = chatMessaging.map {
+            RustChatExecutionBridge(dependencies: dependencies, chatMessaging: $0)
+        }
+        let bridge = chatBridge ?? RustProductExecutionBridge(dependencies: dependencies)
 
         let execution = try runtime.openProductExecution(
             bridge: bridge,
             configuration: ProductExecutionConfig(productId: productId, executionKind: kind),
-            chat: nil
+            chat: chatBridge,
+            pocket: pocket,
+            game: gameReminders == nil ? nil : bridge
         )
 
         bridge.attach(execution)
 
-        return ExecutionModel(execution: execution, chainConnections: chainConnections)
+        return ExecutionModel(
+            execution: execution,
+            chainConnections: chainConnections,
+            osPermissionAsker: osPermissionAsker
+        )
     }
 
     func makeBridgeDependencies(
         productId: ProductId,
         routers: ProductRoutersFacadeProtocol,
-        chainConnections: TrUAPIChainConnecting
+        chainConnections: TrUAPIChainConnecting,
+        osPermissionAsker: OSPermissionAsker
     ) -> RustProductExecutionBridge.Dependencies {
         RustProductExecutionBridge.Dependencies(
             productId: productId,
             permissionGuard: ProductPermissionGuard.create(
                 router: routers.productsRouter,
-                fundingProvider: FundingDomainProvider(hostProvider: hostProvider)
+                fundingProvider: FundingDomainProvider(hostProvider: hostProvider),
+                osAsker: osPermissionAsker
             ),
+            osPermissionAsker: osPermissionAsker,
             notificationScheduler: notificationScheduler,
+            gameReminders: gameReminders,
+            reminderPermissionAsker: osPermissionAsker,
             navigationRouter: routers.navigationRouter,
             chainRegistry: chainRegistry,
             chainConnections: chainConnections,

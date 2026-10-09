@@ -69,17 +69,14 @@ extension SPARustRuntime: SPARuntimeProtocol {
             }
 
         try checkNotDisposed()
-        let bootstrapScript = try await executionModel.startBridge()
-        let scriptsFactory = SPARustRuntimeScriptsFactory(bootstrapScript: bootstrapScript)
+        let bootstrapScript = try executionModel.startBridge()
+        let scriptsFactory = RustRuntimeScriptsFactory(bootstrapScript: bootstrapScript)
 
-        // Camera/mic media capture (getUserMedia) is answered query-only from
-        // the execution's persisted device authorization. The container leaves
-        // RTCPeerConnection available, so no ContainerBridge is needed.
         await engine.registerJSDeviceCapabilityHandler(
-            executionModel.execution.makeDeviceCapabilityHandler()
+            executionModel.osPermissionAsker.makeDeviceCapabilityHandler()
         )
 
-        try await engine.initialize(with: scriptsFactory.makeScripts())
+        try await engine.initialize(with: scriptsFactory.makeScripts() + [.disableZoom])
 
         // Disposed while initializing: dispose captured nil for the engine,
         // so this start is the only owner left — destroy before bailing.
@@ -123,9 +120,9 @@ private extension SPARustRuntime {
     func prepareDotNsContent() async throws -> URL {
         let domain = configuration.page.host.toDotDomain()
 
-        // Bytes come from the app executable's subname; the origin stays the base domain, which
+        // Bytes come from the executable's own subname; the origin stays the base domain, which
         // is what permission grants and web storage are keyed by.
-        let contentId = try await productResolver.resolve(domain).appContentId
+        let contentId = try await productResolver.resolve(domain).contentId(for: configuration.executable)
         let contentURL = try await dotNsResolver.resolveToLocalURL(dotNsName: contentId)
 
         let schemeHandler = ProductScriptSchemeHandler(
