@@ -76,6 +76,16 @@ final class DebugSettingsViewLayout: UIView {
             button.applyMainStyle()
             button.imageWithTitleView?.title = "Open TrUAPI Playground"
         }
+
+        let pocketFacePreviewButton: RoundedButton = .create { button in
+            button.applyMainStyle()
+            button.imageWithTitleView?.title = "Pocket Face Preview"
+        }
+
+        let pocketCardsButton: RoundedButton = .create { button in
+            button.applyMainStyle()
+            button.imageWithTitleView?.title = "Pocket Cards"
+        }
     #endif
 
     let truApiRuntimeSwitch = UISwitch()
@@ -87,6 +97,20 @@ final class DebugSettingsViewLayout: UIView {
     }
 
     private let truApiRuntimeRow: UIStackView = .create { stack in
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.distribution = .equalSpacing
+    }
+
+    let hostPlacedSwitch = UISwitch()
+
+    private let hostPlacedLabel: Label = .create { (view: Label) in
+        view.typography = .bodyMedium
+        view.textColor = .fgPrimary
+        view.text = "Host-placed products"
+    }
+
+    private let hostPlacedRow: UIStackView = .create { stack in
         stack.axis = .horizontal
         stack.alignment = .center
         stack.distribution = .equalSpacing
@@ -138,6 +162,7 @@ final class DebugSettingsViewLayout: UIView {
 
         strategyDebugRow.addArrangedSubviews([strategyDebugLabel, strategyDebugSwitch])
         truApiRuntimeRow.addArrangedSubviews([truApiRuntimeLabel, truApiRuntimeSwitch])
+        hostPlacedRow.addArrangedSubviews([hostPlacedLabel, hostPlacedSwitch])
 
         var rows: [UIView] = [
             chainLabel,
@@ -154,10 +179,10 @@ final class DebugSettingsViewLayout: UIView {
         ]
 
         #if DEBUG
-            rows.append(openTrUAPIPlaygroundButton)
+            rows.append(contentsOf: [openTrUAPIPlaygroundButton, pocketFacePreviewButton, pocketCardsButton])
         #endif
 
-        rows.append(contentsOf: [strategyDebugRow, truApiRuntimeRow])
+        rows.append(contentsOf: [strategyDebugRow, truApiRuntimeRow, hostPlacedRow])
 
         stackView.addArrangedSubviews(rows)
 
