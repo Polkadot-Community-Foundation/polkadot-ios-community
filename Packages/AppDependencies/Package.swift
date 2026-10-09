@@ -142,7 +142,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "trinity-user-agents",
         url: coreIsInTree ? corePath : "https://github.com/paritytech/trinity-user-agents",
-        version: coreIsInTree ? .local : .exact("0.16.0"),
+        version: coreIsInTree ? .local : .exact("0.24.0"),
         products: ["TrUAPIHost"]
     ),
     .init(
