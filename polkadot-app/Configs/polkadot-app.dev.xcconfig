@@ -5,7 +5,9 @@
 
 #include "../../Configs/base.release.xcconfig"
 
-OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN" "-DFEATURE_INPUT"
+// -DTRUAPI_RUNTIME_DEFAULT makes the TrUAPI core the default product runtime, as on Nightly.
+// Testers can switch a device back to the native runtime in Debug Settings.
+OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN" "-DFEATURE_INPUT" "-DTRUAPI_RUNTIME_DEFAULT"
 
 // base.release.xcconfig leaves ICON_SUFFIX empty; must stay after the #include.
 ICON_SUFFIX     = Dev
