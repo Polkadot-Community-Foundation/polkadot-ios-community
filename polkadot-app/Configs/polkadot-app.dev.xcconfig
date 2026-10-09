@@ -21,7 +21,9 @@
 
 #include "../../Configs/base.release.xcconfig"
 
-OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN" "-DFEATURE_INPUT"
+// -DTRUAPI_RUNTIME_DEFAULT makes the TrUAPI core the default product runtime, as on Nightly.
+// Testers can switch a device back to the native runtime in Debug Settings.
+OTHER_SWIFT_FLAGS = $(inherited) "-DDEV" "-DTESTNET_FEATURE" "-DFEATURE_DIMS" "-DFEATURE_DIMS_FULL" "-DFEATURE_PRODUCTS" "-DFEATURE_SIGN_IN" "-DFEATURE_INPUT" "-DTRUAPI_RUNTIME_DEFAULT"
 
 // Icon. project.pbxproj resolves ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon$(ICON_SUFFIX),
 // and base.release.xcconfig leaves ICON_SUFFIX unset on purpose so Release ships "AppIcon".
