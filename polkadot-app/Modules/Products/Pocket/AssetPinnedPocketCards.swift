@@ -23,9 +23,14 @@ struct AssetPinnedPocketCards: PinnedPocketCards {
         }
     }
 
+    // The PCF devnet has no personhood product (peopl.dot) to back Humanity.
+    #if DEV
+    private static let definitions: [Definition] = []
+    #else
     private static let definitions = [
         Definition(cardId: "humanity", title: "Humanity", backingProduct: BuiltInProduct.personhood(for:))
     ]
+    #endif
 
     private let tld: String
 
