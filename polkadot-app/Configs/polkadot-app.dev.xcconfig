@@ -12,7 +12,8 @@
 // feature axis (upstream 2978516) — i.e. everything — except FEATURE_PRIZES, which
 // polkadot-app/Configs/BuildFeatures.swift makes mutually exclusive with FEATURE_DIMS_FULL.
 // UNSTABLE and NIGHTLY are intentionally unset: the fork's -DDEV takes the
-// `#elseif NIGHTLY || DEV` arm in KnownChains.swift, SupportedAssets.swift and AppConfig.swift.
+// `#elseif NIGHTLY || DEV` arm in KnownChains.swift, SupportedAssets.swift, AppConfig.swift and
+// TrUAPISupportedChains.swift.
 // -DW3S was dropped: upstream 2978516 removed the flag and every `#if W3S` site with it.
 //
 // -DDEV is fork-only and load-bearing: it selects the nightly-* chain ids, the devnet asset

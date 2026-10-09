@@ -34,7 +34,7 @@ enum TrUAPISupportedChains {
             "polkadot"
         #elseif SAFETYNET
             "polkadot"
-        #elseif NIGHTLY
+        #elseif NIGHTLY || DEV
             "paseo"
         #else
             "polkadot"
