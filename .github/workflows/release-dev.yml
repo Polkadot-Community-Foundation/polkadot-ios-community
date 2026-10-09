@@ -167,7 +167,7 @@ jobs:
             -showBuildSettings 2>/dev/null | sed -e 's/^[[:space:]]*//' > build-settings.txt
           app_flags=$(awk '/^Build settings for action [a-z]+ and target /{target=$NF}
             target == "polkadot-app:" && /^OTHER_SWIFT_FLAGS = /' build-settings.txt)
-          if printf '%s\n' "$app_flags" | grep -qE '(^| )-DTRUAPI_RUNTIME_DEFAULT( |$)'; then
+          if printf '%s\n' "$app_flags" | grep -qE '(^| )"?-DTRUAPI_RUNTIME_DEFAULT"?( |$)'; then
             echo "ok: polkadot-app OTHER_SWIFT_FLAGS carries -DTRUAPI_RUNTIME_DEFAULT"
           else
             echo "::error::the Dev configuration of polkadot-app does not set -DTRUAPI_RUNTIME_DEFAULT (polkadot-app/Configs/polkadot-app.dev.xcconfig)"
