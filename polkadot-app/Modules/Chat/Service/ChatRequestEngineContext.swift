@@ -82,7 +82,10 @@ actor ChatRequestEngineContext {
     func acceptIncomingRequest(for chatId: Chat.Id) async throws {
         let (contact, request) = try await fetchIncomingChatContact(for: chatId)
         let messageExchangeMode = messageExchangeModeProvider.mode(for: contact.ownKeyId)
-        let acceptorDevice = try chatRequestStoreService.buildLocalAcceptorDevice(for: contact.ownKeyId)
+        let acceptorDevice = try chatRequestStoreService.buildLocalAcceptorDevice(
+            for: contact.ownKeyId,
+            peerAccountId: contact.accountId
+        )
         try await chatRequestStoreService.acceptIncomingRequest(
             .existing(
                 requestId: request.requestId,

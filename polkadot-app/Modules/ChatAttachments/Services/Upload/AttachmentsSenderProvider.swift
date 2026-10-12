@@ -1,6 +1,5 @@
 import Foundation
 import KeyDerivation
-import Products
 
 protocol AttachmentsSenderProviding {
     func getWallet(for chatId: Chat.Id) async throws -> WalletManaging
@@ -11,14 +10,14 @@ enum AttachmentsSenderProviderError: Error, Equatable {
 }
 
 final class AttachmentsSenderProvider {
-    let tldProvider: DotNsTldProviding
+    let peerAccounts: ChatPeerAccountsProviding
     let entropyManager: RootEntropyManaging
 
     init(
-        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared,
+        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts(),
         entropyManager: RootEntropyManaging = RootEntropyManager.shared
     ) {
-        self.tldProvider = tldProvider
+        self.peerAccounts = peerAccounts
         self.entropyManager = entropyManager
     }
 }
@@ -29,8 +28,9 @@ extension AttachmentsSenderProvider: AttachmentsSenderProviding {
             throw AttachmentsSenderProviderError.unsupportedChat
         }
 
-        let derivationPath = try ChatKeyPaths.hop(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
-
-        return DynamicDerivedWallet(derivationPath: derivationPath, entropyManager: entropyManager)
+        return try DynamicDerivedWallet(
+            derivationPath: peerAccounts.uploadKeyId(for: peerAccountId),
+            entropyManager: entropyManager
+        )
     }
 }

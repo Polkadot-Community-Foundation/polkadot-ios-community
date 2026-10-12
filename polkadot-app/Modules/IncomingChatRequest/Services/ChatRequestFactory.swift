@@ -10,8 +10,7 @@ protocol ChatRequestFactoryProtocol {
     func createRemoteRequest(
         from message: Chat.RequestMessage,
         peerEncryptionPubKey: Data,
-        peerAccountId: AccountId,
-        ownKeyId: MessageExchange.Own
+        peerAccountId: AccountId
     ) throws -> ChatRequest.EncryptedRemoteModel
 
     func decodeAndValidate(
@@ -30,15 +29,18 @@ final class ChatRequestFactory {
     let encryptionManager: MessageExchangeEncryptionManaging
     let signManager: StatementStoreSignerManaging
     let remoteContactResolver: RemoteContactResolving
+    let peerAccounts: ChatPeerAccountsProviding
 
     init(
         encryptionManager: MessageExchangeEncryptionManaging,
         signManager: StatementStoreSignerManaging,
-        remoteContactResolver: RemoteContactResolving
+        remoteContactResolver: RemoteContactResolving,
+        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts()
     ) {
         self.encryptionManager = encryptionManager
         self.signManager = signManager
         self.remoteContactResolver = remoteContactResolver
+        self.peerAccounts = peerAccounts
     }
 }
 
@@ -46,8 +48,7 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
     func createRemoteRequest(
         from message: Chat.RequestMessage,
         peerEncryptionPubKey: Data,
-        peerAccountId: AccountId,
-        ownKeyId: MessageExchange.Own
+        peerAccountId: AccountId
     ) throws -> ChatRequest.EncryptedRemoteModel {
         let messageData = try ChatRequest.ProofPayload(
             message: message,
@@ -55,7 +56,7 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
         )
         .scaleEncoded()
 
-        let proof = try signManager.makeSigner(for: ownKeyId.signKeyId).sign(messageData)
+        let proof = try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId)).sign(messageData)
 
         let remoteModel = ChatRequest.RemoteModel(
             message: message,
@@ -121,9 +122,6 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
         return ChatRequest.ValidatedRemoteModel(
             message: decryptedModel.message,
             peerAccountId: peerAccountId,
-            // TODO: Add statement account id to request.
-            // Taking `signer` is fine for now and needed for device sync,
-            // but this is an assumption.
             peerStatementAccountId: signer
         )
     }

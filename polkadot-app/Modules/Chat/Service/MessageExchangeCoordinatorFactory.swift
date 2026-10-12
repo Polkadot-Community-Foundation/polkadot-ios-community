@@ -84,6 +84,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                 deviceEncryptionKeyFactory: MultideviceComponentFactory.makeDeviceEncryptionKeyFactory(
                     deviceEncryptionKeyManager: deviceKeyManager
                 ),
+                accountsProvider: ChatPeerAccounts(),
                 messageRouteSelector: ChatMessageRouteSelector.makeSelector(),
                 maxStatementSize: Constants.maxChatStatementSize,
                 operationQueue: operationQueue,

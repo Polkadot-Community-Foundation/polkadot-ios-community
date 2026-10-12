@@ -154,7 +154,10 @@ private extension IncomingChatRequestCoordinationContext {
         }
 
         let messageExchangeMode = messageExchangeModeProvider.mode(for: contact.ownKeyId)
-        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(for: contact.ownKeyId)
+        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(
+            for: contact.ownKeyId,
+            peerAccountId: contact.accountId
+        )
         try await requestStoreService.acceptOutgoingRequest(
             existingOutgoingRequest.requestId,
             messageExchangeMode: messageExchangeMode,
@@ -204,7 +207,10 @@ private extension IncomingChatRequestCoordinationContext {
         }
 
         let messageExchangeMode = messageExchangeModeProvider.mode(for: contact.ownKeyId)
-        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(for: contact.ownKeyId)
+        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(
+            for: contact.ownKeyId,
+            peerAccountId: contact.accountId
+        )
         try await requestStoreService.acceptIncomingRequest(
             .new(
                 remoteRequest,

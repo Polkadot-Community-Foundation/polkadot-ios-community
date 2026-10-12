@@ -31,6 +31,7 @@ final class MessageExchangeServiceFactory {
     let signManager: StatementStoreSignerManaging
     let encryptionManager: MessageExchangeEncryptionManaging
     let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
+    let accountsProvider: PeerSessionAccountsProviding?
     let messageExchangeModeProvider: MessageExchangeModeProviding
     let messageRouteSelector: (Any) -> PeerSessionRoute
     let workQueue: DispatchQueue
@@ -43,6 +44,7 @@ final class MessageExchangeServiceFactory {
         signManager: StatementStoreSignerManaging,
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
+        accountsProvider: PeerSessionAccountsProviding? = nil,
         messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -52,6 +54,7 @@ final class MessageExchangeServiceFactory {
         self.signManager = signManager
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
+        self.accountsProvider = accountsProvider
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.messageRouteSelector = messageRouteSelector
         self.workQueue = workQueue
@@ -64,6 +67,7 @@ final class MessageExchangeServiceFactory {
         messageExchangeModeProvider: MessageExchangeModeProviding,
         entropyManager: RootEntropyManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
+        accountsProvider: PeerSessionAccountsProviding? = nil,
         messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -75,6 +79,7 @@ final class MessageExchangeServiceFactory {
             signManager: ChatSignerManager(entropyManager: entropyManager),
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
+            accountsProvider: accountsProvider,
             messageRouteSelector: messageRouteSelector,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
@@ -114,6 +119,7 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             subscriptionFactory: subscriptionFactory,
             maxStatementSize: maxStatementSize,
             compactorFactory: compactorFactory,
+            accountsProvider: accountsProvider,
             operationQueue: operationQueue,
             logger: logger
         )

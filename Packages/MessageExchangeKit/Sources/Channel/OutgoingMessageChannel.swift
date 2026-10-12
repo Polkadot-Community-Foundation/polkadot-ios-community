@@ -11,7 +11,7 @@ final class OutgoingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
     private let workQueue: DispatchQueue
     private let routeContexts: PeerSessionRoute.Contexts
     private let submitter: StatementStoreSubmitting
-    private let signer: StatementStoreSigning
+    private let signers: PeerSessionRoute.Signers
     private let preSendHandler: AnyPeerSessionPreSendHandler<M>
     private let priorityProvider: PeerSessionPriorityProviding
     private let requestQueue: AnyOutgoingRequestQueue<M>
@@ -25,7 +25,7 @@ final class OutgoingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
         workQueue: DispatchQueue,
         routeContexts: PeerSessionRoute.Contexts,
         submitter: StatementStoreSubmitting,
-        signer: StatementStoreSigning,
+        signers: PeerSessionRoute.Signers,
         preSendHandler: AnyPeerSessionPreSendHandler<M>,
         priorityProvider: PeerSessionPriorityProviding,
         requestQueue: AnyOutgoingRequestQueue<M>,
@@ -35,7 +35,7 @@ final class OutgoingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
         self.workQueue = workQueue
         self.routeContexts = routeContexts
         self.submitter = submitter
-        self.signer = signer
+        self.signers = signers
         self.preSendHandler = preSendHandler
         self.priorityProvider = priorityProvider
         self.requestQueue = requestQueue
@@ -247,9 +247,16 @@ private extension OutgoingMessageChannel {
     }
 
     func sendOutgoingRequest(_ outgoingRequest: OutgoingRequest<Message>) {
-        let expiry = priorityProvider.incrementedExpiry()
         let requestId = outgoingRequest.requestId
         let route = outgoingRequest.route
+
+        // Held, not failed: the session is recreated with the device route once peer devices are known.
+        guard let signer = signers.signer(for: route) else {
+            logger?.debug("Holding request \(requestId): route \(route) has no signer")
+            return
+        }
+
+        let expiry = priorityProvider.incrementedExpiry()
         let routeContext = routeContexts.context(for: route)
 
         let builder = StatementSubmitParametersBuilder(

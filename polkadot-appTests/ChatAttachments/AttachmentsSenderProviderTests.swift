@@ -23,7 +23,10 @@ struct AttachmentsSenderProviderTests {
 
 private extension AttachmentsSenderProviderTests {
     func makeProvider() -> AttachmentsSenderProvider {
-        AttachmentsSenderProvider(tldProvider: StubDotNsTldProvider(tld: "dot"), entropyManager: entropyManager)
+        AttachmentsSenderProvider(
+            peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
+            entropyManager: entropyManager
+        )
     }
 
     func account(at path: String) throws -> Data {

@@ -6,7 +6,7 @@ import Operation_iOS
 import SDKLogger
 
 protocol OutgoingChatRequestServicing {
-    /// Only the outer statement is signed by `signer`; the inner proof and the session stay on `ownKeyId`.
+    /// Only the outer statement is signed by `signer`; the request channel stays on `ownKeyId`.
     func send(
         message: Chat.RequestMessage,
         to peer: MessageExchange.Peer,
@@ -16,8 +16,7 @@ protocol OutgoingChatRequestServicing {
 
     func encodedSize(
         of message: Chat.RequestMessage,
-        to peer: MessageExchange.Peer,
-        ownKeyId: MessageExchange.Own
+        to peer: MessageExchange.Peer
     ) throws -> Int
 
     func isStored(
@@ -70,7 +69,7 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
         let topic2 = try ChatRequest.paginationTopic(from: peer.accountId, day: pagination.day)
         let channel = try channelFactory.outgoingChannel(with: peer, ownKeyId: ownKeyId)
 
-        let scaleEncodedPayload = try makePayload(message: message, to: peer, ownKeyId: ownKeyId)
+        let scaleEncodedPayload = try makePayload(message: message, to: peer)
 
         let builder = StatementSubmitParametersBuilder(
             signer: signer,
@@ -88,10 +87,9 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
 
     func encodedSize(
         of message: Chat.RequestMessage,
-        to peer: MessageExchange.Peer,
-        ownKeyId: MessageExchange.Own
+        to peer: MessageExchange.Peer
     ) throws -> Int {
-        try makePayload(message: message, to: peer, ownKeyId: ownKeyId).count
+        try makePayload(message: message, to: peer).count
             + StatementSize.overhead(topicCount: Self.topicCount)
     }
 
@@ -114,16 +112,11 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
 }
 
 private extension OutgoingChatRequestService {
-    func makePayload(
-        message: Chat.RequestMessage,
-        to peer: MessageExchange.Peer,
-        ownKeyId: MessageExchange.Own
-    ) throws -> Data {
+    func makePayload(message: Chat.RequestMessage, to peer: MessageExchange.Peer) throws -> Data {
         let remoteRequest = try requestFactory.createRemoteRequest(
             from: message,
             peerEncryptionPubKey: peer.publicKey,
-            peerAccountId: peer.accountId,
-            ownKeyId: ownKeyId
+            peerAccountId: peer.accountId
         )
 
         return try remoteRequest.scaleEncoded().scaleEncoded()

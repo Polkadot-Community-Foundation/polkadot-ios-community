@@ -12,7 +12,7 @@ final class IncomingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
     private let workQueue: DispatchQueue
     private let routeContexts: PeerSessionRoute.Contexts
     private let submitter: StatementStoreSubmitting
-    private let signer: StatementStoreSigning
+    private let signers: PeerSessionRoute.Signers
     private let priorityProvider: PeerSessionPriorityProviding
     private let statementDataCoder: StatementDataCoding
     private let operationQueue: OperationQueue
@@ -24,7 +24,7 @@ final class IncomingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
         workQueue: DispatchQueue,
         routeContexts: PeerSessionRoute.Contexts,
         submitter: StatementStoreSubmitting,
-        signer: StatementStoreSigning,
+        signers: PeerSessionRoute.Signers,
         priorityProvider: PeerSessionPriorityProviding,
         statementDataCoder: StatementDataCoding,
         operationQueue: OperationQueue,
@@ -33,7 +33,7 @@ final class IncomingMessageChannel<M: MessageExchange.CodableMessage>: @unchecke
         self.workQueue = workQueue
         self.routeContexts = routeContexts
         self.submitter = submitter
-        self.signer = signer
+        self.signers = signers
         self.priorityProvider = priorityProvider
         self.statementDataCoder = statementDataCoder
         self.operationQueue = operationQueue
@@ -48,6 +48,11 @@ extension IncomingMessageChannel: IncomingMessageChanneling {
         route: PeerSessionRoute
     ) {
         assert(delegate != nil, "Delegate should not be nil")
+
+        guard let signer = signers.signer(for: route) else {
+            logger?.debug("Skipping response for request \(requestId): route \(route) has no signer")
+            return
+        }
 
         guard let scaleEncodedPayload = makeScaleEncodedPayload(
             response: .init(

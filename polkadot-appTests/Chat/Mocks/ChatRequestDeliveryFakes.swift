@@ -23,11 +23,7 @@ final class RecordingOutgoingChatRequestService: OutgoingChatRequestServicing, @
         sentSigners.append(signer.accountId)
     }
 
-    func encodedSize(
-        of _: Chat.RequestMessage,
-        to _: MessageExchange.Peer,
-        ownKeyId _: MessageExchange.Own
-    ) throws -> Int {
+    func encodedSize(of _: Chat.RequestMessage, to _: MessageExchange.Peer) throws -> Int {
         encodedSize
     }
 
