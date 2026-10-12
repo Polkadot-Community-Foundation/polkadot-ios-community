@@ -27,6 +27,9 @@ public protocol ConnectionFactoryProtocol {
     )
 
     func createOneShotConnection(for chain: ChainNodeConnectable) throws -> OneShotConnection
+
+    /// A fresh, unshared socket to one of the chain's ws nodes; `attempt` rotates through them.
+    func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket
 }
 
 public final class ConnectionFactory {
@@ -134,6 +137,23 @@ extension ConnectionFactory: ConnectionFactoryProtocol {
         if Set(connection.urls) != Set(newUrls) {
             connection.changeUrls(newUrls)
         }
+    }
+
+    public func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket {
+        let urls = extractNodeUrls(
+            from: chain,
+            schemaPredicate: .wsProtocol
+        ).map(\.url)
+
+        guard !urls.isEmpty else {
+            throw ConnectionFactoryError.noNodes
+        }
+
+        return ChainSocket(
+            url: urls[attempt % urls.count],
+            transportFactory: ConnectionTransportFactory(),
+            logger: logger
+        )
     }
 
     private func createConnection(

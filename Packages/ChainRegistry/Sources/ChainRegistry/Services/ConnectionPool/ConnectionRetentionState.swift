@@ -11,6 +11,8 @@ final class ConnectionRetentionState {
     struct Effect {
         var wake: [ChainConnection] = []
         var sleep: [ChainConnection] = []
+        /// Chain sockets have no retain of their own: only an `.all` retain keeps them open.
+        var closeChainSockets = false
     }
 
     private var retainCounts: [ObjectIdentifier: Int] = [:]
@@ -48,7 +50,7 @@ final class ConnectionRetentionState {
             return Effect()
         }
 
-        return Effect(sleep: unretained(connections))
+        return Effect(sleep: unretained(connections), closeChainSockets: true)
     }
 
     func becomeActive() {
@@ -150,7 +152,7 @@ private extension ConnectionRetentionState {
             return Effect()
         }
 
-        return Effect(sleep: unretained(currentConnections))
+        return Effect(sleep: unretained(currentConnections), closeChainSockets: true)
     }
 
     func unretained(_ connections: [ChainConnection]) -> [ChainConnection] {

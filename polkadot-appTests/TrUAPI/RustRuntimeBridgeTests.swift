@@ -14,15 +14,8 @@ import UIKitExt
 
 // MARK: - Helpers
 
-private func makeRegistryPool(chainRegistry: ChainRegistryProtocol) -> TrUAPIChainConnectionPool {
-    TrUAPIChainConnectionPool(
-        engineResolver: { genesisHash in
-            chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap { chain in
-                chainRegistry.getConnection(for: chain.chainId)
-            }
-        },
-        logger: Logger.shared
-    )
+private func makeRegistryPool(chainRegistry: ChainRegistryProtocol) -> TrUAPIV2SpecConnectionPool {
+    TrUAPIV2SpecConnectionPool.makeChainConnections(chainRegistry: chainRegistry, logger: Logger.shared)
 }
 
 private func makeTestDefaults() -> UserDefaults {
