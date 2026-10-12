@@ -5,8 +5,16 @@ import UIKitExt
 @MainActor
 final class ProductsNavigationRouter: ProductsNavigationRouting, WebPresentable {
     private let anchor = ProductsRouter()
+    private let deepLinkHandler: DeferredLinkHandling
+    private let deeplinkMatcher: AppDeeplinkMatching
 
-    nonisolated init() {}
+    nonisolated init(
+        deepLinkHandler: DeferredLinkHandling = DeferredLinkHandler.shared,
+        deeplinkMatcher: AppDeeplinkMatching = AppDeeplinkMatcher()
+    ) {
+        self.deepLinkHandler = deepLinkHandler
+        self.deeplinkMatcher = deeplinkMatcher
+    }
 
     func setPresentationView(_ view: ControllerBackedProtocol) {
         anchor.setPresentationView(view)
@@ -32,6 +40,11 @@ final class ProductsNavigationRouter: ProductsNavigationRouting, WebPresentable 
     func openExternalURL(_ url: URL) async throws {
         guard isReady else {
             throw ProductNativeApiError.navigationForbidden
+        }
+
+        if deeplinkMatcher.isAppDeeplink(url) {
+            deepLinkHandler.handle(with: url)
+            return
         }
 
         guard let scheme = url.scheme?.lowercased() else { return }
