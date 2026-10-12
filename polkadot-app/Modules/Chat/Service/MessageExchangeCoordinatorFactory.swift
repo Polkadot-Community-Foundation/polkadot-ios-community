@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExt
 import UniqueDevice
 import MessageExchangeKit
 import SubstrateSdk
@@ -24,6 +25,7 @@ final class MessageExchangeCoordinatorFactory {
     private let entropyManager: RootEntropyManaging
     private let storageFacade: StorageFacadeProtocol
     private let bulletInManager: AllowanceManaging
+    private let statementAccountFunding: StatementAccountFunding
     private let statementStoreMonitor: StatementStoreActivityMonitoring
     private let operationQueue: OperationQueue
     private let logger: LoggerProtocol
@@ -32,6 +34,7 @@ final class MessageExchangeCoordinatorFactory {
         entropyManager: RootEntropyManaging = RootEntropyManager.shared,
         storageFacade: StorageFacadeProtocol = UserDataStorageFacade.shared,
         bulletInManager: AllowanceManaging,
+        statementAccountFunding: StatementAccountFunding,
         statementStoreMonitor: StatementStoreActivityMonitoring,
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
         logger: LoggerProtocol = Logger.shared
@@ -39,6 +42,7 @@ final class MessageExchangeCoordinatorFactory {
         self.entropyManager = entropyManager
         self.storageFacade = storageFacade
         self.bulletInManager = bulletInManager
+        self.statementAccountFunding = statementAccountFunding
         self.statementStoreMonitor = statementStoreMonitor
         self.operationQueue = operationQueue
         self.logger = logger
@@ -85,6 +89,11 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                     deviceEncryptionKeyManager: deviceKeyManager
                 ),
                 accountsProvider: ChatPeerAccounts(),
+                submissionGate: ChatAccountFunding(
+                    funding: statementAccountFunding,
+                    dateProvider: NowDateProvider(),
+                    issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
+                ),
                 messageRouteSelector: ChatMessageRouteSelector.makeSelector(),
                 maxStatementSize: Constants.maxChatStatementSize,
                 operationQueue: operationQueue,

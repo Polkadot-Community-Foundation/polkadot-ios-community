@@ -241,6 +241,7 @@ extension ServiceCoordinator {
         let statementStoreMonitor = StatementStoreActivityMonitor()
         let chatCoordinatorFactory = MessageExchangeCoordinatorFactory(
             bulletInManager: allowanceManagerFacade.bulletInManager,
+            statementAccountFunding: allowanceManagerFacade.sssManager,
             statementStoreMonitor: statementStoreMonitor
         )
 

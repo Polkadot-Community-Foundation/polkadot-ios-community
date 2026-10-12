@@ -26,6 +26,7 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
     private let maxStatementSize: Int
     private let compactorFactory: AnyMessageCompactorFactory<M>?
     private let accountsProvider: PeerSessionAccountsProviding?
+    private let submissionGate: PeerSessionSubmissionGating?
     private let operationQueue: OperationQueue
     private let logger: SDKLoggerProtocol?
 
@@ -45,6 +46,7 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         maxStatementSize: Int,
         compactorFactory: AnyMessageCompactorFactory<M>? = nil,
         accountsProvider: PeerSessionAccountsProviding? = nil,
+        submissionGate: PeerSessionSubmissionGating? = nil,
         operationQueue: OperationQueue,
         logger: SDKLoggerProtocol?
     ) {
@@ -63,6 +65,7 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         self.maxStatementSize = maxStatementSize
         self.compactorFactory = compactorFactory
         self.accountsProvider = accountsProvider
+        self.submissionGate = submissionGate
         self.operationQueue = operationQueue
         self.logger = logger
     }
@@ -75,6 +78,7 @@ extension PeerSessionFactory: PeerSessionMaking {
         do {
             let identitySigner = try signerManager.makeSigner(for: request.own.signKeyId)
             let signers = try makeSigners(for: request, identitySigner: identitySigner)
+            let sessionSubmitter = makeSubmitter(for: signers.device.accountId)
 
             let identityEncryptionKeyFactory = try encryptionManager
                 .makeEncryptorFactory(ownEncryptionKeyId: request.own.encryptionKeyId)
@@ -136,6 +140,7 @@ extension PeerSessionFactory: PeerSessionMaking {
             let outgoingChannel = try makeOutgoingChannel(
                 routeContexts: routeContexts,
                 signers: signers,
+                submitter: sessionSubmitter,
                 priorityProvider: priorityProvider,
                 requestQueue: AnyOutgoingRequestQueue(OutgoingRequestQueue(
                     statementDataCoder: statementDataCoder,
@@ -176,6 +181,7 @@ extension PeerSessionFactory: PeerSessionMaking {
             let incomingChannel = try makeIncomingChannel(
                 routeContexts: routeContexts,
                 signers: signers,
+                submitter: sessionSubmitter,
                 priorityProvider: priorityProvider,
                 statementDataCoder: statementDataCoder
             )
@@ -258,6 +264,12 @@ private extension PeerSessionFactory {
 
         let deviceSigner = try signerManager.makeSigner(for: accountsProvider.statementSignKeyId(for: request))
         return PeerSessionRoute.Signers(device: deviceSigner, identity: nil)
+    }
+
+    func makeSubmitter(for accountId: AccountId) -> StatementStoreSubmitting {
+        guard let submissionGate else { return submitter }
+
+        return GatedStatementSubmitter(base: submitter, accountId: accountId, gate: submissionGate)
     }
 
     func makeRouteConfiguration(
@@ -562,6 +574,7 @@ private extension PeerSessionFactory {
     func makeOutgoingChannel(
         routeContexts: PeerSessionRoute.Contexts,
         signers: PeerSessionRoute.Signers,
+        submitter: StatementStoreSubmitting,
         priorityProvider: PeerSessionPriorityProviding,
         requestQueue: AnyOutgoingRequestQueue<Message>
     ) throws -> OutgoingMessageChannel<M> {
@@ -581,6 +594,7 @@ private extension PeerSessionFactory {
     func makeIncomingChannel(
         routeContexts: PeerSessionRoute.Contexts,
         signers: PeerSessionRoute.Signers,
+        submitter: StatementStoreSubmitting,
         priorityProvider: PeerSessionPriorityProviding,
         statementDataCoder: StatementDataCoding
     ) throws -> IncomingMessageChannel<M> {

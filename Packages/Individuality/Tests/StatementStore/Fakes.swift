@@ -107,7 +107,11 @@ final class FakeSlotInfoProvider: StatementStoreSlotInfoProviding {
         false
     }
 
-    func freeSlot(excluding _: AccountId, callerPriority _: AllowanceRecord.Priority) async throws -> SSSSlotInfo {
+    func freeSlot(
+        excluding _: AccountId,
+        callerPriority _: AllowanceRecord.Priority,
+        allowsEviction _: Bool
+    ) async throws -> SSSSlotInfo {
         switch config.freeSlot {
         case let .success(slot):
             return slot
@@ -248,14 +252,34 @@ final class FakeLogger: SDKLoggerProtocol {
 final class FakeAllowanceSlotAllocating: AllowanceSlotAllocating {
     private let period: UInt32
     private(set) var assignSlotCalls: [AccountId] = []
+    private(set) var allowsEvictionCalls: [Bool] = []
 
     init(period: UInt32) {
         self.period = period
     }
 
-    func assignSlot(accountId: AccountId, priority _: AllowanceRecord.Priority) async throws -> UInt32 {
+    func assignSlot(accountId: AccountId, priority: AllowanceRecord.Priority) async throws -> UInt32 {
+        try await assignSlot(accountId: accountId, priority: priority, allowsEviction: true)
+    }
+
+    func assignSlot(
+        accountId: AccountId,
+        priority _: AllowanceRecord.Priority,
+        allowsEviction: Bool
+    ) async throws -> UInt32 {
         assignSlotCalls.append(accountId)
+        allowsEvictionCalls.append(allowsEviction)
         return period
+    }
+}
+
+// MARK: - FakeRenewalFilter
+
+struct FakeRenewalFilter: AllowanceRenewalFiltering {
+    let renewableAccountIds: Set<AccountId>
+
+    func renewable(_ records: [AllowanceRecord]) async throws -> [AllowanceRecord] {
+        records.filter { renewableAccountIds.contains($0.accountId) }
     }
 }
 

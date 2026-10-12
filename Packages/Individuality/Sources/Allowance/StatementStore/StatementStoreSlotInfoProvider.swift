@@ -35,7 +35,11 @@ public struct SSSRenewalSlot {
 
 public protocol StatementStoreSlotInfoProviding {
     func hasExistingSlot(for accountId: AccountId) async throws -> Bool
-    func freeSlot(excluding accountId: AccountId, callerPriority: AllowanceRecord.Priority) async throws -> SSSSlotInfo
+    func freeSlot(
+        excluding accountId: AccountId,
+        callerPriority: AllowanceRecord.Priority,
+        allowsEviction: Bool
+    ) async throws -> SSSSlotInfo
     func renewalSlots(period: UInt32) async throws -> [SSSRenewalSlot]
 }
 
@@ -92,7 +96,8 @@ public final class StatementStoreSlotInfoProvider: StatementStoreSlotInfoProvidi
 
     public func freeSlot(
         excluding accountId: AccountId,
-        callerPriority: AllowanceRecord.Priority
+        callerPriority: AllowanceRecord.Priority,
+        allowsEviction: Bool
     ) async throws -> SSSSlotInfo {
         let state = try await fetchState()
 
@@ -107,6 +112,10 @@ public final class StatementStoreSlotInfoProvider: StatementStoreSlotInfoProvidi
                 seq: UInt32(freeIndex),
                 personOrigin: originEntry.personOrigin
             )
+        }
+
+        guard allowsEviction else {
+            throw StatementStoreAllowanceError.noEvictableSlots
         }
 
         let cooldown = try await fetchReplacementCooldown()

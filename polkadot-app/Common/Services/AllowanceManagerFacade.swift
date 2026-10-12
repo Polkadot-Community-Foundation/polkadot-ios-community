@@ -4,7 +4,7 @@ import ChainRegistry
 
 struct AllowanceManagerFacade {
     let bulletInManager: AllowanceManaging
-    let sssManager: AllowanceManaging
+    let sssManager: AllowanceManaging & StatementAccountFunding
     let smartContractManager: AllowanceManaging
 
     var allManagers: [AllowanceManaging] {

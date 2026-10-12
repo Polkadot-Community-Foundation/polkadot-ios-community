@@ -32,6 +32,7 @@ final class MessageExchangeServiceFactory {
     let encryptionManager: MessageExchangeEncryptionManaging
     let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
     let accountsProvider: PeerSessionAccountsProviding?
+    let submissionGate: PeerSessionSubmissionGating?
     let messageExchangeModeProvider: MessageExchangeModeProviding
     let messageRouteSelector: (Any) -> PeerSessionRoute
     let workQueue: DispatchQueue
@@ -45,6 +46,7 @@ final class MessageExchangeServiceFactory {
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
         accountsProvider: PeerSessionAccountsProviding? = nil,
+        submissionGate: PeerSessionSubmissionGating? = nil,
         messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -55,6 +57,7 @@ final class MessageExchangeServiceFactory {
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
         self.accountsProvider = accountsProvider
+        self.submissionGate = submissionGate
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.messageRouteSelector = messageRouteSelector
         self.workQueue = workQueue
@@ -68,6 +71,7 @@ final class MessageExchangeServiceFactory {
         entropyManager: RootEntropyManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
         accountsProvider: PeerSessionAccountsProviding? = nil,
+        submissionGate: PeerSessionSubmissionGating? = nil,
         messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -80,6 +84,7 @@ final class MessageExchangeServiceFactory {
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
             accountsProvider: accountsProvider,
+            submissionGate: submissionGate,
             messageRouteSelector: messageRouteSelector,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
@@ -120,6 +125,7 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             maxStatementSize: maxStatementSize,
             compactorFactory: compactorFactory,
             accountsProvider: accountsProvider,
+            submissionGate: submissionGate,
             operationQueue: operationQueue,
             logger: logger
         )
