@@ -28,7 +28,6 @@ public protocol ConnectionFactoryProtocol {
 
     func createOneShotConnection(for chain: ChainNodeConnectable) throws -> OneShotConnection
 
-    /// A fresh, unshared socket to one of the chain's ws nodes; `attempt` rotates through them.
     func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket
 }
 

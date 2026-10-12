@@ -4,13 +4,6 @@ import SubstrateSdk
 import Starscream
 import SDKLogger
 
-/// Raw, single-use JSON-RPC WebSocket to one chain node (see ``ChainSocketProtocol``).
-///
-/// Unlike ``ChainConnection`` it never reconnects, health-checks through RPC or
-/// rewrites frames: every transport death (connect failure, peer close, error,
-/// missed ping, pool sleep) ends the socket and is reported once through the
-/// delegate. A socket opened while the app is backgrounded without an `.all`
-/// retain is not closed by a later sleep; it errors once the OS resumes the app.
 public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     public struct Configuration: Sendable {
         public let connectionTimeout: TimeInterval
@@ -98,8 +91,7 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     }
 
     public func send(text: String) {
-        // Writes happen under the lock so a send racing the connect flush
-        // cannot overtake frames buffered before it.
+        // Written under the lock so a send can't overtake the buffered frames being flushed on connect.
         let accepted = state.withLockUnchecked { [connection] state -> Bool in
             switch state.phase {
             case .connecting:
@@ -120,18 +112,20 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     }
 
     public func close() {
-        guard terminate() != nil else { return }
+        guard state.withLockUnchecked({ $0.markClosed() }) else { return }
         connection.forceDisconnect()
     }
 
-    /// Ends the socket on the host's behalf and reports `reason` to the delegate.
-    /// No-op once closed.
     func shutDown(reason: ChainSocketCloseReason) {
-        guard let delegate = terminate() else { return }
+        let (didClose, delegate) = state.withLockUnchecked { state in
+            (state.markClosed(), state.delegate)
+        }
+
+        guard didClose else { return }
 
         connection.forceDisconnect()
         logger.debug("chain socket \(host): closed, reason \(reason)")
-        delegate.value?.chainSocket(self, didCloseWith: reason)
+        delegate?.chainSocket(self, didCloseWith: reason)
     }
 
     func handle(_ event: WebSocketEvent) {
@@ -167,24 +161,8 @@ extension ChainSocket: WebSocketDelegate {
 }
 
 private extension ChainSocket {
-    /// Weak box so a terminated socket can tell "was live, no delegate" apart from "already closed".
-    struct DelegateBox {
-        weak var value: ChainSocketDelegate?
-    }
-
     var host: String {
         url.host ?? "unknown"
-    }
-
-    /// Moves the socket to `closed`; nil when it already was.
-    func terminate() -> DelegateBox? {
-        state.withLockUnchecked { state -> DelegateBox? in
-            guard state.phase != .closed else { return nil }
-            state.phase = .closed
-            state.pending.removeAll()
-            state.cancelLiveness()
-            return DelegateBox(value: state.delegate)
-        }
     }
 
     func didConnect() {
@@ -250,6 +228,14 @@ private extension ChainSocket {
 }
 
 private extension ChainSocket.State {
+    mutating func markClosed() -> Bool {
+        guard phase != .closed else { return false }
+        phase = .closed
+        pending.removeAll()
+        cancelLiveness()
+        return true
+    }
+
     mutating func cancelPongDeadline() {
         pongDeadline?.cancel()
         pongDeadline = nil

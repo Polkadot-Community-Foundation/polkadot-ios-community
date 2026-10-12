@@ -122,7 +122,6 @@ struct TrUAPIV2SpecConnectionPoolTests {
 }
 
 private extension TrUAPIV2SpecConnectionPoolTests {
-    /// Hands out the queued sockets one per resolve, then reports the chain unsupported.
     final class SocketQueue: @unchecked Sendable {
         private(set) var vended: [MockChainSocket] = []
         private var remaining: [MockChainSocket]

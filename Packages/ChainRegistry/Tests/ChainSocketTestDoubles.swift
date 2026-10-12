@@ -79,7 +79,6 @@ final class RecordingChainSocketDelegate: ChainSocketDelegate, @unchecked Sendab
 
     private let events = OSAllocatedUnfairLock(uncheckedState: Events())
 
-    /// Invoked after the close is recorded; lets async tests await it.
     var onClose: ((ChainSocketCloseReason) -> Void)?
 
     var received: [String] { events.withLockUnchecked { $0.received } }

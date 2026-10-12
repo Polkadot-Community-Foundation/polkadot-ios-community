@@ -3,16 +3,8 @@ import os
 import ChainRegistry
 import SDKLogger
 
-/// One dedicated raw JSON-RPC socket per core `chain_connect` lease.
-///
-/// The core owns request ids, subscription routing and recovery, so the pool
-/// only keeps lease bookkeeping: frames go out and come back unchanged, the
-/// death of a socket is reported once through `chainDidClose`, and nothing is
-/// ever resent — the core rebuilds its state on a fresh `chain_connect`.
-/// A lease released by the core (`close`) ends silently.
+/// One dedicated node socket per core `chain_connect`; socket deaths are reported, never hidden by reconnects.
 public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked Sendable {
-    /// Opens nothing: returns an unopened socket for the genesis hash, or nil
-    /// when the chain is unsupported (the core maps nil to "chain provider unavailable").
     public typealias SocketResolver = @Sendable (_ genesisHash: Data) -> ChainSocketProtocol?
 
     fileprivate struct State {
@@ -36,7 +28,6 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
         self.logger = logger
     }
 
-    /// The registry-backed pool the app wires: genesis → activated chain → fresh socket.
     public static func makeChainConnections(
         chainRegistry: ChainRegistryProtocol,
         logger: SDKLoggerProtocol

@@ -1,9 +1,5 @@
 import Foundation
 
-/// Host side of the core's chain-connection contract. Every connection id is one
-/// independent node connection: its subscription ids, limits and lifetime belong
-/// to it alone. Frames pass through unchanged, and the death of the transport is
-/// reported through `chainDidClose` instead of being hidden by a reconnect.
 public protocol TrUAPIChainConnecting: AnyObject, Sendable {
     /// Receives responses/termination events for all logical connections.
     var eventHandler: TrUAPIChainEventHandling? { get set }

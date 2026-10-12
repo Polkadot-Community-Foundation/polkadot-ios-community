@@ -11,8 +11,6 @@ public protocol ConnectionPoolProtocol {
     func getOneShotConnection(for chain: ChainModel) -> JSONRPCEngine?
     func deactivateConnection(for chainId: ChainModel.Id)
 
-    /// A fresh, unshared ``ChainSocket`` for the chain, rotating through its nodes per call.
-    /// The pool closes it with `.sleep` when it sleeps the app's connections.
     func makeChainSocket(for chain: ChainModel) throws -> ChainSocket
 }
 
@@ -246,8 +244,7 @@ private extension ConnectionPool {
         return sockets
     }
 
-    /// Called outside `mutex`: the close is reported synchronously, and the
-    /// receiver may immediately ask the pool for a replacement socket.
+    // Must run outside `mutex`: the delegate may synchronously request a replacement socket.
     func sleep(_ sockets: [ChainSocket]) {
         sockets.forEach { $0.shutDown(reason: .sleep) }
     }

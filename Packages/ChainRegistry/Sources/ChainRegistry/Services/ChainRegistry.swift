@@ -13,8 +13,7 @@ public protocol ChainRegistryProtocol: ChainResourceProtocol, ConnectionRetentio
     func getConnection(for chainId: ChainModel.Id) -> ChainConnection?
     func getOneShotConnection(for chainId: ChainModel.Id) -> JSONRPCEngine?
 
-    /// A fresh, unshared raw JSON-RPC socket for an activated chain; nil when the chain is
-    /// unknown, not activated, or has no ws node. The socket is not opened yet.
+    /// Returns an unopened socket, or nil unless the chain is activated.
     func makeChainSocket(for chainId: ChainModel.Id) -> ChainSocketProtocol?
 
     func getRuntimeProvider(for chainId: ChainModel.Id) -> RuntimeProviderProtocol?

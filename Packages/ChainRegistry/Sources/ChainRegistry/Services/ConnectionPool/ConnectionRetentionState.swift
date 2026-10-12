@@ -11,7 +11,6 @@ final class ConnectionRetentionState {
     struct Effect {
         var wake: [ChainConnection] = []
         var sleep: [ChainConnection] = []
-        /// Chain sockets have no retain of their own: only an `.all` retain keeps them open.
         var closeChainSockets = false
     }
 

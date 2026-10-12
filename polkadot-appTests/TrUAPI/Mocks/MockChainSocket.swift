@@ -8,7 +8,6 @@ final class MockChainSocket: ChainSocketProtocol, @unchecked Sendable {
     private(set) var closeCallCount = 0
     private(set) var sent: [String] = []
 
-    /// Runs inside `open()`, e.g. to simulate a connect failure reported synchronously.
     var onOpen: ((MockChainSocket) -> Void)?
 
     func open() {
