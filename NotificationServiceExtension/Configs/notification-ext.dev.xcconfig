@@ -13,3 +13,7 @@ APP_NAME        = $(BRAND_DISPLAY_NAME)
 APP_MAIN_BUNDLE = io.pcf.polkadotapp.devnet
 APP_GROUP       = group.pcf.polkadotapp.devnet
 BUNDLE          = $(APP_MAIN_BUNDLE).NotificationServiceExtension
+
+// PCF legal pages; brand.xcconfig keeps upstream values.
+BRAND_TERMS_HOST   = pcf.network/legal/user-terms/
+BRAND_PRIVACY_HOST = pcf.network/legal/privacy/
