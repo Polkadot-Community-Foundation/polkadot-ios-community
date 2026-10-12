@@ -1,41 +1,36 @@
 import Foundation
-import SubstrateSdk
-import Operation_iOS
 import KeyDerivation
 import Products
-import StructuredConcurrency
 
 protocol AttachmentsSenderProviding {
     func getWallet(for chatId: Chat.Id) async throws -> WalletManaging
 }
 
+enum AttachmentsSenderProviderError: Error, Equatable {
+    case unsupportedChat
+}
+
 final class AttachmentsSenderProvider {
-    let contactsStorageService: ContactsLocalStorageServicing
     let tldProvider: DotNsTldProviding
+    let entropyManager: RootEntropyManaging
 
     init(
-        contactsStorageService: ContactsLocalStorageServicing = ContactsLocalStorageService(),
-        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared,
+        entropyManager: RootEntropyManaging = RootEntropyManager.shared
     ) {
-        self.contactsStorageService = contactsStorageService
         self.tldProvider = tldProvider
+        self.entropyManager = entropyManager
     }
 }
 
 extension AttachmentsSenderProvider: AttachmentsSenderProviding {
     func getWallet(for chatId: Chat.Id) async throws -> WalletManaging {
-        let mainSignKeyId = try WalletDerivationPath.main(for: tldProvider.currentTldOrError())
-
-        guard let accountId = chatId.accountId else {
-            return DynamicDerivedWallet(derivationPath: mainSignKeyId)
+        guard let peerAccountId = chatId.accountId else {
+            throw AttachmentsSenderProviderError.unsupportedChat
         }
 
-        let contact = try await contactsStorageService
-            .getContact(by: accountId)
-            .asyncExecute()
+        let derivationPath = try ChatKeyPaths.hop(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
 
-        let signKeyId = contact?.ownKeyId.signKeyId ?? mainSignKeyId
-
-        return DynamicDerivedWallet(derivationPath: signKeyId)
+        return DynamicDerivedWallet(derivationPath: derivationPath, entropyManager: entropyManager)
     }
 }

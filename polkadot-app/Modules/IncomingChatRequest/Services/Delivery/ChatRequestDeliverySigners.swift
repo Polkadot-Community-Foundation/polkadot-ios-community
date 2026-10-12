@@ -24,7 +24,7 @@ final class ChatRequestDeliverySigners {
 extension ChatRequestDeliverySigners: ChatRequestDeliverySigning {
     func anonymous(requestId: String, period: UInt32) throws -> ChatRequestDeliverySigner {
         try ChatRequestDeliverySigner(
-            signer: signManager.makeSigner(for: "//chat-request//\(requestId)//\(period)"),
+            signer: signManager.makeSigner(for: ChatKeyPaths.request(requestId: requestId, period: period)),
             period: period
         )
     }
