@@ -17,6 +17,7 @@ enum SPAViewFactory {
         flowState: SPAFlowState
     ) -> SPAViewProtocol? {
         let truapiEnabled = SettingsManager.shared.isTrUAPIRuntimeEnabled
+            && !LegacyRuntimeProducts.runsNative(productName: configuration.page.host.name)
 
         if truapiEnabled {
             return createRustView(configuration: configuration, flowState: flowState)
