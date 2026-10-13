@@ -15,6 +15,7 @@ struct ChatAccountFundingTests {
         try await gate.awaitSubmittable(accountId: accountId)
         try await gate.awaitSubmittable(accountId: accountId)
         #expect(funding.calls.count == 1)
+        #expect(funding.priorities == [.critical])
 
         await dateProvider.advance(by: 86_400)
         try await gate.awaitSubmittable(accountId: accountId)

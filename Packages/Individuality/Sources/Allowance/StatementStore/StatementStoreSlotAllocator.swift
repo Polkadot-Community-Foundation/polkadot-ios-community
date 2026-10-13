@@ -26,14 +26,6 @@ public final class StatementStoreSlotAllocator: AllowanceSlotAllocating {
     }
 
     public func assignSlot(accountId: AccountId, priority: AllowanceRecord.Priority) async throws -> UInt32 {
-        try await assignSlot(accountId: accountId, priority: priority, allowsEviction: true)
-    }
-
-    public func assignSlot(
-        accountId: AccountId,
-        priority: AllowanceRecord.Priority,
-        allowsEviction: Bool
-    ) async throws -> UInt32 {
         try await markStallRegion("Reserving SS slot") {
             try await serialQueue.run { [weak self] in
                 guard let self else { throw AllowanceSlotAssignmentError.noSlotsAvailable }
@@ -41,8 +33,7 @@ public final class StatementStoreSlotAllocator: AllowanceSlotAllocating {
                 let slot = try await markStallRegion("Reading chain state") {
                     try await self.slotInfoProvider.freeSlot(
                         excluding: accountId,
-                        callerPriority: priority,
-                        allowsEviction: allowsEviction
+                        callerPriority: priority
                     )
                 }
 

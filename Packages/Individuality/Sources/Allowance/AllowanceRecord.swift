@@ -38,6 +38,12 @@ public extension AllowanceRecord {
     enum Priority: Int, Comparable {
         case normal = 0
         case high = 1
+        /// Never evicted, since losing the slot evicts statements a peer still needs.
+        case critical = 2
+
+        public var isEvictable: Bool {
+            self != .critical
+        }
 
         public static func < (lhs: Self, rhs: Self) -> Bool {
             lhs.rawValue < rhs.rawValue

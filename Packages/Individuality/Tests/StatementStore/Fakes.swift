@@ -109,8 +109,7 @@ final class FakeSlotInfoProvider: StatementStoreSlotInfoProviding {
 
     func freeSlot(
         excluding _: AccountId,
-        callerPriority _: AllowanceRecord.Priority,
-        allowsEviction _: Bool
+        callerPriority _: AllowanceRecord.Priority
     ) async throws -> SSSSlotInfo {
         switch config.freeSlot {
         case let .success(slot):
@@ -252,23 +251,15 @@ final class FakeLogger: SDKLoggerProtocol {
 final class FakeAllowanceSlotAllocating: AllowanceSlotAllocating {
     private let period: UInt32
     private(set) var assignSlotCalls: [AccountId] = []
-    private(set) var allowsEvictionCalls: [Bool] = []
+    private(set) var priorities: [AllowanceRecord.Priority] = []
 
     init(period: UInt32) {
         self.period = period
     }
 
     func assignSlot(accountId: AccountId, priority: AllowanceRecord.Priority) async throws -> UInt32 {
-        try await assignSlot(accountId: accountId, priority: priority, allowsEviction: true)
-    }
-
-    func assignSlot(
-        accountId: AccountId,
-        priority _: AllowanceRecord.Priority,
-        allowsEviction: Bool
-    ) async throws -> UInt32 {
         assignSlotCalls.append(accountId)
-        allowsEvictionCalls.append(allowsEviction)
+        priorities.append(priority)
         return period
     }
 }

@@ -7,6 +7,7 @@ import SubstrateSdk
 final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sendable {
     private struct State {
         var calls: [AccountId] = []
+        var priorities: [AllowanceRecord.Priority] = []
         var failure: Error?
         var holdsNext = false
         var released = false
@@ -15,6 +16,7 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
     private let state = OSAllocatedUnfairLock(initialState: State())
 
     var calls: [AccountId] { state.withLock { $0.calls } }
+    var priorities: [AllowanceRecord.Priority] { state.withLock { $0.priorities } }
 
     func fail(with error: Error?) {
         state.withLock { $0.failure = error }
@@ -28,9 +30,10 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
         state.withLock { $0.released = true }
     }
 
-    func ensureFunded(accountId: AccountId, priority _: AllowanceRecord.Priority) async throws {
+    func ensureFunded(accountId: AccountId, priority: AllowanceRecord.Priority) async throws {
         let shouldHold = state.withLock { state in
             state.calls.append(accountId)
+            state.priorities.append(priority)
             defer { state.holdsNext = false }
             return state.holdsNext
         }

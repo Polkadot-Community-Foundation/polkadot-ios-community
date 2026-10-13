@@ -39,8 +39,7 @@ extension SSStoreAllowanceManager: AllowanceManaging {
             try await allocateInBackground(
                 accountId: accountId,
                 policy: policy,
-                priority: priority,
-                allowsEviction: true
+                priority: priority
             )
         }
     }
@@ -63,8 +62,7 @@ extension SSStoreAllowanceManager: StatementAccountFunding {
             try await allocateInBackground(
                 accountId: accountId,
                 policy: .ignore,
-                priority: priority,
-                allowsEviction: false
+                priority: priority
             )
         }
     }
@@ -74,8 +72,7 @@ private extension SSStoreAllowanceManager {
     func allocateInBackground(
         accountId: AccountId,
         policy: OnExistingAllowancePolicy,
-        priority: AllowanceRecord.Priority,
-        allowsEviction: Bool
+        priority: AllowanceRecord.Priority
     ) async throws {
         try await backgroundExecutor.execute { [allocator, repository, slotInfoProvider] in
             try await markStallActivity("Allocating SS allowance") {
@@ -87,11 +84,7 @@ private extension SSStoreAllowanceManager {
                     return
                 }
 
-                let period = try await allocator.assignSlot(
-                    accountId: accountId,
-                    priority: priority,
-                    allowsEviction: allowsEviction
-                )
+                let period = try await allocator.assignSlot(accountId: accountId, priority: priority)
 
                 let record = AllowanceRecord(
                     accountId: accountId,

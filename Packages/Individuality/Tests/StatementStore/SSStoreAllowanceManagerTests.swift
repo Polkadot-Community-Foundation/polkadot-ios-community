@@ -31,7 +31,7 @@ struct SSStoreAllowanceManagerTests {
         )
     }
 
-    @Test func ensureFundedNeverEvicts() async throws {
+    @Test func ensureFundedAllocatesWithCallerPriority() async throws {
         let capturingRepo = CapturingRepository()
         let allocator = FakeAllowanceSlotAllocating(period: 100)
         let manager = makeManager(
@@ -40,9 +40,9 @@ struct SSStoreAllowanceManagerTests {
             slotInfoProvider: FakeSlotInfoProvider()
         )
 
-        try await manager.ensureFunded(accountId: testAccountId, priority: .normal)
+        try await manager.ensureFunded(accountId: testAccountId, priority: .critical)
 
-        #expect(allocator.allowsEvictionCalls == [false])
+        #expect(allocator.priorities == [.critical])
         #expect(capturingRepo.savedRecords.map(\.accountId) == [testAccountId])
     }
 
@@ -224,8 +224,7 @@ final class CustomFakeSlotInfoProvider: StatementStoreSlotInfoProviding {
 
     func freeSlot(
         excluding _: AccountId,
-        callerPriority _: AllowanceRecord.Priority,
-        allowsEviction _: Bool
+        callerPriority _: AllowanceRecord.Priority
     ) async throws -> SSSSlotInfo {
         fatalError("Should not be called")
     }
