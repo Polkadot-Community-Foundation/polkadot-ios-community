@@ -33,21 +33,22 @@ extension SSStoreAllowanceManager: AllowanceManaging {
     public func allocate(
         accountId: AccountId,
         policy: OnExistingAllowancePolicy,
-        priority: AllowanceRecord.Priority
+        priority: AllowanceRecord.Priority,
+        domain: AllowanceRecord.Domain
     ) async throws {
         try await issueDiagnostics.observeAllocation {
             try await allocateInBackground(
                 accountId: accountId,
                 policy: policy,
-                priority: priority
+                priority: priority,
+                domain: domain
             )
         }
     }
 
-    public func release(accountId: AccountId) async throws {
+    public func release(with filter: AllowanceReleaseFiltering) async throws {
         try await backgroundExecutor.execute { [repository] in
-            let identifier = accountId.toHex()
-            try await repository.saveOperation({ [] }, { [identifier] }).asyncExecute()
+            try await repository.releaseRecords(with: filter)
         }
     }
 
@@ -57,12 +58,17 @@ extension SSStoreAllowanceManager: AllowanceManaging {
 }
 
 extension SSStoreAllowanceManager: StatementAccountFunding {
-    public func ensureFunded(accountId: AccountId, priority: AllowanceRecord.Priority) async throws {
+    public func ensureFunded(
+        accountId: AccountId,
+        priority: AllowanceRecord.Priority,
+        domain: AllowanceRecord.Domain
+    ) async throws {
         try await issueDiagnostics.observeAllocation {
             try await allocateInBackground(
                 accountId: accountId,
                 policy: .ignore,
-                priority: priority
+                priority: priority,
+                domain: domain
             )
         }
     }
@@ -72,7 +78,8 @@ private extension SSStoreAllowanceManager {
     func allocateInBackground(
         accountId: AccountId,
         policy: OnExistingAllowancePolicy,
-        priority: AllowanceRecord.Priority
+        priority: AllowanceRecord.Priority,
+        domain: AllowanceRecord.Domain
     ) async throws {
         try await backgroundExecutor.execute { [allocator, repository, slotInfoProvider] in
             try await markStallActivity("Allocating SS allowance") {
@@ -90,6 +97,7 @@ private extension SSStoreAllowanceManager {
                     accountId: accountId,
                     allocatedAt: Date(),
                     kind: .statementStore,
+                    domain: domain,
                     priority: priority,
                     latestRenewedPeriod: period
                 )

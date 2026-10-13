@@ -48,6 +48,8 @@ extension AllowanceRenewalService: ApplicationServiceProtocol {
 
 private extension AllowanceRenewalService {
     func renewAllowanceSlots() async {
+        await managerFacade.cleanupService.cleanup()
+
         await withDiscardingTaskGroup { group in
             for manager in managerFacade.allManagers {
                 group.addTask { [logger] in

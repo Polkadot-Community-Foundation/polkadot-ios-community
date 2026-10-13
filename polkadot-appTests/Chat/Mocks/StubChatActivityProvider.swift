@@ -1,19 +1,20 @@
 import Foundation
 import os
+import SubstrateSdk
 @testable import polkadot_app
 
 final class StubChatActivityProvider: ChatActivityProviding, @unchecked Sendable {
-    private let activity: ChatActivity
+    private let activePeers: Set<AccountId>
     private let lastCutoff = OSAllocatedUnfairLock<Date?>(initialState: nil)
 
-    init(activity: ChatActivity) {
-        self.activity = activity
+    init(activePeers: Set<AccountId>) {
+        self.activePeers = activePeers
     }
 
     var requestedCutoff: Date? { lastCutoff.withLock { $0 } }
 
-    func activity(since cutoff: Date) async throws -> ChatActivity {
+    func activePeers(since cutoff: Date) async throws -> Set<AccountId> {
         lastCutoff.withLock { $0 = cutoff }
-        return activity
+        return activePeers
     }
 }

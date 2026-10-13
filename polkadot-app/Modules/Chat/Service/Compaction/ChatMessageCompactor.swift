@@ -61,7 +61,12 @@ private extension ChatMessageCompactor {
         let loader = try loaderFactory.makeLoader(for: node)
 
         let accountId = try proofWallet.getRawPublicKey()
-        try await allowanceManager.allocate(accountId: accountId, policy: .ignore, priority: .normal)
+        try await allowanceManager.allocate(
+            accountId: accountId,
+            policy: .ignore,
+            priority: .normal,
+            domain: .chat
+        )
 
         let sender = try SenderProofProvider(sender: proofWallet.getMultiSigner()) { [proofWallet] data in
             try proofWallet.sign(data: data)

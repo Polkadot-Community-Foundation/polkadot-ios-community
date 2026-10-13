@@ -109,12 +109,6 @@ extension SSStoreAllowanceManager {
             chainTimeProvider: timeProvider,
             serialQueue: serialQueue,
             issueDiagnostics: .make(reporter: IssueReportingFacade.shared),
-            renewalFilter: ChatAccountRenewalFilter(
-                activityProvider: ChatActivityStore(storageFacade: userStorageFacade),
-                peerAccounts: ChatPeerAccounts(tldProvider: tldProvider),
-                signManager: ChatSignerManager(entropyManager: entropyManager),
-                dateProvider: NowDateProvider()
-            ),
             logger: logger
         )
 

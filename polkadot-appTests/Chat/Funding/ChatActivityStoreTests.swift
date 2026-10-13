@@ -9,6 +9,7 @@ struct ChatActivityStoreTests {
     private let pendingPeer = Data(repeating: 0x01, count: 32)
     private let recentPeer = Data(repeating: 0x02, count: 32)
     private let idlePeer = Data(repeating: 0x03, count: 32)
+    private let blockedPeer = Data(repeating: 0x04, count: 32)
 
     @Test func activePeersHavePendingOrRecentMessages() async throws {
         let old = now.addingTimeInterval(-10 * 86_400)
@@ -16,21 +17,35 @@ struct ChatActivityStoreTests {
         try await insertChat(with: recentPeer, status: .incoming(.seen), at: now)
         try await insertChat(with: idlePeer, status: .outgoing(.delivered), at: old)
 
-        let activity = try await ChatActivityStore(storageFacade: facade)
-            .activity(since: now.addingTimeInterval(-3 * 86_400))
+        let activePeers = try await ChatActivityStore(storageFacade: facade)
+            .activePeers(since: now.addingTimeInterval(-3 * 86_400))
 
-        #expect(activity.peers == [pendingPeer, recentPeer, idlePeer])
-        #expect(activity.activePeers == [pendingPeer, recentPeer])
+        #expect(activePeers == [pendingPeer, recentPeer])
+    }
+
+    @Test func blockedContactsAreNeverActive() async throws {
+        try await insertChat(with: blockedPeer, status: .incoming(.seen), at: now, isBlocked: true)
+
+        let activePeers = try await ChatActivityStore(storageFacade: facade)
+            .activePeers(since: now.addingTimeInterval(-3 * 86_400))
+
+        #expect(activePeers.isEmpty)
     }
 }
 
 private extension ChatActivityStoreTests {
-    func insertChat(with peer: Data, status: Chat.LocalMessage.Status, at date: Date) async throws {
+    func insertChat(
+        with peer: Data,
+        status: Chat.LocalMessage.Status,
+        at date: Date,
+        isBlocked: Bool = false
+    ) async throws {
         try await facade.databaseService.performWrite { context in
             let contact = CDChatContact(context: context)
             contact.identifier = peer.toHex()
             contact.username = "peer"
             contact.publicKey = Data(repeating: 1, count: 32)
+            contact.isBlocked = isBlocked
 
             let chat = CDChat(context: context)
             chat.identifier = UUID().uuidString

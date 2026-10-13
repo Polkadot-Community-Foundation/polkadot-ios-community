@@ -58,7 +58,9 @@ extension RemoveDeviceInteractor: RemoveDeviceInteractorInputProtocol {
 private extension RemoveDeviceInteractor {
     func releaseAllowance(for accountId: AccountId) async {
         do {
-            try await serviceCoordinator.allowanceManagerFacade.sssManager.release(accountId: accountId)
+            try await serviceCoordinator.allowanceManagerFacade.sssManager.release(
+                with: AccountsAllowanceFilter(accountIds: [accountId])
+            )
             logger.debug("Released allowance for device \(accountId.toHex())")
         } catch {
             logger.error("Failed to release allowance: \(error)")

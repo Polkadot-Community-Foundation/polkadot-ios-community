@@ -37,6 +37,7 @@ final class FakeSlotAccounting: StatementStoreSlotAccounting {
             accountId: record.accountId,
             allocatedAt: since,
             kind: record.kind,
+            domain: .product,
             priority: record.priority,
             latestRenewedPeriod: period
         )
@@ -261,16 +262,6 @@ final class FakeAllowanceSlotAllocating: AllowanceSlotAllocating {
         assignSlotCalls.append(accountId)
         priorities.append(priority)
         return period
-    }
-}
-
-// MARK: - FakeRenewalFilter
-
-struct FakeRenewalFilter: AllowanceRenewalFiltering {
-    let renewableAccountIds: Set<AccountId>
-
-    func renewable(_ records: [AllowanceRecord]) async throws -> [AllowanceRecord] {
-        records.filter { renewableAccountIds.contains($0.accountId) }
     }
 }
 

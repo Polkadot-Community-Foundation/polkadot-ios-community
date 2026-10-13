@@ -67,7 +67,7 @@ private extension ChatAccountFunding {
 
     func fund(_ accountId: AccountId, day: Int, now: Date) async throws {
         do {
-            try await funding.ensureFunded(accountId: accountId, priority: .critical)
+            try await funding.ensureFunded(accountId: accountId, priority: .critical, domain: .chat)
 
             state.withLock { state in
                 state.fundedDay[accountId] = day

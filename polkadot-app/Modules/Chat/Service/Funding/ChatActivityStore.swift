@@ -3,14 +3,9 @@ import Foundation
 import Operation_iOS
 import SubstrateSdk
 
-struct ChatActivity: Equatable {
-    let peers: Set<AccountId>
-    let activePeers: Set<AccountId>
-}
-
 protocol ChatActivityProviding {
-    /// Active peers have an unanswered outgoing message or any message since `cutoff`.
-    func activity(since cutoff: Date) async throws -> ChatActivity
+    /// Unblocked contacts with an unanswered outgoing message or any message since `cutoff`.
+    func activePeers(since cutoff: Date) async throws -> Set<AccountId>
 }
 
 final class ChatActivityStore {
@@ -22,16 +17,13 @@ final class ChatActivityStore {
 }
 
 extension ChatActivityStore: ChatActivityProviding {
-    func activity(since cutoff: Date) async throws -> ChatActivity {
+    func activePeers(since cutoff: Date) async throws -> Set<AccountId> {
         try await databaseService.performRead { context in
-            let peers = try Self.contactIdentifiers(in: context)
+            let blocked = try Self.blockedContactIdentifiers(in: context)
             let pending = try Self.messagePeers(matching: .byStatus(.outgoing(.sent)), in: context)
             let recent = try Self.messagePeers(matching: Self.messages(since: cutoff), in: context)
 
-            return ChatActivity(
-                peers: Self.accountIds(from: peers),
-                activePeers: Self.accountIds(from: pending.union(recent))
-            )
+            return Self.accountIds(from: pending.union(recent).subtracting(blocked))
         }
     }
 }
@@ -39,8 +31,10 @@ extension ChatActivityStore: ChatActivityProviding {
 private extension ChatActivityStore {
     static let peerKeyPath = #keyPath(CDChatMessage.chat.contact.identifier)
 
-    static func contactIdentifiers(in context: NSManagedObjectContext) throws -> Set<String> {
-        try Set(context.fetch(CDChatContact.fetchRequest()).compactMap(\.identifier))
+    static func blockedContactIdentifiers(in context: NSManagedObjectContext) throws -> Set<String> {
+        let request = CDChatContact.fetchRequest()
+        request.predicate = NSPredicate(format: "%K == YES", #keyPath(CDChatContact.isBlocked))
+        return try Set(context.fetch(request).compactMap(\.identifier))
     }
 
     static func messagePeers(

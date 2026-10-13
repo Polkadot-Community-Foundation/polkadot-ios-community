@@ -188,6 +188,7 @@ private extension StatementStoreSlotEvictionPickerTests {
             accountId: accountId,
             allocatedAt: Date(),
             kind: .statementStore,
+            domain: .product,
             priority: priority,
             latestRenewedPeriod: nil
         )

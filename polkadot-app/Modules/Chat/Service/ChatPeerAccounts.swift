@@ -1,6 +1,7 @@
 import Foundation
 import MessageExchangeKit
 import Products
+import StatementStore
 import SubstrateSdk
 
 protocol ChatPeerAccountsProviding {
@@ -33,5 +34,18 @@ extension ChatPeerAccounts: PeerSessionAccountsProviding {
 
     func uploadSignKeyId(for request: MessageExchange.SessionRequest) throws -> String {
         try uploadKeyId(for: request.peer.accountId)
+    }
+}
+
+protocol ChatStatementAccountResolving {
+    func statementAccountId(for peerAccountId: AccountId) throws -> AccountId
+}
+
+struct ChatStatementAccountResolver: ChatStatementAccountResolving {
+    let peerAccounts: ChatPeerAccountsProviding
+    let signManager: StatementStoreSignerManaging
+
+    func statementAccountId(for peerAccountId: AccountId) throws -> AccountId {
+        try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId)).accountId
     }
 }

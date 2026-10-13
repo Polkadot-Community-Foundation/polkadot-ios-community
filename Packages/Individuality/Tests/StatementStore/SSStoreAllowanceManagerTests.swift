@@ -40,10 +40,11 @@ struct SSStoreAllowanceManagerTests {
             slotInfoProvider: FakeSlotInfoProvider()
         )
 
-        try await manager.ensureFunded(accountId: testAccountId, priority: .critical)
+        try await manager.ensureFunded(accountId: testAccountId, priority: .critical, domain: .chat)
 
         #expect(allocator.priorities == [.critical])
         #expect(capturingRepo.savedRecords.map(\.accountId) == [testAccountId])
+        #expect(capturingRepo.savedRecords.map(\.domain) == [.chat])
     }
 
     @Test func ensureFundedSkipsAccountWithSlot() async throws {
@@ -54,7 +55,7 @@ struct SSStoreAllowanceManagerTests {
             slotInfoProvider: CustomFakeSlotInfoProvider(hasExistingSlot: true)
         )
 
-        try await manager.ensureFunded(accountId: testAccountId, priority: .normal)
+        try await manager.ensureFunded(accountId: testAccountId, priority: .normal, domain: .chat)
 
         #expect(allocator.assignSlotCalls.isEmpty)
     }
@@ -78,7 +79,8 @@ struct SSStoreAllowanceManagerTests {
         try await manager.allocate(
             accountId: testAccountId,
             policy: .ignore,
-            priority: .normal
+            priority: .normal,
+            domain: .product
         )
 
         #expect(capturingRepo.savedRecords.count == 1)
@@ -105,7 +107,8 @@ struct SSStoreAllowanceManagerTests {
         try await manager.allocate(
             accountId: testAccountId,
             policy: .increase,
-            priority: .normal
+            priority: .normal,
+            domain: .product
         )
 
         #expect(capturingRepo.savedRecords.count == 1)
@@ -133,15 +136,26 @@ struct SSStoreAllowanceManagerTests {
         try await manager.allocate(
             accountId: testAccountId,
             policy: .ignore,
-            priority: .normal
+            priority: .normal,
+            domain: .product
         )
 
         // Should not call allocator or write to repository
         #expect(capturingRepo.savedRecords.isEmpty)
     }
 
-    @Test func releaseDeletesRecordByAccountId() async throws {
-        let capturingRepo = CapturingRepository()
+    @Test func releaseDeletesRecordsSelectedByFilter() async throws {
+        let otherAccountId = Data(repeating: 0x0F, count: 32)
+        let capturingRepo = CapturingRepository(storedRecords: [testAccountId, otherAccountId].map { accountId in
+            AllowanceRecord(
+                accountId: accountId,
+                allocatedAt: Date(),
+                kind: .statementStore,
+                domain: .chat,
+                priority: .critical,
+                latestRenewedPeriod: 100
+            )
+        })
         let repository = AnyDataProviderRepository(capturingRepo)
 
         let manager = makeManager(
@@ -150,7 +164,7 @@ struct SSStoreAllowanceManagerTests {
             slotInfoProvider: FakeSlotInfoProvider()
         )
 
-        try await manager.release(accountId: testAccountId)
+        try await manager.release(with: AccountsAllowanceFilter(accountIds: [testAccountId]))
 
         #expect(capturingRepo.deletedIds == [testAccountId.toHex()])
         #expect(capturingRepo.savedRecords.isEmpty)
@@ -162,8 +176,13 @@ struct SSStoreAllowanceManagerTests {
 final class CapturingRepository: DataProviderRepositoryProtocol {
     typealias Model = AllowanceRecord
 
+    private let storedRecords: [AllowanceRecord]
     private(set) var savedRecords: [AllowanceRecord] = []
     private(set) var deletedIds: [String] = []
+
+    init(storedRecords: [AllowanceRecord] = []) {
+        self.storedRecords = storedRecords
+    }
 
     func saveOperation(
         _ updateModelsBlock: @escaping () throws -> [Model],
@@ -186,7 +205,7 @@ final class CapturingRepository: DataProviderRepositoryProtocol {
     }
 
     func fetchAllOperation(with _: RepositoryFetchOptions) -> BaseOperation<[Model]> {
-        fatalError("Should not be called in tests")
+        BaseOperation.createWithResult(storedRecords)
     }
 
     func fetchOperation(

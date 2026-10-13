@@ -30,7 +30,11 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
         state.withLock { $0.released = true }
     }
 
-    func ensureFunded(accountId: AccountId, priority: AllowanceRecord.Priority) async throws {
+    func ensureFunded(
+        accountId: AccountId,
+        priority: AllowanceRecord.Priority,
+        domain _: AllowanceRecord.Domain
+    ) async throws {
         let shouldHold = state.withLock { state in
             state.calls.append(accountId)
             state.priorities.append(priority)

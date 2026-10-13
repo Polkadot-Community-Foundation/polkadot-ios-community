@@ -13,7 +13,6 @@ public final class StatementStoreSlotRenewer: StatementStoreSlotRenewing {
     private let chainTimeProvider: ChainTimeProviding
     private let serialQueue: SerialOperationQueue
     private let issueDiagnostics: StatementStoreRenewalIssueDiagnostics
-    private let renewalFilter: AllowanceRenewalFiltering?
     private let logger: SDKLoggerProtocol
 
     public init(
@@ -25,7 +24,6 @@ public final class StatementStoreSlotRenewer: StatementStoreSlotRenewing {
         chainTimeProvider: ChainTimeProviding,
         serialQueue: SerialOperationQueue,
         issueDiagnostics: StatementStoreRenewalIssueDiagnostics,
-        renewalFilter: AllowanceRenewalFiltering? = nil,
         logger: SDKLoggerProtocol
     ) {
         self.chainId = chainId
@@ -36,7 +34,6 @@ public final class StatementStoreSlotRenewer: StatementStoreSlotRenewing {
         self.chainTimeProvider = chainTimeProvider
         self.serialQueue = serialQueue
         self.issueDiagnostics = issueDiagnostics
-        self.renewalFilter = renewalFilter
         self.logger = logger
     }
 
@@ -78,8 +75,7 @@ private extension StatementStoreSlotRenewer {
     func makeRenewalPlan(period: UInt32) async throws -> RenewalPlan {
         let slots = try await slotInfoProvider.renewalSlots(period: period)
         let staleRows = try await accounting.staleRows(currentPeriod: period)
-        let rows = try await renewalFilter?.renewable(staleRows) ?? staleRows
-        let sortedRows = rows.sorted { ($0.priority, $0.allocatedAt) > ($1.priority, $1.allocatedAt) }
+        let sortedRows = staleRows.sorted { ($0.priority, $0.allocatedAt) > ($1.priority, $1.allocatedAt) }
         let pairs = sortedRows.prefix(slots.count).enumerated().map { index, row in
             (allowance: row, slot: slots[index])
         }

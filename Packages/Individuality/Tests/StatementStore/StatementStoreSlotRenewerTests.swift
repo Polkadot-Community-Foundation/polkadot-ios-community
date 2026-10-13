@@ -19,8 +19,7 @@ struct StatementStoreSlotRenewerTests {
         repository: FakeSlotAccounting,
         submitter: FakeSubmitter,
         periodProvider: FakeChainTimeProvider,
-        originFactory: FakeOriginFactory = FakeOriginFactory(),
-        renewalFilter: AllowanceRenewalFiltering? = nil
+        originFactory: FakeOriginFactory = FakeOriginFactory()
     ) -> StatementStoreSlotRenewer {
         let queue = SerialOperationQueue()
         let logger = FakeLogger()
@@ -34,44 +33,8 @@ struct StatementStoreSlotRenewerTests {
             chainTimeProvider: periodProvider,
             serialQueue: queue,
             issueDiagnostics: .make(reporter: NoopIssueReporter()),
-            renewalFilter: renewalFilter,
             logger: logger
         )
-    }
-
-    @Test func filteredRowsAreNeitherRenewedNorDropped() async throws {
-        let repository = FakeSlotAccounting()
-        let periodProvider = FakeChainTimeProvider()
-        periodProvider.setPeriod(100)
-
-        let active = Data([0x01])
-        let idle = Data([0x02])
-
-        repository.setInitialRecords([active, idle].map { accountId in
-            AllowanceRecord(
-                accountId: accountId,
-                allocatedAt: Date(timeIntervalSince1970: 1_000),
-                kind: .statementStore,
-                priority: .normal,
-                latestRenewedPeriod: 99
-            )
-        })
-
-        let slotProvider = FakeSlotInfoProvider()
-        slotProvider.updateRenewalSlots(.success([SSSRenewalSlot(personOrigin: makePersonOrigin(), seq: 0)]))
-
-        let renewer = makeRenewer(
-            slotInfoProvider: slotProvider,
-            repository: repository,
-            submitter: FakeSubmitter(),
-            periodProvider: periodProvider,
-            renewalFilter: FakeRenewalFilter(renewableAccountIds: [active])
-        )
-
-        try await renewer.renew()
-
-        #expect(repository.markRenewedCalls.map(\.record.accountId) == [active])
-        #expect(repository.deleteForCalls.isEmpty)
     }
 
     // Test: Submit failure leaves row stale
@@ -87,6 +50,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountA,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -94,6 +58,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountB,
             allocatedAt: Date(timeIntervalSince1970: 2_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -137,6 +102,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountA,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -144,6 +110,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountB,
             allocatedAt: Date(timeIntervalSince1970: 2_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -186,6 +153,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: pgasAccount,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .pgas,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: nil
         )
@@ -224,6 +192,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountA,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -271,6 +240,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountA,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -322,6 +292,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountHigh,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .high,
             latestRenewedPeriod: 99
         )
@@ -330,6 +301,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountNormal,
             allocatedAt: Date(timeIntervalSince1970: 2_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -370,6 +342,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountA,
             allocatedAt: Date(timeIntervalSince1970: 1_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
@@ -377,6 +350,7 @@ struct StatementStoreSlotRenewerTests {
             accountId: accountB,
             allocatedAt: Date(timeIntervalSince1970: 2_000),
             kind: .statementStore,
+            domain: .product,
             priority: .normal,
             latestRenewedPeriod: 99
         )
