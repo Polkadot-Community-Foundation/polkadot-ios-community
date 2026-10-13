@@ -50,9 +50,14 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                 let incomingContext = try await serviceFactory.makeIncomingChatRequestContext()
                 let outgoingContext = try await serviceFactory.makeOutgoingChatRequestContext()
                 let renewer = try await serviceFactory.makeChatRequestRenewer()
+                let acceptancePublisher = try await serviceFactory.makeChatAcceptancePublisher()
 
                 let renewalTask = Task { [backgroundExecutor] in
-                    await Self.runRenewal(renewer, backgroundExecutor: backgroundExecutor)
+                    await Self.runRenewal(
+                        renewer,
+                        acceptancePublisher: acceptancePublisher,
+                        backgroundExecutor: backgroundExecutor
+                    )
                 }
                 defer { renewalTask.cancel() }
 
@@ -86,6 +91,10 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                             context: outgoingContext
                         )
 
+                        Task { [backgroundExecutor] in
+                            try? await backgroundExecutor.execute { await acceptancePublisher.sync() }
+                        }
+
                         logger.debug("Handled contacts: \(contacts.count)")
                     }
                 } onCancel: {
@@ -107,9 +116,16 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
 
 private extension ChatRequestCoordinatorService {
     // The renewer stays executor-free so a background task can drive it under its own expiration.
-    static func runRenewal(_ renewer: ChatRequestRenewing, backgroundExecutor: BackgroundExecuting) async {
+    static func runRenewal(
+        _ renewer: ChatRequestRenewing,
+        acceptancePublisher: ChatAcceptancePublishing,
+        backgroundExecutor: BackgroundExecuting
+    ) async {
         while !Task.isCancelled {
-            try? await backgroundExecutor.execute { await renewer.renew() }
+            try? await backgroundExecutor.execute {
+                await renewer.renew()
+                await acceptancePublisher.sync()
+            }
             try? await Task.sleep(for: renewalInterval)
         }
     }

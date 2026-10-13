@@ -23,7 +23,6 @@ final class MessageExchangeChatCoordinator {
     private let chatChainId: ChainModel.Id
     let workQueue: DispatchQueue
     private let operationQueue: OperationQueue
-    private let senderDeviceActivator: SenderDeviceActivator
     private let deviceMessageBroadcaster: DeviceMessageBroadcaster
     private let pendingDeviceFanOutProcessor: PendingDeviceFanOutProcessor
     private let messageExchangeModeProvider: MessageExchangeModeProviding
@@ -126,12 +125,6 @@ final class MessageExchangeChatCoordinator {
         self.chainRegistry = chainRegistry
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.statementStoreMonitor = statementStoreMonitor
-        senderDeviceActivator = MultideviceComponentFactory.makeSenderDeviceActivator(
-            contactsStorageService: contactsStorageService,
-            chatRequestStoreService: chatRequestStoreService,
-            messageExchangeModeProvider: messageExchangeModeProvider,
-            logger: logger
-        )
         deviceMessageBroadcaster = MultideviceComponentFactory.makeDeviceMessageBroadcaster(
             messageExchangeModeProvider: messageExchangeModeProvider,
             logger: logger
@@ -302,14 +295,6 @@ extension MessageExchangeChatCoordinator {
             } else {
                 logger.warning("Missing contact for sent messages: \(peer.accountId.toHex())")
             }
-
-            // TODO: Move sender device activation to delivered callback once MDS
-            // responses are stable.
-            senderDeviceActivator.handleSentMessages(
-                messages,
-                to: peer,
-                withError: error
-            )
         }
     }
 

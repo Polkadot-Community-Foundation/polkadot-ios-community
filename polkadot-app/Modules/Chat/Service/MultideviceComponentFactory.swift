@@ -18,20 +18,6 @@ enum MultideviceComponentFactory {
         )
     }
 
-    static func makeSenderDeviceActivator(
-        contactsStorageService: ContactsLocalStorageServicing,
-        chatRequestStoreService: ChatRequestStoreServicing,
-        messageExchangeModeProvider: MessageExchangeModeProviding,
-        logger: LoggerProtocol = Logger.shared
-    ) -> SenderDeviceActivator {
-        SenderDeviceActivator(
-            contactsStorageService: contactsStorageService,
-            chatRequestStoreService: chatRequestStoreService,
-            messageExchangeModeProvider: messageExchangeModeProvider,
-            logger: logger
-        )
-    }
-
     static func makeDeviceMessageBroadcaster(
         messageExchangeModeProvider: MessageExchangeModeProviding,
         logger: LoggerProtocol = Logger.shared

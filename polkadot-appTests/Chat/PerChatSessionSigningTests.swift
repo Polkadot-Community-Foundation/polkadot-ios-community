@@ -52,6 +52,38 @@ struct PerChatSessionSigningTests {
         #expect(!didPost)
         #expect(try store.senderAccountIds().isEmpty)
     }
+
+    @Test func requesterReceivesAcceptanceFromOneShotAccount() async throws {
+        let store = MockStatementStore()
+        let acceptor = try Participant()
+        let requester = try Participant()
+        let requesterService = try requester.makeService(store: store)
+        let oneShotKeypair = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
+        let acceptance = acceptor.textMessage()
+
+        let statement = try acceptor.makeIdentityRouteRequestFactory().makeRequestStatement(
+            for: acceptor.request(for: requester, knowingDevices: false),
+            requestId: UUID().uuidString,
+            message: acceptance,
+            signer: StatementStoreKeypairSigner(keypair: oneShotKeypair)
+        )
+
+        let received: [Chat.OpaqueMessage] = await withCheckedContinuation { continuation in
+            var didResume = false
+            requester.delegate.didReceiveMessagesClosure = { _, messages, completion in
+                completion(.success)
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: messages)
+            }
+            requesterService.updateSessions([requester.request(for: acceptor, knowingDevices: false)])
+
+            Task { try await store.submitStatement(with: statement) }
+        }
+
+        #expect(received == [acceptance])
+        #expect(try store.senderAccountIds() == [oneShotKeypair.publicKey().rawData()])
+    }
 }
 
 private struct Participant {
@@ -86,6 +118,17 @@ private struct Participant {
             maxStatementSize: 4_096
         )
         .makeService(statementStoreConnection: store, delegate: AnyPeerSessionDelegate(delegate))
+    }
+
+    func makeIdentityRouteRequestFactory() -> IdentityRouteRequestFactory {
+        IdentityRouteRequestFactory(
+            encryptionManager: ClosureEncryptionManager { [identityEncryptionKey] _ in
+                X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
+            },
+            signerManager: ClosureSignerManager { [identityKeypair] _ in
+                StatementStoreKeypairSigner(keypair: identityKeypair)
+            }
+        )
     }
 
     func request(for peer: Participant, knowingDevices: Bool) -> MessageExchange.SessionRequest {

@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExt
 import MessageExchangeKit
 import StatementStore
 import SubstrateSdk
@@ -25,6 +26,8 @@ protocol ChatRequestServiceMaking {
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext
 
     func makeOutgoingChatRequestContext() async throws -> OutgoingChatRequestCoordinationContext
+
+    func makeChatAcceptancePublisher() async throws -> ChatAcceptancePublishing
 }
 
 actor ChatRequestServiceFactory {
@@ -154,16 +157,10 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         return try IncomingChatRequestCoordinationContext(
             discoveryOwnKeyIds: [Chat.Contact.Own.main()],
             matchOwnKeyIds: Chat.Contact.Own.allPossibleIds(),
-            requestStoreService: ChatRequestStoreService(
+            requestStoreService: makeRequestStoreService(
                 messageExchangeModeProvider: messageExchangeModeProvider,
-                storageFacade: storageFacade,
-                pushIdFactory: ChatPushIdFactory(
-                    encryptionManager: encryptionManager,
-                    signManager: signManager,
-                    sessionIdFactory: PeerSessionIdFactory(),
-                    logger: logger
-                ),
-                deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared,
+                encryptionManager: encryptionManager,
+                signManager: signManager
             ),
             messageExchangeModeProvider: messageExchangeModeProvider,
             contactsStorageService: ContactsLocalStorageService(),
@@ -190,6 +187,41 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         )
     }
 
+    func makeChatAcceptancePublisher() async throws -> ChatAcceptancePublishing {
+        let encryptionManager = makeAccountEncryptionManager()
+        let signManager = makeAccountSignManager()
+        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
+            tld: DotNsTldProviderFacade.shared.currentTldOrError()
+        )
+
+        let dependencies = try await ChatAcceptancePublisherDependencies(
+            store: ChatAcceptanceStore(storageFacade: storageFacade),
+            allocator: notificationAllocator,
+            signManager: signManager,
+            requestFactory: IdentityRouteRequestFactory(
+                encryptionManager: encryptionManager,
+                signerManager: signManager
+            ),
+            submitter: makeConnection(),
+            deviceActivator: SenderDeviceActivator(
+                contactsStorageService: ContactsLocalStorageService(),
+                chatRequestStoreService: makeRequestStoreService(
+                    messageExchangeModeProvider: messageExchangeModeProvider,
+                    encryptionManager: encryptionManager,
+                    signManager: signManager
+                ),
+                messageExchangeModeProvider: messageExchangeModeProvider
+            )
+        )
+
+        return ChatAcceptancePublisher(
+            dependencies: dependencies,
+            dateProvider: NowDateProvider(),
+            issueDiagnostics: .make(reporter: issueReporter),
+            logger: logger
+        )
+    }
+
     func makeChatRequestRenewer() async throws -> ChatRequestRenewing {
         try await ChatRequestRenewer(
             store: ChatRequestDeliveryStore(storageFacade: storageFacade),
@@ -202,6 +234,24 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
 }
 
 private extension ChatRequestServiceFactory {
+    func makeRequestStoreService(
+        messageExchangeModeProvider: MessageExchangeModeProviding,
+        encryptionManager: MessageExchangeEncryptionManaging,
+        signManager: StatementStoreSignerManaging
+    ) -> ChatRequestStoreService {
+        ChatRequestStoreService(
+            messageExchangeModeProvider: messageExchangeModeProvider,
+            storageFacade: storageFacade,
+            pushIdFactory: ChatPushIdFactory(
+                encryptionManager: encryptionManager,
+                signManager: signManager,
+                sessionIdFactory: PeerSessionIdFactory(),
+                logger: logger
+            ),
+            deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared
+        )
+    }
+
     func makeDiagnostics() -> ChatRequestDiagnostics {
         if let diagnostics {
             return diagnostics
