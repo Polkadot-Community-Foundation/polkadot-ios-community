@@ -125,14 +125,6 @@ final class InMemoryChatAcceptanceStore: ChatAcceptanceStoring, @unchecked Senda
     }
 }
 
-final class RecordingSenderDeviceActivator: SenderDeviceActivating, @unchecked Sendable {
-    private(set) var activations: [String] = []
-
-    func activate(requestId: String, peerAccountId _: AccountId) async throws {
-        activations.append(requestId)
-    }
-}
-
 final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
     private let failures = OSAllocatedUnfairLock(initialState: 0)
 

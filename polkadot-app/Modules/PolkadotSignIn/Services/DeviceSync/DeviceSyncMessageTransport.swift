@@ -59,7 +59,6 @@ final class DeviceSyncMessageTransport: @unchecked Sendable {
             signManager: signerManager,
             encryptionManager: encryptionManager,
             deviceEncryptionKeyFactory: nil,
-            messageRouteSelector: { _ in .identity },
             maxStatementSize: MessageExchangeCoordinatorFactory.Constants.maxDeviceSyncStatementSize,
             workQueue: DispatchQueue(label: "device.sync.transport.queue"),
             logger: peerLogger

@@ -69,7 +69,10 @@ private extension ChatAccountFunding {
 
     func fund(_ accountId: AccountId) async throws {
         do {
-            try await funding.ensureFunded(accountId: accountId, priority: .critical, domain: .chat)
+            // A caller may have read the record just before a previous funding finished.
+            if try await !isFundedForCurrentPeriod(accountId) {
+                try await funding.ensureFunded(accountId: accountId, priority: .critical, domain: .chat)
+            }
 
             state.withLock { state in
                 state.consecutiveFailures[accountId] = nil

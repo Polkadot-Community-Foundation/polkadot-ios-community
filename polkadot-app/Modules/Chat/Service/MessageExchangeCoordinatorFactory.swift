@@ -72,10 +72,6 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
 
         let tokenProvider = JWTTokenManager.shared
         let deviceKeyManager = DeviceEncryptionKeyManager.shared
-        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
-            tld: DotNsTldProviderFacade.shared.currentTldOrError()
-        )
-
         let compactorFactory = ChatMessageCompactorFactory(
             allowanceManager: bulletInManager,
             logger: logger
@@ -83,7 +79,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
 
         return try MessageExchangeChatCoordinator(
             serviceFactory: MessageExchangeServiceFactory(
-                messageExchangeModeProvider: messageExchangeModeProvider,
+                messageExchangeModeProvider: FixedMessageExchangeModeProvider(mode: .multidevice),
                 entropyManager: entropyManager,
                 deviceEncryptionKeyFactory: MultideviceComponentFactory.makeDeviceEncryptionKeyFactory(
                     deviceEncryptionKeyManager: deviceKeyManager
@@ -94,7 +90,6 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                     dateProvider: NowDateProvider(),
                     issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
                 ),
-                messageRouteSelector: ChatMessageRouteSelector.makeSelector(),
                 maxStatementSize: Constants.maxChatStatementSize,
                 operationQueue: operationQueue,
                 logger: logger
@@ -102,12 +97,6 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
             pushIdFactory: pushIdFactory,
             pushMessageCoder: ChatPushMessageCoder(encryptionManager: encryptionManager),
             notificationPayloadBuilder: ChatNotificationPayloadBuilder(logger: logger),
-            chatRequestStoreService: ChatRequestStoreService(
-                messageExchangeModeProvider: messageExchangeModeProvider,
-                storageFacade: storageFacade,
-                pushIdFactory: pushIdFactory,
-                deviceEncryptionKeyManager: deviceKeyManager
-            ),
             messageCompacterFactory: compactorFactory,
             tokenProvider: tokenProvider,
             chatContactDataProviderFactory: ChatContactDataProviderFactory(
@@ -115,7 +104,6 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                 operationQueue: operationQueue,
                 logger: logger
             ),
-            messageExchangeModeProvider: messageExchangeModeProvider,
             statementStoreMonitor: statementStoreMonitor
         )
     }
@@ -150,7 +138,6 @@ private extension MessageExchangeCoordinatorFactory {
             messageExchangeModeProvider: FixedMessageExchangeModeProvider(mode: .identity),
             entropyManager: entropyManager,
             deviceEncryptionKeyFactory: nil,
-            messageRouteSelector: { _ in .identity },
             maxStatementSize: Constants.maxSSOStatementSize,
             operationQueue: operationQueue,
             logger: logger

@@ -32,6 +32,10 @@ protocol ChatRequestServiceMaking {
     ) async throws -> ChatAcceptancePublishing
 
     func makeChatAcceptanceRenewer() async throws -> ChatAcceptanceRenewing
+
+    func makeChatAcceptanceListener() async throws -> ChatAcceptanceListening
+
+    func makeAcceptContext() async -> ChatRequestAcceptProcessorContext
 }
 
 actor ChatRequestServiceFactory {
@@ -157,19 +161,14 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext {
         let encryptionManager = makeAccountEncryptionManager()
         let signManager = makeAccountSignManager()
-        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
-            tld: DotNsTldProviderFacade.shared.currentTldOrError()
-        )
 
         return try IncomingChatRequestCoordinationContext(
             discoveryOwnKeyIds: [Chat.Contact.Own.main()],
             matchOwnKeyIds: Chat.Contact.Own.allPossibleIds(),
             requestStoreService: makeRequestStoreService(
-                messageExchangeModeProvider: messageExchangeModeProvider,
                 encryptionManager: encryptionManager,
                 signManager: signManager
             ),
-            messageExchangeModeProvider: messageExchangeModeProvider,
             contactsStorageService: ContactsLocalStorageService(),
             remoteContactResolver: remoteContactResolver
         )
@@ -197,26 +196,11 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeChatAcceptancePublisher(
         messageProviderFactory: ChatMessageDataProviderMaking
     ) async throws -> ChatAcceptancePublishing {
-        let encryptionManager = makeAccountEncryptionManager()
-        let signManager = makeAccountSignManager()
-        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
-            tld: DotNsTldProviderFacade.shared.currentTldOrError()
-        )
-
         let dependencies = try await ChatAcceptanceDeliveryDependencies(
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
-            signers: ChatAcceptanceSigners(signManager: signManager),
-            statementService: makeAcceptanceStatementService(),
-            deviceActivator: SenderDeviceActivator(
-                contactsStorageService: ContactsLocalStorageService(),
-                chatRequestStoreService: makeRequestStoreService(
-                    messageExchangeModeProvider: messageExchangeModeProvider,
-                    encryptionManager: encryptionManager,
-                    signManager: signManager
-                ),
-                messageExchangeModeProvider: messageExchangeModeProvider
-            )
+            signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
+            statementService: makeAcceptanceStatementService()
         )
 
         let deliveryService = ChatAcceptanceDeliveryService(
@@ -229,6 +213,31 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         return ChatAcceptancePublisher(
             messageProviderFactory: messageProviderFactory,
             deliveryService: deliveryService,
+            logger: logger
+        )
+    }
+
+    func makeChatAcceptanceListener() async throws -> ChatAcceptanceListening {
+        try await ChatAcceptanceListener(
+            requestFactory: IdentityRouteRequestFactory(
+                encryptionManager: makeAccountEncryptionManager(),
+                signerManager: makeAccountSignManager()
+            ),
+            connection: makeConnection(),
+            logger: logger
+        )
+    }
+
+    func makeAcceptContext() async -> ChatRequestAcceptProcessorContext {
+        let encryptionManager = makeAccountEncryptionManager()
+        let signManager = makeAccountSignManager()
+
+        return ChatRequestAcceptProcessorContext(
+            requestStoreService: makeRequestStoreService(
+                encryptionManager: encryptionManager,
+                signManager: signManager
+            ),
+            contactsStorageService: ContactsLocalStorageService(),
             logger: logger
         )
     }
@@ -262,12 +271,10 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
 
 private extension ChatRequestServiceFactory {
     func makeRequestStoreService(
-        messageExchangeModeProvider: MessageExchangeModeProviding,
         encryptionManager: MessageExchangeEncryptionManaging,
         signManager: StatementStoreSignerManaging
     ) -> ChatRequestStoreService {
         ChatRequestStoreService(
-            messageExchangeModeProvider: messageExchangeModeProvider,
             storageFacade: storageFacade,
             pushIdFactory: ChatPushIdFactory(
                 encryptionManager: encryptionManager,

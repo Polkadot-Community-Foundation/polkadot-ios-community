@@ -23,6 +23,8 @@ enum ChatRequestFactoryError: Error {
     case unsupportedProof
     case invalidSignature
     case peerNotFound
+    /// v1 requests carry no device, so the chat could never reach the device route.
+    case unsupportedRequestVersion
 }
 
 final class ChatRequestFactory {
@@ -134,7 +136,7 @@ private extension ChatRequestFactory {
         ownEncryptionKeyId: String
     ) async throws -> AccountId {
         guard let identityAccountId = message.content.extractIdentityAccountId() else {
-            return signer
+            throw ChatRequestFactoryError.unsupportedRequestVersion
         }
 
         let peerEncryptionPubKey = try await fetchPeerEncryptionPubKey(

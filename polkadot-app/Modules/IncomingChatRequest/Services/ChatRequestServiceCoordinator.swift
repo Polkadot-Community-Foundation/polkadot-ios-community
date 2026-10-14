@@ -54,6 +54,11 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                     messageProviderFactory: messageProviderFactory
                 )
                 let acceptanceRenewer = try await serviceFactory.makeChatAcceptanceRenewer()
+                let outgoingServices = try await OutgoingRequestServices(
+                    deliveryService: deliveryService,
+                    acceptanceListener: serviceFactory.makeChatAcceptanceListener(),
+                    acceptContext: serviceFactory.makeAcceptContext()
+                )
 
                 acceptancePublisher.setup()
 
@@ -95,7 +100,7 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
 
                         await updateOutgoing(
                             contacts: contacts,
-                            deliveryService: deliveryService,
+                            services: outgoingServices,
                             context: outgoingContext
                         )
 
@@ -194,15 +199,52 @@ private extension ChatRequestCoordinatorService {
 
     func updateOutgoing(
         contacts: [Chat.Contact],
-        deliveryService: ChatRequestDelivering,
+        services: OutgoingRequestServices,
         context: OutgoingChatRequestCoordinationContext
     ) async {
         await context.update(
             contacts: contacts,
             outgoingRequestTaskBuilder: {
-                setupOutgoingRequestsTask(deliveryService: deliveryService, context: context)
+                setupOutgoingRequestsTask(deliveryService: services.deliveryService, context: context)
+            },
+            acceptanceTaskBuilder: { requests in
+                setupAcceptanceTask(for: requests, services: services)
             }
         )
+    }
+
+    func setupAcceptanceTask(
+        for requests: [MessageExchange.SessionRequest],
+        services: OutgoingRequestServices
+    ) -> Task<Void, Never> {
+        Task {
+            guard !requests.isEmpty else { return }
+
+            do {
+                for try await acceptance in services.acceptanceListener.subscribe(to: requests) {
+                    await apply(acceptance, using: services.acceptContext)
+                }
+            } catch {
+                logger.error("Acceptance listening failed: \(error)")
+            }
+        }
+    }
+
+    // Copies from earlier periods can coexist; the context accepts each request once.
+    func apply(_ acceptance: ReceivedChatAcceptance, using context: ChatRequestAcceptProcessorContext) async {
+        do {
+            guard try await context.accept(
+                requestId: acceptance.requestId,
+                from: acceptance.peerAccountId,
+                peerDevice: acceptance.device
+            ) != nil else {
+                return
+            }
+
+            logger.debug("Applied acceptance of \(acceptance.requestId)")
+        } catch {
+            logger.error("Applying acceptance of \(acceptance.requestId) failed: \(error)")
+        }
     }
 
     func setupOutgoingRequestsTask(
@@ -225,4 +267,10 @@ private extension ChatRequestCoordinatorService {
             logger.debug("Outgoing requests stream ended")
         }
     }
+}
+
+private struct OutgoingRequestServices {
+    let deliveryService: ChatRequestDelivering
+    let acceptanceListener: ChatAcceptanceListening
+    let acceptContext: ChatRequestAcceptProcessorContext
 }

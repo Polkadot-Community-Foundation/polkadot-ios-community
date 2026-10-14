@@ -15,19 +15,16 @@ actor ChatRequestEngineContext {
 
     let tokenProvider: APNSTokenProviding
     let chatRequestStoreService: ChatRequestStoreServicing
-    let messageExchangeModeProvider: any MessageExchangeModeProviding
     let chatRepository: AnyDataProviderRepository<Chat.LocalModel>
 
     init(
         pendingRequest: ChatOpenModel.NewRequest?,
         chatRequestStoreService: ChatRequestStoreServicing,
-        messageExchangeModeProvider: any MessageExchangeModeProviding,
         tokenProvider: APNSTokenProviding,
         storageFacade: StorageFacadeProtocol
     ) {
         self.pendingRequest = pendingRequest
         self.chatRequestStoreService = chatRequestStoreService
-        self.messageExchangeModeProvider = messageExchangeModeProvider
         self.tokenProvider = tokenProvider
 
         chatRepository = AnyDataProviderRepository(
@@ -81,17 +78,9 @@ actor ChatRequestEngineContext {
 
     func acceptIncomingRequest(for chatId: Chat.Id) async throws {
         let (contact, request) = try await fetchIncomingChatContact(for: chatId)
-        let messageExchangeMode = messageExchangeModeProvider.mode(for: contact.ownKeyId)
-        let acceptorDevice = try chatRequestStoreService.buildLocalAcceptorDevice(
-            for: contact.ownKeyId,
-            peerAccountId: contact.accountId
-        )
+        let acceptorDevice = try chatRequestStoreService.buildLocalAcceptorDevice(peerAccountId: contact.accountId)
         try await chatRequestStoreService.acceptIncomingRequest(
-            .existing(
-                requestId: request.requestId,
-                messageExchangeMode: messageExchangeMode,
-                acceptorDevice: acceptorDevice
-            )
+            .existing(requestId: request.requestId, acceptorDevice: acceptorDevice)
         )
     }
 

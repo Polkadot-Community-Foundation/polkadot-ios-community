@@ -17,17 +17,14 @@ final class LeaveChatService {
     private let chatRepository: AnyDataProviderRepository<Chat.LocalModel>
     private let contactRepository: AnyDataProviderRepository<Chat.Contact>
     private let removedChatRepository: AnyDataProviderRepository<Chat.RemovedChat>
-    private let messageExchangeModeProvider: MessageExchangeModeProviding
     private let allowanceCleanupService: AllowanceCleanupServicing
 
     init(
         outboxService: ChatOutboxServicing,
-        messageExchangeModeProvider: MessageExchangeModeProviding,
         allowanceCleanupService: AllowanceCleanupServicing,
         storageFacade: StorageFacadeProtocol = UserDataStorageFacade.shared
     ) {
         self.outboxService = outboxService
-        self.messageExchangeModeProvider = messageExchangeModeProvider
         self.allowanceCleanupService = allowanceCleanupService
 
         chatRepository = AnyDataProviderRepository(
@@ -79,10 +76,6 @@ extension LeaveChatService: LeaveChatServicing {
 
 private extension LeaveChatService {
     func saveRemovedChatTombstoneIfNeeded(for contact: Chat.Contact) async throws {
-        guard messageExchangeModeProvider.mode(for: contact) == .multidevice else {
-            return
-        }
-
         let tombstone = Chat.RemovedChat(
             accountId: contact.accountId,
             removedAt: Date()

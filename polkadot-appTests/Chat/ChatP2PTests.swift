@@ -102,7 +102,6 @@ private extension ChatP2PTests {
             signManager: signManager,
             encryptionManager: encryptionManager,
             deviceEncryptionKeyFactory: nil,
-            messageRouteSelector: { _ in .identity },
             maxStatementSize: 1_024
         ).makeService(
             statementStoreConnection: statementStore,

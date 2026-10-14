@@ -9,8 +9,6 @@ import Keystore_iOS
 protocol ChatRequestStoreServicing {
     func fetchByRequestId(_ requestId: String) async throws -> Chat.Request?
 
-    func fetchPeerDeviceByRequestId(_ requestId: String) async throws -> Chat.PeerDevice?
-
     func newIncomingRequestFromRemote(
         _ remote: ChatRequest.ValidatedRemoteModel,
         contact: Chat.RemoteContact,
@@ -32,27 +30,25 @@ protocol ChatRequestStoreServicing {
 
     func acceptOutgoingRequest(
         _ requestId: String,
-        messageExchangeMode: MessageExchangeMode,
         remoteIncoming: ChatRequest.ValidatedRemoteModel?,
-        acceptorDevice: Chat.PeerDevice?
+        acceptorDevice: Chat.PeerDevice?,
+        peerDevice: Chat.PeerDevice?
     ) async throws
 
     func declineIncomingRequest(_ requestId: String) async throws
 
-    func buildLocalAcceptorDevice(for ownKeyId: Chat.Contact.Own, peerAccountId: AccountId) throws -> Chat.PeerDevice?
+    func buildLocalAcceptorDevice(peerAccountId: AccountId) throws -> Chat.PeerDevice
 }
 
 final class ChatRequestStoreService {
     let storageFacade: StorageFacadeProtocol
     let pushIdFactory: ChatPushIdMaking
     let deviceEncryptionKeyManager: DeviceEncryptionKeyManaging
-    let messageExchangeModeProvider: MessageExchangeModeProviding
     let encryptionManager: MessageExchangeEncryptionManaging
     let walletRepo: WalletManagerRepositoryProtocol
     let statementSignerResolver: ChatStatementSignerResolving
 
     init(
-        messageExchangeModeProvider: MessageExchangeModeProviding,
         storageFacade: StorageFacadeProtocol,
         pushIdFactory: ChatPushIdMaking,
         deviceEncryptionKeyManager: DeviceEncryptionKeyManaging,
@@ -63,7 +59,6 @@ final class ChatRequestStoreService {
         self.storageFacade = storageFacade
         self.pushIdFactory = pushIdFactory
         self.deviceEncryptionKeyManager = deviceEncryptionKeyManager
-        self.messageExchangeModeProvider = messageExchangeModeProvider
         self.encryptionManager = encryptionManager
         self.walletRepo = walletRepo
         self.statementSignerResolver = statementSignerResolver
@@ -80,18 +75,6 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
             options: RepositoryFetchOptions()
         )
         .asyncExecute()
-    }
-
-    func fetchPeerDeviceByRequestId(_ requestId: String) async throws -> Chat.PeerDevice? {
-        try await storageFacade.createRepository(
-            mapper: AnyCoreDataMapper(ChatRequestPeerDeviceMapper())
-        )
-        .fetchOperation(
-            by: { requestId },
-            options: RepositoryFetchOptions()
-        )
-        .asyncExecute()?
-        .peerDevice
     }
 
     func newIncomingRequestFromRemote(
@@ -134,33 +117,23 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
         }
         let textContent = ChatRemoteMessageContent.RichText(text: text, attachments: nil)
 
-        let requestContent: Chat.VersionedRequestContent
+        let identityAccountId = try walletRepo.main().getRawPublicKey()
+        let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
 
-        switch messageExchangeModeProvider.mode(for: ownKeyId) {
-        case .identity:
-            requestContent = .v1(Chat.RequestContentV1(
-                pushToken: pushTokenContent,
-                welcomeMessage: textContent
-            ))
-        case .multidevice:
-            let identityAccountId = try walletRepo.main().getRawPublicKey()
-            let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
+        let signer = try statementSignerResolver.statementSigner(for: contact.accountId)
+        let identityProof = try makeIdentityProof(
+            identityAccountId: identityAccountId,
+            deviceAccountId: signer.accountId,
+            peerEncryptionPubKey: contact.chatPublicKey.rawData,
+            ownEncryptionKeyId: ownKeyId.encryptionKeyId
+        )
 
-            let signer = try statementSignerResolver.statementSigner(for: contact.accountId)
-            let identityProof = try makeIdentityProof(
-                identityAccountId: identityAccountId,
-                deviceAccountId: signer.accountId,
-                peerEncryptionPubKey: contact.chatPublicKey.rawData,
-                ownEncryptionKeyId: ownKeyId.encryptionKeyId
-            )
-
-            requestContent = .v2(Chat.RequestContentV2(
-                identityProof: identityProof,
-                deviceEncPubKey: devicePublicKey,
-                pushToken: pushTokenContent,
-                welcomeMessage: textContent
-            ))
-        }
+        let requestContent = Chat.VersionedRequestContent.v2(Chat.RequestContentV2(
+            identityProof: identityProof,
+            deviceEncPubKey: devicePublicKey,
+            pushToken: pushTokenContent,
+            welcomeMessage: textContent
+        ))
 
         let newOutgoing = ChatRequest.NewOutgoing(
             message: Chat.RequestMessage(
@@ -210,15 +183,15 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
 
     func acceptOutgoingRequest(
         _ requestId: String,
-        messageExchangeMode: MessageExchangeMode,
         remoteIncoming: ChatRequest.ValidatedRemoteModel?,
-        acceptorDevice: Chat.PeerDevice?
+        acceptorDevice: Chat.PeerDevice?,
+        peerDevice: Chat.PeerDevice?
     ) async throws {
         let acceptOutgoing = ChatRequest.AcceptOutgoing(
             requestId: requestId,
-            messageExchangeMode: messageExchangeMode,
             incomingRequest: remoteIncoming,
-            acceptorDevice: acceptorDevice
+            acceptorDevice: acceptorDevice,
+            peerDevice: peerDevice
         )
 
         try await storageFacade.createRepository(
@@ -238,22 +211,11 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
         .asyncExecute()
     }
 
-    func buildLocalAcceptorDevice(
-        for ownKeyId: Chat.Contact.Own,
-        peerAccountId: AccountId
-    ) throws -> Chat.PeerDevice? {
-        switch messageExchangeModeProvider.mode(for: ownKeyId) {
-        case .identity:
-            return nil
-        case .multidevice:
-            let statementAccountId = try statementSignerResolver.statementSigner(for: peerAccountId).accountId
-            let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
-
-            return Chat.PeerDevice(
-                statementAccountId: statementAccountId,
-                encryptionPublicKey: devicePublicKey
-            )
-        }
+    func buildLocalAcceptorDevice(peerAccountId: AccountId) throws -> Chat.PeerDevice {
+        try Chat.PeerDevice(
+            statementAccountId: statementSignerResolver.statementSigner(for: peerAccountId).accountId,
+            encryptionPublicKey: deviceEncryptionKeyManager.getPublicKey()
+        )
     }
 }
 

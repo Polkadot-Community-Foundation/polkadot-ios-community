@@ -34,7 +34,6 @@ final class MessageExchangeServiceFactory {
     let accountsProvider: PeerSessionAccountsProviding?
     let submissionGate: PeerSessionSubmissionGating?
     let messageExchangeModeProvider: MessageExchangeModeProviding
-    let messageRouteSelector: (Any) -> PeerSessionRoute
     let workQueue: DispatchQueue
     let operationQueue: OperationQueue
     let maxStatementSize: Int
@@ -47,7 +46,6 @@ final class MessageExchangeServiceFactory {
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
         accountsProvider: PeerSessionAccountsProviding? = nil,
         submissionGate: PeerSessionSubmissionGating? = nil,
-        messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -59,7 +57,6 @@ final class MessageExchangeServiceFactory {
         self.accountsProvider = accountsProvider
         self.submissionGate = submissionGate
         self.messageExchangeModeProvider = messageExchangeModeProvider
-        self.messageRouteSelector = messageRouteSelector
         self.workQueue = workQueue
         self.operationQueue = operationQueue
         self.maxStatementSize = maxStatementSize
@@ -72,7 +69,6 @@ final class MessageExchangeServiceFactory {
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
         accountsProvider: PeerSessionAccountsProviding? = nil,
         submissionGate: PeerSessionSubmissionGating? = nil,
-        messageRouteSelector: @escaping (Any) -> PeerSessionRoute,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -85,7 +81,6 @@ final class MessageExchangeServiceFactory {
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
             accountsProvider: accountsProvider,
             submissionGate: submissionGate,
-            messageRouteSelector: messageRouteSelector,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
             operationQueue: operationQueue,
@@ -118,9 +113,6 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             sessionIdFactory: PeerSessionIdFactory(),
             channelFactory: ChatStatementChannelFactory(),
             preSendHandler: AnyPeerSessionPreSendHandler.empty(),
-            preferredRouteSelector: PeerSessionRouteSelector<M> { [messageRouteSelector] message in
-                messageRouteSelector(message)
-            },
             subscriptionFactory: subscriptionFactory,
             maxStatementSize: maxStatementSize,
             compactorFactory: compactorFactory,

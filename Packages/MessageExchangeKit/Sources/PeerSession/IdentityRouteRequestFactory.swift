@@ -13,6 +13,15 @@ public protocol IdentityRouteRequestMaking {
 
     /// The topic such request statements are published under, for looking them up in the store.
     func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data
+
+    /// The topic the peer publishes its identity-route requests under.
+    func peerRequestTopic(for request: MessageExchange.SessionRequest) throws -> Data
+
+    /// Decodes a peer's identity-route request; nil when the payload is not a request.
+    func decodePeerRequest<M: MessageExchange.CodableMessage>(
+        _ scaleEncodedPayload: Data,
+        for request: MessageExchange.SessionRequest
+    ) throws -> MessageExchange.Request<M>?
 }
 
 public final class IdentityRouteRequestFactory {
@@ -64,6 +73,25 @@ extension IdentityRouteRequestFactory: IdentityRouteRequestMaking {
 
     public func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data {
         try makeSessionId(for: request, encryptor: makeEncryptor(for: request)).own.fixedStatementFieldData()
+    }
+
+    public func peerRequestTopic(for request: MessageExchange.SessionRequest) throws -> Data {
+        try makeSessionId(for: request, encryptor: makeEncryptor(for: request)).peer.fixedStatementFieldData()
+    }
+
+    public func decodePeerRequest<M: MessageExchange.CodableMessage>(
+        _ scaleEncodedPayload: Data,
+        for request: MessageExchange.SessionRequest
+    ) throws -> MessageExchange.Request<M>? {
+        let result: StatementDataDecodingResult<M> = try StatementDataCoder(
+            encryptor: makeEncryptor(for: request),
+            logger: logger
+        )
+        .decodeFromScaleEncodedPayload(scaleEncodedPayload, senderAccountId: nil, route: .identity)
+
+        guard case let .statementData(.request(peerRequest)) = result else { return nil }
+
+        return peerRequest
     }
 }
 

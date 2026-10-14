@@ -5,9 +5,8 @@ import Testing
 
 struct ChatAcceptanceDeliveryServiceTests {
     private let fixture = ChatAcceptanceFixture()
-    private let activator = RecordingSenderDeviceActivator()
 
-    @Test func publishesFromCurrentPeriodAccountThenActivatesRequesterDevice() async throws {
+    @Test func publishesFromCurrentPeriodAccountAndRecordsPeriod() async throws {
         let store = InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: nil)])
 
         await makeService(store: store).deliverUntilDone(messageId: "acceptance")
@@ -15,7 +14,6 @@ struct ChatAcceptanceDeliveryServiceTests {
         let account = try fixture.acceptAccountId(period: fixture.allocator.period)
         #expect(try fixture.senders() == [account])
         #expect(fixture.allocator.initiatedTargets == [account])
-        #expect(activator.activations == [fixture.requestId])
         #expect(store.published == [fixture.allocator.period])
     }
 
@@ -26,7 +24,6 @@ struct ChatAcceptanceDeliveryServiceTests {
         await makeService(store: store).deliverUntilDone(messageId: "acceptance")
 
         #expect(try fixture.senders().isEmpty)
-        #expect(activator.activations.isEmpty)
     }
 
     @Test func keepsRetryingWithoutSlotAndPublishesNothing() async throws {
@@ -38,7 +35,6 @@ struct ChatAcceptanceDeliveryServiceTests {
 
         #expect(store.awaitingReadsLeft == -1)
         #expect(try fixture.senders().isEmpty)
-        #expect(activator.activations.isEmpty)
         #expect(store.published.isEmpty)
     }
 
@@ -58,8 +54,7 @@ private extension ChatAcceptanceDeliveryServiceTests {
                 store: store,
                 allocator: fixture.allocator,
                 signers: fixture.signers,
-                statementService: fixture.statementService,
-                deviceActivator: activator
+                statementService: fixture.statementService
             ),
             execution: ChatRequestDeliveryExecution(
                 backgroundExecutor: InlineBackgroundExecutor(),

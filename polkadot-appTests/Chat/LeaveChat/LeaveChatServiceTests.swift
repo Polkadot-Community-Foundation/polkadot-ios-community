@@ -33,7 +33,6 @@ private extension LeaveChatServiceTests {
     func makeService() -> LeaveChatService {
         LeaveChatService(
             outboxService: StubLeaveOutbox(),
-            messageExchangeModeProvider: FixedMessageExchangeModeProvider(mode: .multidevice),
             allowanceCleanupService: cleanupService,
             storageFacade: facade
         )

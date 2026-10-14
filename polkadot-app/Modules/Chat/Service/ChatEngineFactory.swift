@@ -41,12 +41,8 @@ final class ChatEngineFactory: ChatEngineFactoryProtocol {
         )
 
         let storageFacade = UserDataStorageFacade.shared
-        let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
-            tld: tldProvider.currentTldOrError()
-        )
         let leaveChatService = LeaveChatService(
             outboxService: flowState.outboxService,
-            messageExchangeModeProvider: messageExchangeModeProvider,
             allowanceCleanupService: flowState.allowanceCleanupService
         )
         let blockUserService = BlockUserService()
@@ -54,12 +50,10 @@ final class ChatEngineFactory: ChatEngineFactoryProtocol {
         let requestContext = ChatRequestEngineContext(
             pendingRequest: request,
             chatRequestStoreService: ChatRequestStoreService(
-                messageExchangeModeProvider: messageExchangeModeProvider,
                 storageFacade: storageFacade,
                 pushIdFactory: chatIdFactory,
                 deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared
             ),
-            messageExchangeModeProvider: messageExchangeModeProvider,
             tokenProvider: APNSTokenProviderFacade.sharedManager,
             storageFacade: storageFacade
         )

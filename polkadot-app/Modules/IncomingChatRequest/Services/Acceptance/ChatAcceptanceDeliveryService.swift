@@ -12,11 +12,9 @@ struct ChatAcceptanceDeliveryDependencies {
     let allocator: NotificationStatementAccountAllocating
     let signers: ChatAcceptanceSigning
     let statementService: ChatAcceptanceStatementServicing
-    let deviceActivator: SenderDeviceActivating
 }
 
-/// First publication of acceptances from the current period's one-shot account. Storing the requester's
-/// device moves the session to the device route, so it waits until the acceptance is out.
+/// First publication of acceptances from the current period's one-shot account.
 final class ChatAcceptanceDeliveryService: @unchecked Sendable {
     private static let firstRetryDelay: Duration = .seconds(2)
     private static let maxRetryDelay: Duration = .seconds(5 * 60)
@@ -77,10 +75,6 @@ private extension ChatAcceptanceDeliveryService {
         )
 
         try await dependencies.statementService.send(candidate, signer: signer.signer)
-        try await dependencies.deviceActivator.activate(
-            requestId: candidate.requestId,
-            peerAccountId: candidate.session.peer.accountId
-        )
         try await dependencies.store.markPublished(candidate, period: period)
     }
 

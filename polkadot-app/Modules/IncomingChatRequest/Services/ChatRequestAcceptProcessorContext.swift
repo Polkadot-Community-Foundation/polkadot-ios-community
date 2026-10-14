@@ -4,7 +4,6 @@ import SubstrateSdk
 
 actor ChatRequestAcceptProcessorContext {
     private let requestStoreService: ChatRequestStoreServicing
-    private let messageStoreService: MessagesLocalStorageServicing
     private let contactsStorageService: ContactsLocalStorageServicing
 
     let logger: LoggerProtocol
@@ -13,12 +12,10 @@ actor ChatRequestAcceptProcessorContext {
 
     init(
         requestStoreService: ChatRequestStoreServicing,
-        messageStoreService: MessagesLocalStorageServicing,
         contactsStorageService: ContactsLocalStorageServicing,
         logger: LoggerProtocol
     ) {
         self.requestStoreService = requestStoreService
-        self.messageStoreService = messageStoreService
         self.contactsStorageService = contactsStorageService
         self.logger = logger
     }
@@ -29,7 +26,7 @@ extension ChatRequestAcceptProcessorContext {
     func accept(
         requestId: String,
         from contactId: AccountId,
-        messageExchangeMode: MessageExchangeMode
+        peerDevice: Chat.PeerDevice
     ) async throws -> Chat.Request? {
         guard !processedRequestIds.contains(requestId) else {
             return nil
@@ -52,12 +49,19 @@ extension ChatRequestAcceptProcessorContext {
             return nil
         }
 
-        try await requestStoreService.acceptOutgoingRequest(
-            requestId,
-            messageExchangeMode: messageExchangeMode,
-            remoteIncoming: nil,
-            acceptorDevice: nil
-        )
+        do {
+            try await requestStoreService.acceptOutgoingRequest(
+                requestId,
+                remoteIncoming: nil,
+                acceptorDevice: nil,
+                peerDevice: peerDevice
+            )
+        } catch {
+            // Let the next copy of the acceptance retry the save.
+            processedRequestIds.remove(requestId)
+            throw error
+        }
+
         logger.debug("Request has been accepted")
 
         guard let contact = try await contactsStorageService
@@ -71,23 +75,6 @@ extension ChatRequestAcceptProcessorContext {
         await eraseVoIPPushToken(contact)
 
         return request
-    }
-
-    func markMessageAsDelivered(for requestId: String) async throws {
-        try await messageStoreService.markAsDelivered([requestId]).asyncExecute()
-    }
-
-    func storePeerDevices(_ devices: [Chat.PeerDevice], for contactId: AccountId) async {
-        let changes = devices.map { Chat.DeviceChange.added($0) }
-        let settings = Chat.ContactDeviceSettings(
-            accountId: contactId,
-            changes: changes
-        )
-        do {
-            try await contactsStorageService.updateDeviceSettings([settings]).asyncExecute()
-        } catch {
-            logger.error("Failed to store peer devices: \(error)")
-        }
     }
 }
 

@@ -25,21 +25,6 @@ public enum PeerSessionRoute: Hashable, Sendable {
             }
         }
     }
-
-    struct Signers {
-        let device: StatementStoreSigning
-        // Nil when the session must never sign on the identity route.
-        let identity: StatementStoreSigning?
-
-        func signer(for route: PeerSessionRoute) -> StatementStoreSigning? {
-            switch route {
-            case .device:
-                device
-            case .identity:
-                identity
-            }
-        }
-    }
 }
 
 public final class PeerSessionRouteSelector<M: MessageExchange.CodableMessage> {

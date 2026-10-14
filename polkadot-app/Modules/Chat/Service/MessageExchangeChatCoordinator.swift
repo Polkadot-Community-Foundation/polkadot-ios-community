@@ -25,7 +25,6 @@ final class MessageExchangeChatCoordinator {
     private let operationQueue: OperationQueue
     private let deviceMessageBroadcaster: DeviceMessageBroadcaster
     private let pendingDeviceFanOutProcessor: PendingDeviceFanOutProcessor
-    private let messageExchangeModeProvider: MessageExchangeModeProviding
     private let statementStoreMonitor: StatementStoreActivityMonitoring
 
     private var contactsProvider: StreamableProvider<Chat.Contact>?
@@ -46,7 +45,6 @@ final class MessageExchangeChatCoordinator {
         pushIdFactory: ChatPushIdMaking,
         pushMessageCoder: ChatPushMessageCoding,
         notificationPayloadBuilder: ChatNotificationPayloadBuilding,
-        chatRequestStoreService: ChatRequestStoreServicing,
         messageCompacterFactory: (any ChatMessageCompactorMaking)?,
         chatChainId: ChainModel.Id = AppConfig.Chains.chatChain,
         chainRegistry: ChainRegistryProtocol = ChainRegistryFacade.sharedRegistry,
@@ -55,7 +53,6 @@ final class MessageExchangeChatCoordinator {
         messagesStorageService: MessagesLocalStorageServicing = MessagesLocalStorageService(),
         contactsStorageService: ContactsLocalStorageServicing = ContactsLocalStorageService(),
         chatContactDataProviderFactory: ChatContactDataProviderMaking,
-        messageExchangeModeProvider: MessageExchangeModeProviding,
         statementStoreMonitor: StatementStoreActivityMonitoring,
         workQueue: DispatchQueue = DispatchQueue(label: "ChatCoordinator.workQueue", qos: .utility),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -87,20 +84,10 @@ final class MessageExchangeChatCoordinator {
             logger: logger
         )
 
-        var processors: [IncomingMessageProcessing] = [
-            ChatRequestAcceptProcessor(
-                messageExchangeModeProvider: messageExchangeModeProvider,
-                requestStoreService: chatRequestStoreService,
-                messageStoreService: messagesStorageService,
-                contactsStorageService: contactsStorageService,
-                logger: logger
-            ),
-            pushNotificationService
-        ]
+        var processors: [IncomingMessageProcessing] = [pushNotificationService]
 
         let deviceUpdateProcessor = MultideviceComponentFactory.makeDeviceUpdateProcessor(
             contactsStorageService: contactsStorageService,
-            messageExchangeModeProvider: messageExchangeModeProvider,
             workQueue: workQueue,
             operationQueue: operationQueue,
             logger: logger
@@ -123,15 +110,10 @@ final class MessageExchangeChatCoordinator {
         self.chatContactDataProviderFactory = chatContactDataProviderFactory
         self.serviceFactory = serviceFactory
         self.chainRegistry = chainRegistry
-        self.messageExchangeModeProvider = messageExchangeModeProvider
         self.statementStoreMonitor = statementStoreMonitor
-        deviceMessageBroadcaster = MultideviceComponentFactory.makeDeviceMessageBroadcaster(
-            messageExchangeModeProvider: messageExchangeModeProvider,
-            logger: logger
-        )
+        deviceMessageBroadcaster = MultideviceComponentFactory.makeDeviceMessageBroadcaster(logger: logger)
         pendingDeviceFanOutProcessor = MultideviceComponentFactory.makePendingDeviceFanOutProcessor(
             chatContactDataProviderFactory: chatContactDataProviderFactory,
-            messageExchangeModeProvider: messageExchangeModeProvider,
             logger: logger
         )
         self.logger = logger
@@ -252,10 +234,9 @@ private extension MessageExchangeChatCoordinator {
 
         var sessionRequests = Set<MessageExchange.SessionRequest>()
 
-        // we don't want to create incoming session until user approves the request
-        // also do not include blocked contacts
+        // A session needs a peer device: requests and acceptances travel outside sessions.
         let sessionContacts = contactsByAccountId.filter {
-            !$0.value.hasIncomingChatRequest && !$0.value.isBlocked
+            $0.value.chatRequest == nil && !$0.value.devices.isEmpty && !$0.value.isBlocked
         }
 
         for (_, contact) in sessionContacts {
