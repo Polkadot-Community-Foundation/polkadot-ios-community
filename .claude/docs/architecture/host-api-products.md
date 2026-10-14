@@ -179,7 +179,10 @@ Rules:
    never resends after a reconnect and never hides one: every transport death (connect failure,
    peer close, error, missed ping, background sleep) is reported once via `chainDidClose`, and
    the core rebuilds on a fresh `chain_connect`. A lease the core releases (`chain_close`) ends
-   silently.
+   silently. Nothing is closed or reported on background, so products don't retry against an app
+   about to be suspended. On `willEnterForeground` the pool revalidates every socket that lived
+   through the background: past `ResumePolicy.expiryThreshold` it `expire()`s all of them,
+   otherwise it `probe(timeout:)`s each and only silent ones close (`.livenessTimeout`).
 
 ## Seams
 
