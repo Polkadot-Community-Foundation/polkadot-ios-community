@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import ChainRegistry
+import TrUAPIHost
 @testable import polkadot_app
 
 struct TrUAPIV2SpecConnectionPoolTests {
@@ -86,10 +87,32 @@ struct TrUAPIV2SpecConnectionPoolTests {
         #expect(handler.closed == [connectionId])
     }
 
-    @Test func unsupportedChainReturnsNil() {
+    @Test func unsupportedChainReturnsNil() throws {
         let pool = makePool(sockets: SocketQueue([]))
 
-        #expect(pool.connect(genesisHash: genesis) == nil)
+        #expect(try pool.connect(genesisHash: genesis) == nil)
+    }
+
+    @Test func refusedConnectIsRejectedWithoutRegistering() throws {
+        let socket = MockChainSocket()
+        let refusal = RefusalSwitch()
+        let pool = TrUAPIV2SpecConnectionPool(
+            socketResolver: { _ in
+                if refusal.isOn { throw ConnectionPoolError.suspended }
+                return socket
+            },
+            logger: StubLogger()
+        )
+
+        #expect(throws: HostRejection.self) {
+            try pool.connect(genesisHash: genesis)
+        }
+
+        refusal.isOn = false
+        let connectionId = try #require(pool.connect(genesisHash: genesis))
+
+        #expect(connectionId == 1)
+        #expect(socket.openCallCount == 1)
     }
 
     @Test func closeAllClosesEverySocketSilently() throws {
@@ -111,13 +134,26 @@ struct TrUAPIV2SpecConnectionPoolTests {
         chainRegistry.chainsByGenesis[genesis.toHex()] = chain
         let pool = TrUAPIV2SpecConnectionPool.makeChainConnections(chainRegistry: chainRegistry, logger: StubLogger())
 
-        #expect(pool.connect(genesisHash: genesis) == nil)
+        #expect(try pool.connect(genesisHash: genesis) == nil)
 
         let socket = MockChainSocket()
         chainRegistry.chainSocketsById[chain.chainId] = socket
 
-        #expect(pool.connect(genesisHash: genesis) != nil)
+        #expect(try pool.connect(genesisHash: genesis) != nil)
         #expect(socket.openCallCount == 1)
+    }
+
+    @Test func registryResolverRejectsWhileSuspended() throws {
+        let chainRegistry = MockChainRegistry()
+        let chain = ChainMock.makeChainModel(from: ChainMock.makeRemoteChain(name: "TestChain"), order: 0)
+        chainRegistry.chainsByGenesis[genesis.toHex()] = chain
+        chainRegistry.chainSocketsById[chain.chainId] = MockChainSocket()
+        chainRegistry.chainSocketError = ConnectionPoolError.suspended
+        let pool = TrUAPIV2SpecConnectionPool.makeChainConnections(chainRegistry: chainRegistry, logger: StubLogger())
+
+        #expect(throws: HostRejection.self) {
+            try pool.connect(genesisHash: genesis)
+        }
     }
 }
 
@@ -136,6 +172,10 @@ private extension TrUAPIV2SpecConnectionPoolTests {
             vended.append(socket)
             return socket
         }
+    }
+
+    final class RefusalSwitch: @unchecked Sendable {
+        var isOn = true
     }
 
     func makePool(

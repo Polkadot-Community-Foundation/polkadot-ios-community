@@ -203,6 +203,39 @@ struct ConnectionRetentionTests {
 
         #expect(factory.socketAttempts == ["chain-1": [0, 1], "chain-2": [0]])
     }
+
+    @Test func chainSocketRefusedWhileBackgrounded() {
+        let pool = makePool()
+
+        pool.enterBackground()
+
+        #expect(throws: ConnectionPoolError.suspended) {
+            try pool.makeChainSocket(for: makeChain(id: "chain-1"))
+        }
+    }
+
+    @Test func allRetainAllowsChainSocketWhileBackgrounded() throws {
+        let pool = makePool()
+        let token = pool.retainConnections(.all)
+        pool.enterBackground()
+
+        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
+
+        token.release()
+
+        #expect(throws: ConnectionPoolError.suspended) {
+            try pool.makeChainSocket(for: makeChain(id: "chain-1"))
+        }
+    }
+
+    @Test func chainSocketAllowedAfterBecomingActive() throws {
+        let pool = makePool()
+        pool.enterBackground()
+
+        pool.becomeActive()
+
+        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
+    }
 }
 
 // MARK: - Helpers
@@ -256,6 +289,10 @@ private extension ConnectionRetentionTests {
 private extension ConnectionPool {
     func enterBackground() {
         didReceiveDidEnterBackground(notification: Notification(name: .init("test.background")))
+    }
+
+    func becomeActive() {
+        didReceiveDidBecomeActive(notification: Notification(name: .init("test.active")))
     }
 }
 

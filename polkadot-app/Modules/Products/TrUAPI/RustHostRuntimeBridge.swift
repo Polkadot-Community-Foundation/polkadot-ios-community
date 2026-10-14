@@ -61,7 +61,7 @@ final class RustHostRuntimeBridge: HostBridge, @unchecked Sendable {
     }
 
     func chainConnect(genesisHash: Data) throws -> UInt32? {
-        chainConnections.connect(genesisHash: genesisHash)
+        try chainConnections.connect(genesisHash: genesisHash)
     }
 
     func chainSend(connectionId: UInt32, request: String) throws {

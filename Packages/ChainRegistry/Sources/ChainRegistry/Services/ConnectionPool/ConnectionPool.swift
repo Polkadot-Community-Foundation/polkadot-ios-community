@@ -14,6 +14,10 @@ public protocol ConnectionPoolProtocol {
     func makeChainSocket(for chain: ChainModel) throws -> ChainSocket
 }
 
+public enum ConnectionPoolError: Error {
+    case suspended
+}
+
 public protocol ConnectionStateSubscription: AnyObject {
     func didReceive(
         state: WebSocketEngine.State,
@@ -178,6 +182,10 @@ extension ConnectionPool: ConnectionPoolProtocol {
         mutex.lock()
 
         defer { mutex.unlock() }
+
+        guard !retention.suspendsChainSockets else {
+            throw ConnectionPoolError.suspended
+        }
 
         let attempt = chainSocketAttempts[chain.chainId, default: 0]
         chainSocketAttempts[chain.chainId] = attempt + 1

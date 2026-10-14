@@ -18,6 +18,11 @@ final class ConnectionRetentionState {
     private var allRetainCount = 0
     private var isSleeping = false
 
+    /// A socket opened now would cross an app suspension unnoticed, so new chain sockets are refused.
+    var suspendsChainSockets: Bool {
+        isSleeping && allRetainCount == 0
+    }
+
     func retain(
         _ scope: ResolvedScope,
         owner: ConnectionRetaining

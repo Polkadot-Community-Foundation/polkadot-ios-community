@@ -2,10 +2,11 @@ import Foundation
 import os
 import ChainRegistry
 import SDKLogger
+import TrUAPIHost
 
 /// One dedicated node socket per core `chain_connect`; socket deaths are reported, never hidden by reconnects.
 public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked Sendable {
-    public typealias SocketResolver = @Sendable (_ genesisHash: Data) -> ChainSocketProtocol?
+    public typealias SocketResolver = @Sendable (_ genesisHash: Data) throws -> ChainSocketProtocol?
 
     fileprivate struct State {
         weak var eventHandler: TrUAPIChainEventHandling?
@@ -34,16 +35,16 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
     ) -> TrUAPIV2SpecConnectionPool {
         TrUAPIV2SpecConnectionPool(
             socketResolver: { [chainRegistry] genesisHash in
-                chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap {
-                    chainRegistry.makeChainSocket(for: $0.chainId)
+                try chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap {
+                    try chainRegistry.makeChainSocket(for: $0.chainId)
                 }
             },
             logger: logger
         )
     }
 
-    public func connect(genesisHash: Data) -> UInt32? {
-        guard let socket = socketResolver(genesisHash) else {
+    public func connect(genesisHash: Data) throws -> UInt32? {
+        guard let socket = try resolveSocket(for: genesisHash) else {
             logger.debug("TrUAPI chain \(genesisHash.toHex()) has no host-managed connection; unsupported")
             return nil
         }
@@ -113,6 +114,18 @@ extension TrUAPIV2SpecConnectionPool: ChainSocketDelegate {
 
         logger.debug("TrUAPI chain connection \(connectionId) closed: \(reason)")
         handler?.chainDidClose(connectionId: connectionId)
+    }
+}
+
+private extension TrUAPIV2SpecConnectionPool {
+    // The core reports a declared rejection as a failed call and reconnects on the next one.
+    func resolveSocket(for genesisHash: Data) throws -> ChainSocketProtocol? {
+        do {
+            return try socketResolver(genesisHash)
+        } catch {
+            logger.debug("TrUAPI chain \(genesisHash.toHex()) connection refused: \(error)")
+            throw HostRejection.Rejected(reason: "chain connection refused: \(error)")
+        }
     }
 }
 
