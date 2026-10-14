@@ -144,7 +144,20 @@ struct SSStoreAllowanceManagerTests {
         #expect(capturingRepo.savedRecords.isEmpty)
     }
 
-    @Test func releaseDeletesRecordsSelectedByFilter() async throws {
+    @Test func releaseByAccountIdsDeletesWithoutReadingRecords() async throws {
+        let capturingRepo = CapturingRepository()
+
+        try await makeManager(
+            allocator: FakeAllowanceSlotAllocating(period: 100),
+            repository: AnyDataProviderRepository(capturingRepo),
+            slotInfoProvider: FakeSlotInfoProvider()
+        ).release(with: .accountIds([testAccountId]))
+
+        #expect(capturingRepo.deletedIds == [testAccountId.toHex()])
+        #expect(capturingRepo.fetchAllCount == 0)
+    }
+
+    @Test func releaseByFilterDeletesSelectedRecords() async throws {
         let otherAccountId = Data(repeating: 0x0F, count: 32)
         let capturingRepo = CapturingRepository(storedRecords: [testAccountId, otherAccountId].map { accountId in
             AllowanceRecord(
@@ -156,18 +169,23 @@ struct SSStoreAllowanceManagerTests {
                 latestRenewedPeriod: 100
             )
         })
-        let repository = AnyDataProviderRepository(capturingRepo)
 
-        let manager = makeManager(
+        try await makeManager(
             allocator: FakeAllowanceSlotAllocating(period: 100),
-            repository: repository,
+            repository: AnyDataProviderRepository(capturingRepo),
             slotInfoProvider: FakeSlotInfoProvider()
-        )
-
-        try await manager.release(with: AccountsAllowanceFilter(accountIds: [testAccountId]))
+        ).release(with: .filter(SelectingReleaseFilter(accountIds: [testAccountId])))
 
         #expect(capturingRepo.deletedIds == [testAccountId.toHex()])
         #expect(capturingRepo.savedRecords.isEmpty)
+    }
+}
+
+private struct SelectingReleaseFilter: AllowanceReleaseFiltering {
+    let accountIds: Set<AccountId>
+
+    func recordsToRelease(from records: [AllowanceRecord]) async throws -> [AllowanceRecord] {
+        records.filter { accountIds.contains($0.accountId) }
     }
 }
 
@@ -179,6 +197,7 @@ final class CapturingRepository: DataProviderRepositoryProtocol {
     private let storedRecords: [AllowanceRecord]
     private(set) var savedRecords: [AllowanceRecord] = []
     private(set) var deletedIds: [String] = []
+    private(set) var fetchAllCount = 0
 
     init(storedRecords: [AllowanceRecord] = []) {
         self.storedRecords = storedRecords
@@ -205,7 +224,8 @@ final class CapturingRepository: DataProviderRepositoryProtocol {
     }
 
     func fetchAllOperation(with _: RepositoryFetchOptions) -> BaseOperation<[Model]> {
-        BaseOperation.createWithResult(storedRecords)
+        fetchAllCount += 1
+        return BaseOperation.createWithResult(storedRecords)
     }
 
     func fetchOperation(

@@ -9,7 +9,7 @@ protocol AllowanceCleanupServicing: Sendable {
 final class AllowanceCleanupService: @unchecked Sendable {
     struct Target {
         let manager: AllowanceManaging
-        let filter: AllowanceReleaseFiltering
+        let strategy: AllowanceReleaseStrategy
     }
 
     private let targets: [Target]
@@ -25,7 +25,7 @@ extension AllowanceCleanupService: AllowanceCleanupServicing {
     func cleanup() async {
         for target in targets {
             do {
-                try await target.manager.release(with: target.filter)
+                try await target.manager.release(with: target.strategy)
             } catch {
                 logger.error("Allowance cleanup failed: \(error)")
             }

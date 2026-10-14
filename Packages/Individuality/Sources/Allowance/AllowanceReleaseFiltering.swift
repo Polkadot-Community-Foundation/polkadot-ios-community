@@ -6,14 +6,9 @@ public protocol AllowanceReleaseFiltering {
     func recordsToRelease(from records: [AllowanceRecord]) async throws -> [AllowanceRecord]
 }
 
-public struct AccountsAllowanceFilter: AllowanceReleaseFiltering {
-    private let accountIds: Set<AccountId>
-
-    public init(accountIds: Set<AccountId>) {
-        self.accountIds = accountIds
-    }
-
-    public func recordsToRelease(from records: [AllowanceRecord]) async throws -> [AllowanceRecord] {
-        records.filter { accountIds.contains($0.accountId) }
-    }
+public enum AllowanceReleaseStrategy {
+    /// Deletes these accounts' records directly, without reading the others.
+    case accountIds(Set<AccountId>)
+    /// Reads every record and deletes the ones the filter selects.
+    case filter(AllowanceReleaseFiltering)
 }

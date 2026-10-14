@@ -50,10 +50,4 @@ extension PGASAllowanceManager: AllowanceManaging {
             try await repository.saveOperation({ [record] }, { [] }).asyncExecute()
         }
     }
-
-    public func release(with filter: AllowanceReleaseFiltering) async throws {
-        try await backgroundExecutor.execute { [repository] in
-            try await repository.releaseRecords(with: filter)
-        }
-    }
 }

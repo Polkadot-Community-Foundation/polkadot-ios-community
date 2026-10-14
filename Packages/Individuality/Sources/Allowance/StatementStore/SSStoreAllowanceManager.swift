@@ -46,9 +46,21 @@ extension SSStoreAllowanceManager: AllowanceManaging {
         }
     }
 
-    public func release(with filter: AllowanceReleaseFiltering) async throws {
+    public func release(with strategy: AllowanceReleaseStrategy) async throws {
         try await backgroundExecutor.execute { [repository] in
-            try await repository.releaseRecords(with: filter)
+            let identifiers: [String] =
+                switch strategy {
+                case let .accountIds(accountIds):
+                    accountIds.map { $0.toHex() }
+                case let .filter(filter):
+                    try await filter.recordsToRelease(
+                        from: repository.fetchAllOperation(with: RepositoryFetchOptions()).asyncExecute()
+                    ).map(\.identifier)
+                }
+
+            guard !identifiers.isEmpty else { return }
+
+            try await repository.saveOperation({ [] }, { identifiers }).asyncExecute()
         }
     }
 

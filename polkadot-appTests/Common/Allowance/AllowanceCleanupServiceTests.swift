@@ -11,8 +11,8 @@ struct AllowanceCleanupServiceTests {
 
         await AllowanceCleanupService(
             targets: [
-                .init(manager: failing, filter: AccountsAllowanceFilter(accountIds: [])),
-                .init(manager: healthy, filter: AccountsAllowanceFilter(accountIds: []))
+                .init(manager: failing, strategy: .accountIds([])),
+                .init(manager: healthy, strategy: .accountIds([]))
             ],
             logger: MockLogger()
         ).cleanup()

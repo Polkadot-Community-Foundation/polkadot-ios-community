@@ -21,7 +21,7 @@ final class MockAllowanceManager: AllowanceManaging {
         }
     }
 
-    func release(with _: AllowanceReleaseFiltering) async throws {
+    func release(with _: AllowanceReleaseStrategy) async throws {
         releaseCallCount += 1
 
         if let releaseError {

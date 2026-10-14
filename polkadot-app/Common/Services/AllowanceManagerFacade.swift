@@ -45,7 +45,7 @@ extension AllowanceManagerFacade {
         )
 
         return AllowanceCleanupService(
-            targets: [.init(manager: sssManager, filter: chatFilter)],
+            targets: [.init(manager: sssManager, strategy: .filter(chatFilter))],
             logger: Logger.shared
         )
     }

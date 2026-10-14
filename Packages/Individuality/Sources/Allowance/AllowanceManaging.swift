@@ -41,7 +41,7 @@ public protocol AllowanceManaging {
         domain: AllowanceRecord.Domain
     ) async throws
     func renew() async throws
-    func release(with filter: AllowanceReleaseFiltering) async throws
+    func release(with strategy: AllowanceReleaseStrategy) async throws
 }
 
 public extension AllowanceManaging {
@@ -54,5 +54,5 @@ public extension AllowanceManaging {
     }
 
     func renew() async throws {}
-    func release(with _: AllowanceReleaseFiltering) async throws {}
+    func release(with _: AllowanceReleaseStrategy) async throws {}
 }
