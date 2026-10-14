@@ -51,7 +51,7 @@ final class MockChainRegistry: ChainRegistryProtocol {
         nil
     }
 
-    func makeChainSocket(for _: ChainModel.Id) -> ChainSocketProtocol? {
+    func makeChainSocket(for _: ChainModel.Id, attempt _: Int) -> ChainSocketProtocol? {
         nil
     }
 

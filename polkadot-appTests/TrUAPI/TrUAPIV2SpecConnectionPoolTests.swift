@@ -7,7 +7,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
     private let genesis = Data(repeating: 0xAA, count: 32)
 
     @Test func eachConnectGetsItsOwnSocketAndId() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
         let pool = makePool(sockets: sockets)
 
         let firstId = try #require(pool.connect(genesisHash: genesis))
@@ -18,7 +18,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
     }
 
     @Test func sendWritesFrameVerbatimToOwnSocketOnly() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
         let pool = makePool(sockets: sockets)
         let firstId = try #require(pool.connect(genesisHash: genesis))
         _ = try #require(pool.connect(genesisHash: genesis))
@@ -31,7 +31,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
     }
 
     @Test func inboundFrameRoutesVerbatimToItsConnection() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
         let handler = RecordingChainEventHandler()
         let pool = makePool(sockets: sockets, handler: handler)
         _ = try #require(pool.connect(genesisHash: genesis))
@@ -46,7 +46,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
     }
 
     @Test func socketDeathReportsCloseOnceAndForgetsConnection() throws {
-        let sockets = SocketQueue([MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket()])
         let handler = RecordingChainEventHandler()
         let pool = makePool(sockets: sockets, handler: handler)
         let connectionId = try #require(pool.connect(genesisHash: genesis))
@@ -63,7 +63,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
     }
 
     @Test func coreCloseIsSilent() throws {
-        let sockets = SocketQueue([MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket()])
         let handler = RecordingChainEventHandler()
         let pool = makePool(sockets: sockets, handler: handler)
         let connectionId = try #require(pool.connect(genesisHash: genesis))
@@ -79,7 +79,7 @@ struct TrUAPIV2SpecConnectionPoolTests {
         let socket = MockChainSocket()
         socket.onOpen = { $0.simulateClose(.transport(nil)) }
         let handler = RecordingChainEventHandler()
-        let pool = makePool(sockets: SocketQueue([socket]), handler: handler)
+        let pool = makePool(sockets: MockChainSocketResolver([socket]), handler: handler)
 
         let connectionId = try #require(pool.connect(genesisHash: genesis))
 
@@ -87,13 +87,13 @@ struct TrUAPIV2SpecConnectionPoolTests {
     }
 
     @Test func unsupportedChainReturnsNil() {
-        let pool = makePool(sockets: SocketQueue([]))
+        let pool = makePool(sockets: MockChainSocketResolver([]))
 
         #expect(pool.connect(genesisHash: genesis) == nil)
     }
 
     @Test func closeAllClosesEverySocketSilently() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
         let handler = RecordingChainEventHandler()
         let pool = makePool(sockets: sockets, handler: handler)
         _ = try #require(pool.connect(genesisHash: genesis))
@@ -118,62 +118,80 @@ struct TrUAPIV2SpecConnectionPoolTests {
 
         #expect(pool.connect(genesisHash: genesis) != nil)
         #expect(socket.openCallCount == 1)
+        #expect(chainRegistry.chainSocketAttempts == [0, 1])
+    }
+
+    @Test func nodeAttemptGrowsPerChain() throws {
+        let otherGenesis = Data(repeating: 0xBB, count: 32)
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket(), MockChainSocket()])
+        let pool = makePool(sockets: sockets)
+
+        _ = try #require(pool.connect(genesisHash: genesis))
+        _ = try #require(pool.connect(genesisHash: genesis))
+        _ = try #require(pool.connect(genesisHash: otherGenesis))
+
+        #expect(sockets.requests.map(\.attempt) == [0, 1, 0])
+        #expect(sockets.requests.map(\.genesisHash) == [genesis, genesis, otherGenesis])
     }
 
     // MARK: - Foreground revalidation
 
     @Test func shortBackgroundProbesEverySocket() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, lifecycle: lifecycle)
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, applicationHandler: applicationHandler, clock: clock)
         _ = try #require(pool.connect(genesisHash: genesis))
         _ = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidEnterBackground()
-        lifecycle.clock.advance(by: 29)
-        lifecycle.handler.simulateWillEnterForeground()
+        applicationHandler.simulateDidEnterBackground()
+        clock.advance(by: 29)
+        applicationHandler.simulateWillEnterForeground()
 
         #expect(sockets.vended.allSatisfy { $0.probeTimeouts == [5] && $0.expireCallCount == 0 })
     }
 
     @Test func longBackgroundExpiresEverySocket() throws {
-        let sockets = SocketQueue([MockChainSocket(), MockChainSocket()])
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, lifecycle: lifecycle)
+        let sockets = MockChainSocketResolver([MockChainSocket(), MockChainSocket()])
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, applicationHandler: applicationHandler, clock: clock)
         _ = try #require(pool.connect(genesisHash: genesis))
         _ = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidEnterBackground()
-        lifecycle.clock.advance(by: 30)
-        lifecycle.handler.simulateWillEnterForeground()
+        applicationHandler.simulateDidEnterBackground()
+        clock.advance(by: 30)
+        applicationHandler.simulateWillEnterForeground()
 
         #expect(sockets.vended.allSatisfy { $0.expireCallCount == 1 && $0.probeTimeouts.isEmpty })
     }
 
     @Test func expiredSocketIsReportedClosed() throws {
-        let sockets = SocketQueue([MockChainSocket()])
+        let sockets = MockChainSocketResolver([MockChainSocket()])
         let handler = RecordingChainEventHandler()
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, handler: handler, lifecycle: lifecycle)
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, handler: handler, applicationHandler: applicationHandler, clock: clock)
         let connectionId = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidEnterBackground()
-        lifecycle.clock.advance(by: 60)
-        lifecycle.handler.simulateWillEnterForeground()
+        applicationHandler.simulateDidEnterBackground()
+        clock.advance(by: 60)
+        applicationHandler.simulateWillEnterForeground()
         sockets.vended[0].simulateClose(.resumed)
 
         #expect(handler.closed == [connectionId])
     }
 
-    @Test func nothingIsReportedWhileBackgrounded() throws {
-        let sockets = SocketQueue([MockChainSocket()])
+    @Test func backgroundDoesNotRevalidate() throws {
+        let sockets = MockChainSocketResolver([MockChainSocket()])
         let handler = RecordingChainEventHandler()
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, handler: handler, lifecycle: lifecycle)
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, handler: handler, applicationHandler: applicationHandler, clock: clock)
         _ = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidEnterBackground()
-        lifecycle.clock.advance(by: 600)
+        applicationHandler.simulateDidEnterBackground()
+        clock.advance(by: 600)
 
         #expect(sockets.vended[0].expireCallCount == 0)
         #expect(sockets.vended[0].probeTimeouts.isEmpty)
@@ -181,89 +199,76 @@ struct TrUAPIV2SpecConnectionPoolTests {
         #expect(handler.closed.isEmpty)
     }
 
+    @Test func transportDeathWhileBackgroundedIsReported() throws {
+        let sockets = MockChainSocketResolver([MockChainSocket()])
+        let handler = RecordingChainEventHandler()
+        let applicationHandler = MockApplicationHandler()
+        let pool = makePool(sockets: sockets, handler: handler, applicationHandler: applicationHandler)
+        let connectionId = try #require(pool.connect(genesisHash: genesis))
+
+        applicationHandler.simulateDidEnterBackground()
+        sockets.vended[0].simulateClose(.peerClosed)
+
+        #expect(handler.closed == [connectionId])
+    }
+
     @Test func becomingActiveWithoutBackgroundRevalidatesNothing() throws {
-        let sockets = SocketQueue([MockChainSocket()])
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, lifecycle: lifecycle)
+        let sockets = MockChainSocketResolver([MockChainSocket()])
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, applicationHandler: applicationHandler, clock: clock)
         _ = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidBecomeActive()
-        lifecycle.handler.simulateWillEnterForeground()
+        applicationHandler.simulateDidBecomeActive()
+        applicationHandler.simulateWillEnterForeground()
 
         #expect(sockets.vended[0].expireCallCount == 0)
         #expect(sockets.vended[0].probeTimeouts.isEmpty)
     }
 
     @Test func socketReleasedByCoreIsNotRevalidated() throws {
-        let sockets = SocketQueue([MockChainSocket()])
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, lifecycle: lifecycle)
+        let sockets = MockChainSocketResolver([MockChainSocket()])
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, applicationHandler: applicationHandler, clock: clock)
         let connectionId = try #require(pool.connect(genesisHash: genesis))
 
-        lifecycle.handler.simulateDidEnterBackground()
+        applicationHandler.simulateDidEnterBackground()
         pool.close(connectionId: connectionId)
-        lifecycle.clock.advance(by: 60)
-        lifecycle.handler.simulateWillEnterForeground()
+        clock.advance(by: 60)
+        applicationHandler.simulateWillEnterForeground()
 
         #expect(sockets.vended[0].expireCallCount == 0)
     }
 
     @Test func socketOpenedWhileBackgroundedIsRevalidated() throws {
-        let sockets = SocketQueue([MockChainSocket()])
-        let lifecycle = Lifecycle()
-        let pool = makePool(sockets: sockets, lifecycle: lifecycle)
+        let sockets = MockChainSocketResolver([MockChainSocket()])
+        let applicationHandler = MockApplicationHandler()
+        let clock = ManualDateSource()
+        let pool = makePool(sockets: sockets, applicationHandler: applicationHandler, clock: clock)
 
-        lifecycle.handler.simulateDidEnterBackground()
+        applicationHandler.simulateDidEnterBackground()
         _ = try #require(pool.connect(genesisHash: genesis))
-        lifecycle.clock.advance(by: 1)
-        lifecycle.handler.simulateWillEnterForeground()
+        clock.advance(by: 1)
+        applicationHandler.simulateWillEnterForeground()
 
         #expect(sockets.vended[0].probeTimeouts == [5])
     }
 }
 
 private extension TrUAPIV2SpecConnectionPoolTests {
-    final class SocketQueue: @unchecked Sendable {
-        private(set) var vended: [MockChainSocket] = []
-        private var remaining: [MockChainSocket]
-
-        init(_ sockets: [MockChainSocket]) {
-            remaining = sockets
-        }
-
-        func next() -> ChainSocketProtocol? {
-            guard !remaining.isEmpty else { return nil }
-            let socket = remaining.removeFirst()
-            vended.append(socket)
-            return socket
-        }
-    }
-
-    final class TestClock: @unchecked Sendable {
-        private(set) var current = Date(timeIntervalSince1970: 0)
-
-        func advance(by interval: TimeInterval) {
-            current += interval
-        }
-    }
-
-    struct Lifecycle {
-        let handler = MockApplicationHandler()
-        let clock = TestClock()
-    }
-
     func makePool(
-        sockets: SocketQueue,
+        sockets: MockChainSocketResolver,
         handler: RecordingChainEventHandler? = nil,
-        lifecycle: Lifecycle = Lifecycle()
+        applicationHandler: MockApplicationHandler = MockApplicationHandler(),
+        clock: ManualDateSource = ManualDateSource()
     ) -> TrUAPIV2SpecConnectionPool {
-        let clock = lifecycle.clock
         let pool = TrUAPIV2SpecConnectionPool(
-            socketResolver: { _ in sockets.next() },
-            applicationHandler: lifecycle.handler,
+            socketResolver: { genesisHash, attempt in sockets.next(genesisHash: genesisHash, attempt: attempt) },
+            applicationHandler: applicationHandler,
             resumePolicy: .init(expiryThreshold: 30, probeTimeout: 5),
             logger: StubLogger(),
-            now: { clock.current }
+            now: { clock.now }
         )
         pool.eventHandler = handler
         return pool

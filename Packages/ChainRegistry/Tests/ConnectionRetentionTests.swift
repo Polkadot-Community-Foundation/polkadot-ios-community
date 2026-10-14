@@ -152,15 +152,14 @@ struct ConnectionRetentionTests {
 
     // MARK: - Chain sockets
 
-    @Test func chainSocketsRotateNodesPerChain() throws {
+    @Test func chainSocketUsesCallerAttempt() throws {
         let factory = StubConnectionFactory()
         let pool = makePool(factory: factory)
 
-        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
-        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
-        _ = try pool.makeChainSocket(for: makeChain(id: "chain-2"))
+        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"), attempt: 3)
+        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"), attempt: 3)
 
-        #expect(factory.socketAttempts == ["chain-1": [0, 1], "chain-2": [0]])
+        #expect(factory.socketAttempts == ["chain-1": [3, 3]])
     }
 }
 
@@ -274,7 +273,7 @@ private final class StubConnectionFactory: ConnectionFactoryProtocol {
         throw NSError(domain: "ConnectionRetentionTests", code: 0)
     }
 
-    func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket {
+    func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocketProtocol {
         guard let url = URL(string: "wss://\(chain.chainId).example") else {
             throw NSError(domain: "ConnectionRetentionTests", code: 1)
         }

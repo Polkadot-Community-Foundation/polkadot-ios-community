@@ -21,7 +21,8 @@ struct ChainSocketTests {
     }
 
     @Test func framesSentBeforeConnectFlushInOrder() throws {
-        let (socket, connection, _) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, connection) = (fixture.socket, fixture.connection)
 
         socket.open()
         socket.send(text: "a")
@@ -36,7 +37,8 @@ struct ChainSocketTests {
     }
 
     @Test func openIsIdempotent() throws {
-        let (socket, connection, _) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, connection) = (fixture.socket, fixture.connection)
 
         socket.open()
         socket.open()
@@ -45,7 +47,8 @@ struct ChainSocketTests {
     }
 
     @Test func inboundFramesDeliveredVerbatimInOrder() throws {
-        let (socket, _, delegate) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, delegate) = (fixture.socket, fixture.delegate)
         socket.open()
         socket.handle(.connected([:]))
 
@@ -58,7 +61,8 @@ struct ChainSocketTests {
 
     @Test(arguments: TransportDeath.allCases)
     func transportDeathReportsCloseExactlyOnce(death: TransportDeath) throws {
-        let (socket, connection, delegate) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, connection, delegate) = (fixture.socket, fixture.connection, fixture.delegate)
         socket.open()
         socket.handle(.connected([:]))
 
@@ -74,7 +78,8 @@ struct ChainSocketTests {
     }
 
     @Test func connectFailureReportsClose() throws {
-        let (socket, _, delegate) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, delegate) = (fixture.socket, fixture.delegate)
         socket.open()
 
         socket.handle(.error(URLError(.cannotConnectToHost)))
@@ -84,7 +89,8 @@ struct ChainSocketTests {
     }
 
     @Test func callerCloseIsSilentAndFinal() throws {
-        let (socket, connection, delegate) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, connection, delegate) = (fixture.socket, fixture.connection, fixture.delegate)
         socket.open()
         socket.handle(.connected([:]))
 
@@ -102,7 +108,8 @@ struct ChainSocketTests {
     }
 
     @Test func pendingFramesDroppedOnClose() throws {
-        let (socket, connection, _) = try makeSocket()
+        let fixture = try makeSocket()
+        let (socket, connection) = (fixture.socket, fixture.connection)
         socket.open()
         socket.send(text: "pending")
 
@@ -112,107 +119,137 @@ struct ChainSocketTests {
         #expect(connection.written.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func missedPongClosesWithLivenessTimeout() async throws {
-        let configuration = ChainSocket.Configuration(connectionTimeout: 1, pingInterval: 0.05, pongTimeout: 0.05)
-        let (socket, connection, delegate) = try makeSocket(configuration: configuration)
+    @Test func missedPongClosesWithLivenessTimeout() throws {
+        let fixture = try makeOpenSocket()
 
-        let reason = await withCheckedContinuation { continuation in
-            delegate.onClose = { continuation.resume(returning: $0) }
-            socket.open()
-            socket.handle(.connected([:]))
-        }
+        fixture.scheduler.fire(after: Timing.pingInterval)
+        #expect(fixture.connection.pingCount == 1)
+        #expect(fixture.delegate.closeReasons.isEmpty)
 
-        #expect(reason.isLivenessTimeout)
-        #expect(connection.pingCount >= 1)
-        #expect(delegate.closeReasons.count == 1)
+        fixture.scheduler.fire(after: Timing.pongTimeout)
+
+        #expect(fixture.delegate.closeReasons.count == 1)
+        #expect(fixture.delegate.closeReasons.first?.isLivenessTimeout == true)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func expireReportsResumedOnce() async throws {
-        let (socket, connection, delegate) = try makeSocket()
-        socket.open()
-        socket.handle(.connected([:]))
+    @Test func answeredPeriodicPingKeepsPinging() throws {
+        let fixture = try makeOpenSocket()
+        fixture.connection.onPing = { fixture.socket.handle(.pong(nil)) }
 
-        let reason = await withCheckedContinuation { continuation in
-            delegate.onClose = { continuation.resume(returning: $0) }
-            socket.expire()
-        }
-        socket.handle(.error(nil))
+        fixture.scheduler.fire(after: Timing.pingInterval)
+        fixture.scheduler.fire(after: Timing.pongTimeout)
+        fixture.scheduler.fire(after: Timing.pingInterval)
 
-        #expect(reason.isResumed)
-        #expect(delegate.closeReasons.count == 1)
-        #expect(connection.forceDisconnectCount == 1)
+        #expect(fixture.connection.pingCount == 2)
+        #expect(fixture.delegate.closeReasons.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func unansweredProbeClosesWithLivenessTimeout() async throws {
-        let (socket, connection, delegate) = try makeSocket()
-        socket.open()
-        socket.handle(.connected([:]))
+    @Test func expireReportsResumedOnce() throws {
+        let fixture = try makeOpenSocket()
 
-        let reason = await withCheckedContinuation { continuation in
-            delegate.onClose = { continuation.resume(returning: $0) }
-            socket.probe(timeout: 0.05)
-        }
+        fixture.socket.expire()
+        fixture.socket.handle(.error(nil))
 
-        #expect(reason.isLivenessTimeout)
-        #expect(connection.pingCount == 1)
+        #expect(fixture.delegate.closeReasons.count == 1)
+        #expect(fixture.delegate.closeReasons.first?.isResumed == true)
+        #expect(fixture.connection.forceDisconnectCount == 1)
+        #expect(fixture.scheduler.pendingDelays.isEmpty)
     }
 
-    @Test func answeredProbeKeepsSocketOpen() async throws {
-        let (socket, connection, delegate) = try makeSocket()
-        socket.open()
-        socket.handle(.connected([:]))
-        connection.onPing = { socket.handle(.pong(nil)) }
+    @Test func unansweredProbeClosesWithLivenessTimeout() throws {
+        let fixture = try makeOpenSocket()
 
-        socket.probe(timeout: 0.05)
-        try await Task.sleep(for: .milliseconds(200))
+        fixture.socket.probe(timeout: Timing.probeTimeout)
+        #expect(fixture.connection.pingCount == 1)
+        #expect(fixture.delegate.closeReasons.isEmpty)
 
-        #expect(connection.pingCount == 1)
-        #expect(delegate.closeReasons.isEmpty)
+        fixture.scheduler.fire(after: Timing.probeTimeout)
+
+        #expect(fixture.delegate.closeReasons.count == 1)
+        #expect(fixture.delegate.closeReasons.first?.isLivenessTimeout == true)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func stalledConnectClosesWithConnectTimeout() async throws {
-        let configuration = ChainSocket.Configuration(connectionTimeout: 0.05, pingInterval: 30, pongTimeout: 15)
-        let (socket, _, delegate) = try makeSocket(configuration: configuration)
+    @Test func answeredProbeKeepsSocketOpen() throws {
+        let fixture = try makeOpenSocket()
+        fixture.connection.onPing = { fixture.socket.handle(.pong(nil)) }
 
-        let reason = await withCheckedContinuation { continuation in
-            delegate.onClose = { continuation.resume(returning: $0) }
-            socket.open()
-        }
+        fixture.socket.probe(timeout: Timing.probeTimeout)
+        fixture.scheduler.fire(after: Timing.probeTimeout)
 
-        #expect(reason.isConnectTimeout)
+        #expect(fixture.connection.pingCount == 1)
+        #expect(fixture.delegate.closeReasons.isEmpty)
     }
 
-    @Test func completedConnectCancelsConnectTimeout() async throws {
-        let configuration = ChainSocket.Configuration(connectionTimeout: 0.05, pingInterval: 30, pongTimeout: 15)
-        let (socket, _, delegate) = try makeSocket(configuration: configuration)
+    @Test func probeIgnoredOnceClosed() throws {
+        let fixture = try makeOpenSocket()
+        fixture.socket.close()
 
-        socket.open()
-        socket.handle(.connected([:]))
-        try await Task.sleep(for: .milliseconds(200))
+        fixture.socket.probe(timeout: Timing.probeTimeout)
 
-        #expect(delegate.closeReasons.isEmpty)
+        #expect(fixture.connection.pingCount == 0)
+        #expect(fixture.scheduler.pendingDelays.isEmpty)
+    }
+
+    @Test func stalledConnectClosesWithConnectTimeout() throws {
+        let fixture = try makeSocket()
+        fixture.socket.open()
+
+        fixture.scheduler.fire(after: Timing.connectionTimeout)
+
+        #expect(fixture.delegate.closeReasons.count == 1)
+        #expect(fixture.delegate.closeReasons.first?.isConnectTimeout == true)
+    }
+
+    @Test func completedConnectCancelsConnectTimeout() throws {
+        let fixture = try makeOpenSocket()
+
+        fixture.scheduler.fire(after: Timing.connectionTimeout)
+
+        #expect(fixture.delegate.closeReasons.isEmpty)
+        #expect(fixture.scheduler.pendingDelays == [Timing.pingInterval])
     }
 }
 
 private extension ChainSocketTests {
-    func makeSocket(
-        configuration: ChainSocket.Configuration = .default
-    ) throws -> (ChainSocket, RecordingWebSocketConnection, RecordingChainSocketDelegate) {
+    enum Timing {
+        static let connectionTimeout: TimeInterval = 10
+        static let pingInterval: TimeInterval = 30
+        static let pongTimeout: TimeInterval = 15
+        static let probeTimeout: TimeInterval = 5
+    }
+
+    struct Fixture {
+        let socket: ChainSocket
+        let connection: RecordingWebSocketConnection
+        let delegate: RecordingChainSocketDelegate
+        let scheduler: ManualChainSocketScheduler
+    }
+
+    func makeSocket() throws -> Fixture {
         let factory = RecordingTransportFactory()
+        let scheduler = ManualChainSocketScheduler()
         let socket = try ChainSocket(
             url: #require(URL(string: "wss://node.example/rpc")),
             transportFactory: factory,
-            configuration: configuration,
+            configuration: .init(
+                connectionTimeout: Timing.connectionTimeout,
+                pingInterval: Timing.pingInterval,
+                pongTimeout: Timing.pongTimeout
+            ),
+            scheduler: scheduler,
             logger: SilentLogger()
         )
         let delegate = RecordingChainSocketDelegate()
         socket.delegate = delegate
 
         let connection = try #require(factory.created.first?.connection)
-        return (socket, connection, delegate)
+        return Fixture(socket: socket, connection: connection, delegate: delegate, scheduler: scheduler)
+    }
+
+    func makeOpenSocket() throws -> Fixture {
+        let fixture = try makeSocket()
+        fixture.socket.open()
+        fixture.socket.handle(.connected([:]))
+        return fixture
     }
 }

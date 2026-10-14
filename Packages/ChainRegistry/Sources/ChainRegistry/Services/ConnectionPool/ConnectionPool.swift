@@ -11,8 +11,8 @@ public protocol ConnectionPoolProtocol {
     func getOneShotConnection(for chain: ChainModel) -> JSONRPCEngine?
     func deactivateConnection(for chainId: ChainModel.Id)
 
-    /// Creates an unopened socket, rotating through the chain's nodes on each call.
-    func makeChainSocket(for chain: ChainModel) throws -> ChainSocketProtocol
+    /// Creates an unopened socket to the chain's node at `attempt`, wrapping around its node list.
+    func makeChainSocket(for chain: ChainModel, attempt: Int) throws -> ChainSocketProtocol
 }
 
 public protocol ConnectionStateSubscription: AnyObject {
@@ -45,8 +45,6 @@ public class ConnectionPool {
     private(set) var oneShotConnections: [ChainModel.Id: OneShotConnection] = [:]
 
     private(set) var stateSubscriptions: [ChainModel.Id: [WeakWrapper]] = [:]
-
-    private var chainSocketAttempts: [ChainModel.Id: Int] = [:]
 
     private func clearUnusedConnections() {
         connections = connections.filter { $0.value.target != nil }
@@ -174,15 +172,8 @@ extension ConnectionPool: ConnectionPoolProtocol {
         }
     }
 
-    public func makeChainSocket(for chain: ChainModel) throws -> ChainSocketProtocol {
-        mutex.lock()
-
-        defer { mutex.unlock() }
-
-        let attempt = chainSocketAttempts[chain.chainId, default: 0]
-        chainSocketAttempts[chain.chainId] = attempt + 1
-
-        return try connectionFactory.createChainSocket(for: chain, attempt: attempt)
+    public func makeChainSocket(for chain: ChainModel, attempt: Int) throws -> ChainSocketProtocol {
+        try connectionFactory.createChainSocket(for: chain, attempt: attempt)
     }
 
     public func retainConnections(_ scope: ConnectionRetainScope) -> ConnectionRetainToken {

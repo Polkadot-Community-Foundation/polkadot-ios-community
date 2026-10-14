@@ -28,7 +28,7 @@ public protocol ConnectionFactoryProtocol {
 
     func createOneShotConnection(for chain: ChainNodeConnectable) throws -> OneShotConnection
 
-    func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket
+    func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocketProtocol
 }
 
 public final class ConnectionFactory {
@@ -138,7 +138,7 @@ extension ConnectionFactory: ConnectionFactoryProtocol {
         }
     }
 
-    public func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocket {
+    public func createChainSocket(for chain: ChainNodeConnectable, attempt: Int) throws -> ChainSocketProtocol {
         let urls = extractNodeUrls(
             from: chain,
             schemaPredicate: .wsProtocol

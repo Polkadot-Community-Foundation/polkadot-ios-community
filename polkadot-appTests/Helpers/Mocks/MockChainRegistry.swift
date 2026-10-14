@@ -15,6 +15,7 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     private var storedRuntimeProviders: [String: RuntimeProviderProtocol] = [:]
     private var storedConnectionsByChainId: [ChainModel.Id: ChainConnection] = [:]
     private var storedChainSocketsById: [ChainModel.Id: ChainSocketProtocol] = [:]
+    private var storedChainSocketAttempts: [Int] = []
 
     var chainsByGenesis: [String: ChainModel] {
         get { mutex.withLock { storedChainsByGenesis } }
@@ -36,6 +37,9 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
         set { mutex.withLock { storedChainSocketsById = newValue } }
     }
 
+    /// Node attempts passed to `makeChainSocket`, in call order.
+    var chainSocketAttempts: [Int] { mutex.withLock { storedChainSocketAttempts } }
+
     /// Chains delivered to a new subscriber. Empty by default, so subscribing stays a no-op.
     var chainsOnSubscribe: [ChainModel] = []
 
@@ -56,7 +60,13 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     func getChainByGenesis(for genesisHash: ChainModel.Id) -> ChainModel? { chainsByGenesis[genesisHash] }
     func getConnection(for chainId: ChainModel.Id) -> ChainConnection? { connectionsByChainId[chainId] }
     func getOneShotConnection(for _: ChainModel.Id) -> JSONRPCEngine? { nil }
-    func makeChainSocket(for chainId: ChainModel.Id) -> ChainSocketProtocol? { chainSocketsById[chainId] }
+    func makeChainSocket(for chainId: ChainModel.Id, attempt: Int) -> ChainSocketProtocol? {
+        mutex.withLock {
+            storedChainSocketAttempts.append(attempt)
+            return storedChainSocketsById[chainId]
+        }
+    }
+
     func retainConnections(_: ConnectionRetainScope) -> ConnectionRetainToken { ConnectionRetainToken() }
     func getRuntimeProvider(for chainId: ChainModel.Id) -> RuntimeProviderProtocol? { runtimeProviders[chainId] }
     func switchSync(mode _: ChainSyncMode, chainId _: ChainModel.Id) throws {}

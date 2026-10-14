@@ -6,11 +6,14 @@ import SDKLogger
 
 /// One dedicated node socket per core `chain_connect`; socket deaths are reported, never hidden by reconnects.
 ///
-/// Nothing is reported while the app is backgrounded, so products don't retry against a suspended app.
-/// On return to the foreground every socket that lived through the background is revalidated:
-/// after a long absence all are expired, after a short one each is probed and expired only if silent.
+/// Backgrounding alone never closes or probes a socket, so the pool itself gives products no reason to
+/// retry against an app about to be suspended; real transport deaths are still reported whenever they
+/// happen, including while the app keeps running in the background. On return to the foreground every
+/// socket that lived through the background is revalidated: after a long absence all are expired,
+/// after a short one each is probed and expired only if silent.
 public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked Sendable {
-    public typealias SocketResolver = @Sendable (_ genesisHash: Data) -> ChainSocketProtocol?
+    /// `attempt` selects the node; it grows per chain so a reconnect after a dead node lands on the next one.
+    public typealias SocketResolver = @Sendable (_ genesisHash: Data, _ attempt: Int) -> ChainSocketProtocol?
 
     public struct ResumePolicy: Sendable {
         /// Background time after which sockets are expired instead of probed.
@@ -30,6 +33,7 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
         var sockets: [UInt32: ChainSocketProtocol] = [:]
         var connectionIds: [ObjectIdentifier: UInt32] = [:]
         var nextConnectionId: UInt32 = 1
+        var nodeAttempts: [Data: Int] = [:]
         var backgroundedAt: Date?
     }
 
@@ -61,23 +65,27 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
         applicationHandler.delegate = self
     }
 
+    /// Each pool needs its own handler: `ApplicationHandlerProtocol` holds a single delegate.
     public static func makeChainConnections(
         chainRegistry: ChainRegistryProtocol,
+        applicationHandler: ApplicationHandlerProtocol = ApplicationHandler(),
         logger: SDKLoggerProtocol
     ) -> TrUAPIV2SpecConnectionPool {
         TrUAPIV2SpecConnectionPool(
-            socketResolver: { [chainRegistry] genesisHash in
+            socketResolver: { [chainRegistry] genesisHash, attempt in
                 chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap {
-                    chainRegistry.makeChainSocket(for: $0.chainId)
+                    chainRegistry.makeChainSocket(for: $0.chainId, attempt: attempt)
                 }
             },
-            applicationHandler: ApplicationHandler(),
+            applicationHandler: applicationHandler,
             logger: logger
         )
     }
 
     public func connect(genesisHash: Data) -> UInt32? {
-        guard let socket = socketResolver(genesisHash) else {
+        let attempt = state.withLockUnchecked { $0.takeNodeAttempt(for: genesisHash) }
+
+        guard let socket = socketResolver(genesisHash, attempt) else {
             logger.debug("TrUAPI chain \(genesisHash.toHex()) has no host-managed connection; unsupported")
             return nil
         }
@@ -187,6 +195,12 @@ private extension TrUAPIV2SpecConnectionPool {
 }
 
 private extension TrUAPIV2SpecConnectionPool.State {
+    mutating func takeNodeAttempt(for genesisHash: Data) -> Int {
+        let attempt = nodeAttempts[genesisHash, default: 0]
+        nodeAttempts[genesisHash] = attempt + 1
+        return attempt
+    }
+
     mutating func removeSocket(for connectionId: UInt32) -> ChainSocketProtocol? {
         guard let socket = sockets.removeValue(forKey: connectionId) else { return nil }
         connectionIds.removeValue(forKey: ObjectIdentifier(socket))

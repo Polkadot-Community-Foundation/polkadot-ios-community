@@ -30,7 +30,7 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
         var phase: Phase = .idle
         var pending: [String] = []
         weak var delegate: ChainSocketDelegate?
-        var pingTimer: DispatchSourceTimer?
+        var pingTick: DispatchWorkItem?
         var pongDeadline: DispatchWorkItem?
         var connectDeadline: DispatchWorkItem?
     }
@@ -45,6 +45,7 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     private let connection: WebSocketConnectionProtocol
     private let queue: DispatchQueue
     private let configuration: Configuration
+    private let scheduler: ChainSocketScheduling
     private let logger: SDKLoggerProtocol
     private let state = OSAllocatedUnfairLock(uncheckedState: State())
 
@@ -52,10 +53,12 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
         url: URL,
         transportFactory: WebSocketConnectionFactoryProtocol,
         configuration: Configuration = .default,
+        scheduler: ChainSocketScheduling = DispatchChainSocketScheduler(),
         logger: SDKLoggerProtocol
     ) {
         self.url = url
         self.configuration = configuration
+        self.scheduler = scheduler
         self.logger = logger
 
         let queue = DispatchQueue(label: "io.polkadot.chain-socket.\(url.host ?? "unknown")")
@@ -95,7 +98,7 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
 
         guard shouldConnect else { return }
         connection.connect()
-        queue.asyncAfter(deadline: .now() + configuration.connectionTimeout, execute: deadline)
+        scheduler.schedule(after: configuration.connectionTimeout, on: queue, execute: deadline)
     }
 
     public func send(text: String) {
@@ -125,15 +128,19 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     }
 
     public func expire() {
-        queue.async { [weak self] in
+        let work = DispatchWorkItem { [weak self] in
             self?.shutDown(reason: .resumed)
         }
+
+        scheduler.async(on: queue, execute: work)
     }
 
     public func probe(timeout: TimeInterval) {
-        queue.async { [weak self] in
+        let work = DispatchWorkItem { [weak self] in
             self?.sendPing(timeout: timeout)
         }
+
+        scheduler.async(on: queue, execute: work)
     }
 
     private func shutDown(reason: ChainSocketCloseReason) {
@@ -192,7 +199,7 @@ private extension ChainSocket {
             state.cancelConnectDeadline()
             state.pending.forEach { connection.write(string: $0) }
             state.pending.removeAll()
-            state.pingTimer = makePingTimer()
+            state.pingTick = makePingTick()
         }
     }
 
@@ -219,15 +226,25 @@ private extension ChainSocket {
         state.withLockUnchecked { $0.cancelPongDeadline() }
     }
 
-    func makePingTimer() -> DispatchSourceTimer {
-        let interval = configuration.pingInterval
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self] in
-            self?.sendPeriodicPing()
+    func makePingTick() -> DispatchWorkItem {
+        let tick = DispatchWorkItem { [weak self] in
+            self?.handlePingTick()
         }
-        timer.resume()
-        return timer
+
+        scheduler.schedule(after: configuration.pingInterval, on: queue, execute: tick)
+        return tick
+    }
+
+    func handlePingTick() {
+        let isOpen = state.withLockUnchecked { state -> Bool in
+            guard state.phase == .open else { return false }
+            state.pingTick = makePingTick()
+            return true
+        }
+
+        guard isOpen else { return }
+
+        sendPeriodicPing()
     }
 
     func sendPeriodicPing() {
@@ -254,7 +271,7 @@ private extension ChainSocket {
         guard shouldPing else { return }
 
         connection.write(ping: Data(), completion: nil)
-        queue.asyncAfter(deadline: .now() + timeout, execute: deadline)
+        scheduler.schedule(after: timeout, on: queue, execute: deadline)
     }
 }
 
@@ -278,8 +295,8 @@ private extension ChainSocket.State {
     }
 
     mutating func cancelLiveness() {
-        pingTimer?.cancel()
-        pingTimer = nil
+        pingTick?.cancel()
+        pingTick = nil
         cancelPongDeadline()
         cancelConnectDeadline()
     }

@@ -13,8 +13,7 @@ public protocol ChainRegistryProtocol: ChainResourceProtocol, ConnectionRetentio
     func getConnection(for chainId: ChainModel.Id) -> ChainConnection?
     func getOneShotConnection(for chainId: ChainModel.Id) -> JSONRPCEngine?
 
-    /// Returns an unopened socket, or nil unless the chain is activated.
-    func makeChainSocket(for chainId: ChainModel.Id) -> ChainSocketProtocol?
+    func makeChainSocket(for chainId: ChainModel.Id, attempt: Int) -> ChainSocketProtocol?
 
     func getRuntimeProvider(for chainId: ChainModel.Id) -> RuntimeProviderProtocol?
     func switchSync(mode: ChainSyncMode, chainId: ChainModel.Id) throws
@@ -320,7 +319,7 @@ extension ChainRegistry: ChainRegistryProtocol {
         return connectionPool.getOneShotConnection(for: chain)
     }
 
-    public func makeChainSocket(for chainId: ChainModel.Id) -> ChainSocketProtocol? {
+    public func makeChainSocket(for chainId: ChainModel.Id, attempt: Int) -> ChainSocketProtocol? {
         mutex.lock()
 
         defer {
@@ -334,7 +333,7 @@ extension ChainRegistry: ChainRegistryProtocol {
         }
 
         do {
-            return try connectionPool.makeChainSocket(for: chain)
+            return try connectionPool.makeChainSocket(for: chain, attempt: attempt)
         } catch {
             logger?.error("Chain socket unavailable for \(chainId): \(error)")
             return nil
