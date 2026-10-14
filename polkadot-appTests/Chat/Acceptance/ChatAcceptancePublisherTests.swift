@@ -1,136 +1,74 @@
-import CryptoKit
+import CoreData
 import Foundation
-import IssueMonitoring
-import MessageExchangeKit
 import os
-import StatementStore
-import SubstrateSdk
 import Testing
 @testable import polkadot_app
 
+@Suite(.timeLimit(.minutes(1)))
 struct ChatAcceptancePublisherTests {
-    private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let requestId = "request"
-    private let identityKeyId = "//wallet//main"
-    private let peerAccountId = Data(repeating: 9, count: 32)
-    private let statementStore = MockStatementStore()
-    private let allocator = StubNotificationAllocator()
-    private let activator = RecordingSenderDeviceActivator()
-    private let unacknowledged = RecordingIssueDiagnostic()
-    private let signManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
+    private let facade = UserDataStorageTestFacade()
+    private let peer = Data(repeating: 0x07, count: 32)
+    private let delivery = HoldingAcceptanceDelivery()
 
-    @Test func firstPublishActivatesRequesterDeviceAndRecordsPeriod() async throws {
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: nil)])
+    @Test func startsOneDeliveryPerNewAcceptance() async throws {
+        try await insertChat()
+        let publisher = makePublisher()
+        publisher.setup()
+        defer { publisher.throttle() }
 
-        await makePublisher(store: store).sync()
+        try await insertAcceptance(id: "first")
+        await waitUntil { delivery.started == ["first"] }
 
-        #expect(try statementStore.senderAccountIds() == [acceptAccountId(period: allocator.period)])
-        #expect(try allocator.initiatedTargets == [acceptAccountId(period: allocator.period)])
-        #expect(activator.activations == [requestId])
-        #expect(store.published == [allocator.period])
-    }
+        try await insertAcceptance(id: "second")
+        await waitUntil { delivery.started.count == 2 }
 
-    @Test func stalePeriodRepublishesFromFreshAccountWithoutReactivating() async throws {
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: allocator.period - 1)])
-
-        await makePublisher(store: store).sync()
-
-        #expect(try statementStore.senderAccountIds() == [acceptAccountId(period: allocator.period)])
-        #expect(activator.activations.isEmpty)
-        #expect(store.published == [allocator.period])
-    }
-
-    @Test func currentPeriodIsNotRepublished() async throws {
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: allocator.period)])
-
-        await makePublisher(store: store).sync()
-
-        #expect(try statementStore.senderAccountIds().isEmpty)
-        #expect(store.published.isEmpty)
-    }
-
-    @Test func acknowledgedAcceptanceIsMarkedWithoutPublishing() async throws {
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: allocator.period - 1)])
-        store.isAcknowledged = true
-
-        await makePublisher(store: store).sync()
-
-        #expect(try statementStore.senderAccountIds().isEmpty)
-        #expect(store.acknowledgedCount == 1)
-    }
-
-    @Test func stopsRenewingAfterSevenDaysAndReportsIt() async throws {
-        let sentAt = now.addingTimeInterval(-7 * 86_400 - 1)
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: 1, sentAt: sentAt)])
-
-        await makePublisher(store: store).sync()
-
-        #expect(try statementStore.senderAccountIds().isEmpty)
-        #expect(unacknowledged.failureCount == 1)
-    }
-
-    @Test func noFreeSlotPublishesNothing() async throws {
-        allocator.hasFreeSlot = false
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: nil)])
-
-        await makePublisher(store: store).sync()
-
-        #expect(try statementStore.senderAccountIds().isEmpty)
-        #expect(activator.activations.isEmpty)
-        #expect(store.published.isEmpty)
-    }
-
-    @Test func identityAccountNeverSignsAcceptance() async throws {
-        let store = InMemoryChatAcceptanceStore(candidates: [makeCandidate(period: nil)])
-
-        await makePublisher(store: store).sync()
-
-        let identityAccountId = try signManager.makeSigner(for: identityKeyId).accountId
-        #expect(try !statementStore.senderAccountIds().contains(identityAccountId))
+        #expect(delivery.started == ["first", "second"])
     }
 }
 
 private extension ChatAcceptancePublisherTests {
-    func acceptAccountId(period: UInt32) throws -> AccountId {
-        try signManager.makeSigner(for: ChatKeyPaths.accept(requestId: requestId, period: period)).accountId
-    }
-
-    func makePublisher(store: ChatAcceptanceStoring) -> ChatAcceptancePublisher {
-        let identityEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
-
-        return ChatAcceptancePublisher(
-            dependencies: ChatAcceptancePublisherDependencies(
-                store: store,
-                allocator: allocator,
-                signManager: signManager,
-                requestFactory: IdentityRouteRequestFactory(
-                    encryptionManager: ClosureEncryptionManager { _ in
-                        X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
-                    },
-                    signerManager: signManager
-                ),
-                submitter: statementStore,
-                deviceActivator: activator
+    func makePublisher() -> ChatAcceptancePublisher {
+        ChatAcceptancePublisher(
+            messageProviderFactory: ChatMessageDataProviderFactory(
+                repositoryFactory: ChatMessageRepositoryFactory(storageFacade: facade),
+                logger: MockLogger()
             ),
-            dateProvider: MockDateProvider(now: now),
-            issueDiagnostics: ChatAcceptanceIssueDiagnostics(
-                publishFailing: NoopIssueDiagnostic(),
-                unacknowledged: unacknowledged
-            ),
+            deliveryService: delivery,
             logger: MockLogger()
         )
     }
 
-    func makeCandidate(period: UInt32?, sentAt: Date? = nil) -> ChatAcceptanceCandidate {
-        let message = Chat.LocalMessage(
-            messageId: UUID().uuidString,
-            chatId: .person(peerAccountId),
+    func waitUntil(_ condition: () -> Bool) async {
+        while !condition() {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    func insertChat() async throws {
+        try await facade.databaseService.performWrite { [peer] context in
+            let contact = CDChatContact(context: context)
+            contact.identifier = peer.toHex()
+            contact.username = "peer"
+            contact.publicKey = Data(repeating: 1, count: 32)
+            contact.ownSignKeyId = "//wallet//main"
+
+            let chat = CDChat(context: context)
+            chat.identifier = Chat.Id.person(peer).rawRepresentation
+            chat.chatType = Int16(Chat.Id.ChatType.person.rawValue)
+            chat.contact = contact
+        }
+    }
+
+    func insertAcceptance(id: String) async throws {
+        let acceptance = Chat.LocalMessage(
+            messageId: id,
+            chatId: .person(peer),
             origin: .user,
             creationSource: .localDevice,
-            status: .outgoing(period == nil ? .new : .sent),
-            timestamp: (sentAt ?? now).toChatTimestamp(),
+            status: .outgoing(.new),
+            timestamp: Date().toChatTimestamp(),
             content: .multiChatAccepted(.init(
-                requestId: requestId,
+                requestId: "request-\(id)",
                 device: Chat.PeerDevice(
                     statementAccountId: Data(repeating: 2, count: 32),
                     encryptionPublicKey: Data(repeating: 3, count: 32)
@@ -141,63 +79,27 @@ private extension ChatAcceptancePublisherTests {
             relatedMessages: []
         )
 
-        let session = MessageExchange.SessionRequest(
-            own: MessageExchange.Own(signKeyId: identityKeyId, encryptionKeyId: "", pin: nil),
-            peer: MessageExchange.Peer(
-                accountId: peerAccountId,
-                publicKey: Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation,
-                pin: nil,
-                devices: []
+        try await facade.databaseService.performWrite { context in
+            try ChatMessageEntityMapper().populate(
+                entity: CDChatMessage(context: context),
+                from: acceptance,
+                using: context
             )
-        )
-
-        return ChatAcceptanceCandidate(message: message, requestId: requestId, session: session, period: period)
+        }
     }
 }
 
-private final class InMemoryChatAcceptanceStore: ChatAcceptanceStoring, @unchecked Sendable {
-    private let candidates: [ChatAcceptanceCandidate]
-    var isAcknowledged = false
-    private(set) var published: [UInt32] = []
-    private(set) var acknowledgedCount = 0
+/// Never finishes a delivery, so a later snapshot that still lists the acceptance must not restart it.
+private final class HoldingAcceptanceDelivery: ChatAcceptanceDelivering, @unchecked Sendable {
+    private let calls = OSAllocatedUnfairLock<[String]>(initialState: [])
 
-    init(candidates: [ChatAcceptanceCandidate]) {
-        self.candidates = candidates
+    var started: [String] { calls.withLock { $0 } }
+
+    func deliverUntilDone(messageId: String) async {
+        calls.withLock { $0.append(messageId) }
+
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
     }
-
-    func pendingAcceptances() async throws -> [ChatAcceptanceCandidate] {
-        candidates
-    }
-
-    func markPublished(_: ChatAcceptanceCandidate, period: UInt32) async throws {
-        published.append(period)
-    }
-
-    func markAcknowledged(_: ChatAcceptanceCandidate) async throws {
-        acknowledgedCount += 1
-    }
-
-    func isAcknowledged(_: ChatAcceptanceCandidate) async throws -> Bool {
-        isAcknowledged
-    }
-}
-
-private final class RecordingSenderDeviceActivator: SenderDeviceActivating, @unchecked Sendable {
-    private(set) var activations: [String] = []
-
-    func activate(requestId: String, peerAccountId _: AccountId) async throws {
-        activations.append(requestId)
-    }
-}
-
-private final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
-    private let failures = OSAllocatedUnfairLock(initialState: 0)
-
-    var failureCount: Int { failures.withLock { $0 } }
-
-    func recordFailure(for _: String, error _: Error?, counters _: [String: Int]) {
-        failures.withLock { $0 += 1 }
-    }
-
-    func recordRecovery(for _: String) {}
 }

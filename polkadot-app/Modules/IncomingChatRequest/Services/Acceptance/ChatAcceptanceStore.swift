@@ -12,8 +12,13 @@ struct ChatAcceptanceCandidate {
 }
 
 protocol ChatAcceptanceStoring {
-    /// Acceptances not yet acknowledged by the requester.
-    func pendingAcceptances() async throws -> [ChatAcceptanceCandidate]
+    func acceptance(messageId: String) async throws -> ChatAcceptanceCandidate?
+
+    /// True while the acceptance has never been published.
+    func isAwaitingPublication(messageId: String) async throws -> Bool
+
+    /// Published acceptances the requester has not acknowledged yet.
+    func sentAcceptances() async throws -> [ChatAcceptanceCandidate]
 
     func markPublished(_ candidate: ChatAcceptanceCandidate, period: UInt32) async throws
 
@@ -32,10 +37,39 @@ final class ChatAcceptanceStore {
 }
 
 extension ChatAcceptanceStore: ChatAcceptanceStoring {
-    func pendingAcceptances() async throws -> [ChatAcceptanceCandidate] {
+    func acceptance(messageId: String) async throws -> ChatAcceptanceCandidate? {
         try await databaseService.performRead { context in
             let fetchRequest = CDChatMessage.fetchRequest()
-            fetchRequest.predicate = Self.pendingAcceptancesPredicate()
+            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                .messages(withIds: [messageId]),
+                .localDeviceChatAcceptances()
+            ])
+            fetchRequest.fetchLimit = 1
+
+            return try context.fetch(fetchRequest).first.flatMap { try Self.candidate(from: $0, in: context) }
+        }
+    }
+
+    func isAwaitingPublication(messageId: String) async throws -> Bool {
+        try await databaseService.performRead { context in
+            let fetchRequest = CDChatMessage.fetchRequest()
+            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                .messages(withIds: [messageId]),
+                .newLocalDeviceChatAcceptances()
+            ])
+            fetchRequest.fetchLimit = 1
+
+            return try context.count(for: fetchRequest) > 0
+        }
+    }
+
+    func sentAcceptances() async throws -> [ChatAcceptanceCandidate] {
+        try await databaseService.performRead { context in
+            let fetchRequest = CDChatMessage.fetchRequest()
+            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                .localDeviceChatAcceptances(),
+                .byStatus(.outgoing(.sent))
+            ])
 
             return try context.fetch(fetchRequest).compactMap { try Self.candidate(from: $0, in: context) }
         }
@@ -69,17 +103,6 @@ extension ChatAcceptanceStore: ChatAcceptanceStoring {
 }
 
 private extension ChatAcceptanceStore {
-    static func pendingAcceptancesPredicate() -> NSPredicate {
-        let statuses = [Chat.LocalMessage.Status.outgoing(.new), .outgoing(.sent)].map(\.rawValue)
-
-        return NSCompoundPredicate(andPredicateWithSubpredicates: [
-            .messageByContentType(.multiChatAccepted),
-            .messageByChatType(.person),
-            .byCreationSource(.localDevice),
-            NSPredicate(format: "%K IN %@", #keyPath(CDChatMessage.status), statuses)
-        ])
-    }
-
     static func acknowledgementPredicate(for candidate: ChatAcceptanceCandidate) -> NSPredicate {
         let incoming = [Chat.LocalMessage.Status.incoming(.new), .incoming(.seen)].map(\.rawValue)
         let delivered = Chat.LocalMessage.Status.outgoing(.delivered).rawValue

@@ -45,6 +45,21 @@ extension NSPredicate {
         return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
     }
 
+    static func localDeviceChatAcceptances() -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            messageByContentType(.multiChatAccepted),
+            messageByChatType(.person),
+            byCreationSource(.localDevice)
+        ])
+    }
+
+    static func newLocalDeviceChatAcceptances() -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            localDeviceChatAcceptances(),
+            byStatus(Chat.LocalMessage.Status.outgoing(.new))
+        ])
+    }
+
     static func incomingCoinageSendMessages() -> NSPredicate {
         let incomingNewPredicate = byStatus(Chat.LocalMessage.Status.incoming(.new))
         let incomingSeenPredicate = byStatus(Chat.LocalMessage.Status.incoming(.seen))

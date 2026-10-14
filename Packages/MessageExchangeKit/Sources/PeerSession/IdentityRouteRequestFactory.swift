@@ -10,6 +10,9 @@ public protocol IdentityRouteRequestMaking {
         message: some MessageExchange.CodableMessage,
         signer: StatementStoreSigning
     ) throws -> StatementSubmitParametersBuilding
+
+    /// The topic such request statements are published under, for looking them up in the store.
+    func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data
 }
 
 public final class IdentityRouteRequestFactory {
@@ -44,19 +47,8 @@ extension IdentityRouteRequestFactory: IdentityRouteRequestMaking {
         message: some MessageExchange.CodableMessage,
         signer: StatementStoreSigning
     ) throws -> StatementSubmitParametersBuilding {
-        let encryptor = try encryptionManager
-            .makeEncryptorFactory(ownEncryptionKeyId: request.own.encryptionKeyId)
-            .makeEncryptor(remotePublicKey: request.peer.publicKey)
-
-        let sessionId = try sessionIdFactory.createSessionId(
-            for: .init(
-                ownAccountId: signerManager.makeSigner(for: request.own.signKeyId).accountId,
-                ownPin: request.own.pin,
-                peerAccountId: request.peer.accountId,
-                peerPin: request.peer.pin,
-                sharedSecret: encryptor.sharedSecret
-            )
-        )
+        let encryptor = try makeEncryptor(for: request)
+        let sessionId = try makeSessionId(for: request, encryptor: encryptor)
 
         let payload = try StatementDataCoder(encryptor: encryptor, logger: logger).encodeToScaleEncodedPayload(
             StatementData.request(MessageExchange.Request(requestId: requestId, messages: [message])),
@@ -68,5 +60,32 @@ extension IdentityRouteRequestFactory: IdentityRouteRequestMaking {
             .addChannel(channelFactory.createRequestChannel(for: sessionId))
             .addExpiry(priorityFactory.makeTimestampPriority())
             .addScaleEncodedPayload(payload)
+    }
+
+    public func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data {
+        try makeSessionId(for: request, encryptor: makeEncryptor(for: request)).own.fixedStatementFieldData()
+    }
+}
+
+private extension IdentityRouteRequestFactory {
+    func makeEncryptor(for request: MessageExchange.SessionRequest) throws -> MessageExchangeEncrypting {
+        try encryptionManager
+            .makeEncryptorFactory(ownEncryptionKeyId: request.own.encryptionKeyId)
+            .makeEncryptor(remotePublicKey: request.peer.publicKey)
+    }
+
+    func makeSessionId(
+        for request: MessageExchange.SessionRequest,
+        encryptor: MessageExchangeEncrypting
+    ) throws -> MessageExchange.SessionId {
+        try sessionIdFactory.createSessionId(
+            for: .init(
+                ownAccountId: signerManager.makeSigner(for: request.own.signKeyId).accountId,
+                ownPin: request.own.pin,
+                peerAccountId: request.peer.accountId,
+                peerPin: request.peer.pin,
+                sharedSecret: encryptor.sharedSecret
+            )
+        )
     }
 }

@@ -8,37 +8,43 @@ struct ChatAcceptanceStoreTests {
     private let peer = Data(repeating: 0x07, count: 32)
     private let requestId = "request"
     private let acceptanceTimestamp: UInt64 = 1_000
+    private let acceptanceId = "acceptance"
 
-    @Test func unpublishedAcceptanceIsPendingWithoutPeriod() async throws {
-        try await insertAcceptance()
-
-        let candidates = try await makeStore().pendingAcceptances()
-
-        #expect(candidates.map(\.requestId) == [requestId])
-        #expect(candidates.first?.period == nil)
-        #expect(candidates.first?.session.peer.accountId == peer)
-    }
-
-    @Test func markPublishedRecordsPeriodAndKeepsAcceptancePending() async throws {
+    @Test func newAcceptanceAwaitsPublicationWithoutPeriod() async throws {
         try await insertAcceptance()
         let store = makeStore()
-        let candidate = try #require(try await store.pendingAcceptances().first)
+
+        let candidate = try #require(try await store.acceptance(messageId: acceptanceId))
+
+        #expect(candidate.requestId == requestId)
+        #expect(candidate.period == nil)
+        #expect(candidate.session.peer.accountId == peer)
+        #expect(try await store.isAwaitingPublication(messageId: acceptanceId))
+        #expect(try await store.sentAcceptances().isEmpty)
+    }
+
+    @Test func markPublishedMovesAcceptanceToRenewal() async throws {
+        try await insertAcceptance()
+        let store = makeStore()
+        let candidate = try #require(try await store.acceptance(messageId: acceptanceId))
 
         try await store.markPublished(candidate, period: 42)
 
-        let republished = try await store.pendingAcceptances()
-        #expect(republished.map(\.period) == [42])
-        #expect(republished.first?.message.status == .outgoing(.sent))
+        let sent = try await store.sentAcceptances()
+        #expect(sent.map(\.period) == [42])
+        #expect(sent.first?.message.status == .outgoing(.sent))
+        #expect(try await !store.isAwaitingPublication(messageId: acceptanceId))
     }
 
     @Test func markAcknowledgedEndsRenewal() async throws {
         try await insertAcceptance()
         let store = makeStore()
-        let candidate = try #require(try await store.pendingAcceptances().first)
+        let candidate = try #require(try await store.acceptance(messageId: acceptanceId))
+        try await store.markPublished(candidate, period: 42)
 
         try await store.markAcknowledged(candidate)
 
-        #expect(try await store.pendingAcceptances().isEmpty)
+        #expect(try await store.sentAcceptances().isEmpty)
     }
 
     @Test func laterIncomingMessageAcknowledges() async throws {
@@ -73,13 +79,13 @@ private extension ChatAcceptanceStoreTests {
 
     func isAcknowledged() async throws -> Bool {
         let store = makeStore()
-        let candidate = try #require(try await store.pendingAcceptances().first)
+        let candidate = try #require(try await store.acceptance(messageId: acceptanceId))
         return try await store.isAcknowledged(candidate)
     }
 
     func insertAcceptance() async throws {
         let acceptance = Chat.LocalMessage(
-            messageId: UUID().uuidString,
+            messageId: acceptanceId,
             chatId: chatId,
             origin: .user,
             creationSource: .localDevice,

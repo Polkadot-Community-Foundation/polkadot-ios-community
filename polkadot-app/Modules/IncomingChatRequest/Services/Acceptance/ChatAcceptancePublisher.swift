@@ -1,143 +1,71 @@
 import Foundation
-import FoundationExt
-import Individuality
-import MessageExchangeKit
-import StatementStore
+import CommonService
 
-protocol ChatAcceptancePublishing: Sendable {
-    func sync() async
-}
+protocol ChatAcceptancePublishing: ApplicationServiceProtocol {}
 
-struct ChatAcceptancePublisherDependencies {
-    let store: ChatAcceptanceStoring
-    let allocator: NotificationStatementAccountAllocating
-    let signManager: StatementStoreSignerManaging
-    let requestFactory: IdentityRouteRequestMaking
-    let submitter: StatementStoreSubmitting
-    let deviceActivator: SenderDeviceActivating
-}
-
-/// Publishes acceptances on the identity route from a one-shot account per period
-/// until the requester's device-route traffic acknowledges them.
-actor ChatAcceptancePublisher {
-    private let dependencies: ChatAcceptancePublisherDependencies
-    private let dateProvider: DateProviding
-    private let issueDiagnostics: ChatAcceptanceIssueDiagnostics
+/// Hands every new acceptance to the delivery service once; re-emitted snapshots don't start a second delivery.
+final class ChatAcceptancePublisher {
+    private let messageProviderFactory: ChatMessageDataProviderMaking
+    private let deliveryService: ChatAcceptanceDelivering
+    private let deliveries = ChatAcceptanceDeliveries()
     private let logger: LoggerProtocol
 
-    private var isSyncing = false
-    private var needsResync = false
+    private var subscriptionTask: Task<Void, Never>?
 
     init(
-        dependencies: ChatAcceptancePublisherDependencies,
-        dateProvider: DateProviding,
-        issueDiagnostics: ChatAcceptanceIssueDiagnostics,
+        messageProviderFactory: ChatMessageDataProviderMaking,
+        deliveryService: ChatAcceptanceDelivering,
         logger: LoggerProtocol
     ) {
-        self.dependencies = dependencies
-        self.dateProvider = dateProvider
-        self.issueDiagnostics = issueDiagnostics
+        self.messageProviderFactory = messageProviderFactory
+        self.deliveryService = deliveryService
         self.logger = logger
     }
 }
 
 extension ChatAcceptancePublisher: ChatAcceptancePublishing {
-    // Actor methods interleave at suspension points, so a sync requested mid-run is folded into one more pass.
-    func sync() async {
-        guard !isSyncing else {
-            needsResync = true
-            return
+    func setup() {
+        guard subscriptionTask == nil else { return }
+
+        subscriptionTask = Task { [messageProviderFactory, deliveryService, deliveries, logger] in
+            let stream = messageProviderFactory.subscribeMessages(with: .newLocalDeviceChatAcceptances())
+
+            do {
+                for try await messages in stream {
+                    await deliveries.start(messages.map(\.messageId), using: deliveryService)
+                }
+            } catch {
+                logger.error("Chat acceptance subscription failed: \(error)")
+            }
         }
+    }
 
-        isSyncing = true
-        defer { isSyncing = false }
+    func throttle() {
+        subscriptionTask?.cancel()
+        subscriptionTask = nil
 
-        repeat {
-            needsResync = false
-            await syncPendingAcceptances()
-        } while needsResync
+        Task { [deliveries] in await deliveries.cancelAll() }
     }
 }
 
-private extension ChatAcceptancePublisher {
-    static let renewalBound: TimeInterval = 7 * 86_400
+private actor ChatAcceptanceDeliveries {
+    private var inFlight: [String: Task<Void, Never>] = [:]
 
-    func syncPendingAcceptances() async {
-        do {
-            let candidates = try await dependencies.store.pendingAcceptances()
-
-            guard !candidates.isEmpty else { return }
-
-            let period = try await dependencies.allocator.currentPeriod()
-            let now = await dateProvider.read()
-
-            for candidate in candidates {
-                await process(candidate, period: period, now: now)
+    func start(_ messageIds: [String], using deliveryService: ChatAcceptanceDelivering) {
+        for messageId in messageIds where inFlight[messageId] == nil {
+            inFlight[messageId] = Task {
+                await deliveryService.deliverUntilDone(messageId: messageId)
+                self.finish(messageId)
             }
-        } catch {
-            logger.error("Chat acceptance sync failed: \(error)")
         }
     }
 
-    func process(_ candidate: ChatAcceptanceCandidate, period: UInt32, now: Date) async {
-        let messageId = candidate.message.messageId
-
-        do {
-            if try await dependencies.store.isAcknowledged(candidate) {
-                try await dependencies.store.markAcknowledged(candidate)
-                return
-            }
-
-            guard candidate.period != period else { return }
-
-            guard now.timeIntervalSince(Date.fromChatTimestamp(candidate.message.timestamp)) <= Self.renewalBound
-            else {
-                issueDiagnostics.unacknowledged.recordFailure(for: messageId, error: nil, counters: [:])
-                return
-            }
-
-            try await publish(candidate, period: period)
-            issueDiagnostics.publishFailing.recordRecovery(for: messageId)
-        } catch {
-            logger.error("Chat acceptance \(messageId) not published in \(period): \(error)")
-            issueDiagnostics.publishFailing.recordFailure(for: messageId, error: error, counters: [:])
-        }
+    func cancelAll() {
+        inFlight.values.forEach { $0.cancel() }
+        inFlight.removeAll()
     }
 
-    func publish(_ candidate: ChatAcceptanceCandidate, period: UInt32) async throws {
-        guard let remoteMessage = candidate.message.toRemote() else {
-            throw ChatAcceptancePublisherError.notRemote
-        }
-
-        let signer = try dependencies.signManager.makeSigner(
-            for: ChatKeyPaths.accept(requestId: candidate.requestId, period: period)
-        )
-
-        try await dependencies.allocator.allocate(
-            signer.accountId,
-            timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
-        )
-
-        let statement = try dependencies.requestFactory.makeRequestStatement(
-            for: candidate.session,
-            requestId: candidate.message.messageId,
-            message: Chat.OpaqueMessage(remoteMessage: remoteMessage),
-            signer: signer
-        )
-
-        try await dependencies.submitter.submitStatement(with: statement)
-
-        if candidate.period == nil {
-            try await dependencies.deviceActivator.activate(
-                requestId: candidate.requestId,
-                peerAccountId: candidate.session.peer.accountId
-            )
-        }
-
-        try await dependencies.store.markPublished(candidate, period: period)
+    private func finish(_ messageId: String) {
+        inFlight[messageId] = nil
     }
-}
-
-enum ChatAcceptancePublisherError: Error {
-    case notRemote
 }

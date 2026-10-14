@@ -27,7 +27,11 @@ protocol ChatRequestServiceMaking {
 
     func makeOutgoingChatRequestContext() async throws -> OutgoingChatRequestCoordinationContext
 
-    func makeChatAcceptancePublisher() async throws -> ChatAcceptancePublishing
+    func makeChatAcceptancePublisher(
+        messageProviderFactory: ChatMessageDataProviderMaking
+    ) async throws -> ChatAcceptancePublishing
+
+    func makeChatAcceptanceRenewer() async throws -> ChatAcceptanceRenewing
 }
 
 actor ChatRequestServiceFactory {
@@ -187,22 +191,20 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         )
     }
 
-    func makeChatAcceptancePublisher() async throws -> ChatAcceptancePublishing {
+    func makeChatAcceptancePublisher(
+        messageProviderFactory: ChatMessageDataProviderMaking
+    ) async throws -> ChatAcceptancePublishing {
         let encryptionManager = makeAccountEncryptionManager()
         let signManager = makeAccountSignManager()
         let messageExchangeModeProvider = try ChatMessageExchangeModeProvider(
             tld: DotNsTldProviderFacade.shared.currentTldOrError()
         )
 
-        let dependencies = try await ChatAcceptancePublisherDependencies(
+        let dependencies = try await ChatAcceptanceDeliveryDependencies(
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
-            signManager: signManager,
-            requestFactory: IdentityRouteRequestFactory(
-                encryptionManager: encryptionManager,
-                signerManager: signManager
-            ),
-            submitter: makeConnection(),
+            signers: ChatAcceptanceSigners(signManager: signManager),
+            statementService: makeAcceptanceStatementService(),
             deviceActivator: SenderDeviceActivator(
                 contactsStorageService: ContactsLocalStorageService(),
                 chatRequestStoreService: makeRequestStoreService(
@@ -214,7 +216,29 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             )
         )
 
+        let deliveryService = ChatAcceptanceDeliveryService(
+            dependencies: dependencies,
+            execution: ChatRequestDeliveryExecution(backgroundExecutor: backgroundExecutor),
+            issueDiagnostics: .make(reporter: issueReporter),
+            logger: logger
+        )
+
         return ChatAcceptancePublisher(
+            messageProviderFactory: messageProviderFactory,
+            deliveryService: deliveryService,
+            logger: logger
+        )
+    }
+
+    func makeChatAcceptanceRenewer() async throws -> ChatAcceptanceRenewing {
+        let dependencies = try await ChatAcceptanceRenewalDependencies(
+            store: ChatAcceptanceStore(storageFacade: storageFacade),
+            allocator: notificationAllocator,
+            signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
+            statementService: makeAcceptanceStatementService()
+        )
+
+        return ChatAcceptanceRenewer(
             dependencies: dependencies,
             dateProvider: NowDateProvider(),
             issueDiagnostics: .make(reporter: issueReporter),
@@ -249,6 +273,16 @@ private extension ChatRequestServiceFactory {
                 logger: logger
             ),
             deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared
+        )
+    }
+
+    func makeAcceptanceStatementService() async throws -> ChatAcceptanceStatementServicing {
+        try await ChatAcceptanceStatementService(
+            requestFactory: IdentityRouteRequestFactory(
+                encryptionManager: makeAccountEncryptionManager(),
+                signerManager: makeAccountSignManager()
+            ),
+            connection: makeConnection()
         )
     }
 
