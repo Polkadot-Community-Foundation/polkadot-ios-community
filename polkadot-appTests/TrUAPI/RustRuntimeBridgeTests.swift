@@ -15,7 +15,12 @@ import UIKitExt
 // MARK: - Helpers
 
 private func makeRegistryPool(chainRegistry: ChainRegistryProtocol) -> TrUAPIV2SpecConnectionPool {
-    TrUAPIV2SpecConnectionPool.makeChainConnections(chainRegistry: chainRegistry, logger: Logger.shared)
+    TrUAPIV2SpecConnectionPool(
+        chainRegistry: chainRegistry,
+        applicationHandler: MockApplicationHandler(),
+        dateProvider: MockDateProvider(),
+        logger: Logger.shared
+    )
 }
 
 private func makeTestDefaults() -> UserDefaults {

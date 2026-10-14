@@ -2,6 +2,7 @@ import Foundation
 import os
 import ChainRegistry
 import Foundation_iOS
+import FoundationExt
 import SDKLogger
 
 /// One dedicated node socket per core `chain_connect`; socket deaths are reported, never hidden by reconnects.
@@ -12,9 +13,6 @@ import SDKLogger
 /// socket that lived through the background is revalidated: after a long absence all are expired,
 /// after a short one each is probed and expired only if silent.
 public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked Sendable {
-    /// `attempt` selects the node; it grows per chain so a reconnect after a dead node lands on the next one.
-    public typealias SocketResolver = @Sendable (_ genesisHash: Data, _ attempt: Int) -> ChainSocketProtocol?
-
     public struct ResumePolicy: Sendable {
         /// Background time after which sockets are expired instead of probed.
         public let expiryThreshold: TimeInterval
@@ -33,8 +31,11 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
         var sockets: [UInt32: ChainSocketProtocol] = [:]
         var connectionIds: [ObjectIdentifier: UInt32] = [:]
         var nextConnectionId: UInt32 = 1
-        var nodeAttempts: [Data: Int] = [:]
+        /// Grows per chain so a reconnect after a dead node lands on the next one.
+        var nodeAttempts: [ChainModel.Id: Int] = [:]
         var backgroundedAt: Date?
+        /// Tail of the serial chain that keeps background and foreground handling in order.
+        var lifecycleTask: Task<Void, Never>?
     }
 
     public var eventHandler: TrUAPIChainEventHandling? {
@@ -42,50 +43,31 @@ public final class TrUAPIV2SpecConnectionPool: TrUAPIChainConnecting, @unchecked
         set { state.withLockUnchecked { $0.eventHandler = newValue } }
     }
 
-    private let socketResolver: SocketResolver
+    private let chainRegistry: ChainRegistryProtocol
     private let applicationHandler: ApplicationHandlerProtocol
+    private let dateProvider: DateProviding
     private let resumePolicy: ResumePolicy
     private let logger: SDKLoggerProtocol
-    private let now: @Sendable () -> Date
     private let state = OSAllocatedUnfairLock(uncheckedState: State())
 
     public init(
-        socketResolver: @escaping SocketResolver,
+        chainRegistry: ChainRegistryProtocol,
         applicationHandler: ApplicationHandlerProtocol,
+        dateProvider: DateProviding,
         resumePolicy: ResumePolicy = .default,
-        logger: SDKLoggerProtocol,
-        now: @escaping @Sendable () -> Date = Date.init
+        logger: SDKLoggerProtocol
     ) {
-        self.socketResolver = socketResolver
+        self.chainRegistry = chainRegistry
         self.applicationHandler = applicationHandler
+        self.dateProvider = dateProvider
         self.resumePolicy = resumePolicy
         self.logger = logger
-        self.now = now
 
         applicationHandler.delegate = self
     }
 
-    /// Each pool needs its own handler: `ApplicationHandlerProtocol` holds a single delegate.
-    public static func makeChainConnections(
-        chainRegistry: ChainRegistryProtocol,
-        applicationHandler: ApplicationHandlerProtocol = ApplicationHandler(),
-        logger: SDKLoggerProtocol
-    ) -> TrUAPIV2SpecConnectionPool {
-        TrUAPIV2SpecConnectionPool(
-            socketResolver: { [chainRegistry] genesisHash, attempt in
-                chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap {
-                    chainRegistry.makeChainSocket(for: $0.chainId, attempt: attempt)
-                }
-            },
-            applicationHandler: applicationHandler,
-            logger: logger
-        )
-    }
-
     public func connect(genesisHash: Data) -> UInt32? {
-        let attempt = state.withLockUnchecked { $0.takeNodeAttempt(for: genesisHash) }
-
-        guard let socket = socketResolver(genesisHash, attempt) else {
+        guard let socket = makeSocket(for: genesisHash) else {
             logger.debug("TrUAPI chain \(genesisHash.toHex()) has no host-managed connection; unsupported")
             return nil
         }
@@ -160,26 +142,66 @@ extension TrUAPIV2SpecConnectionPool: ChainSocketDelegate {
 
 extension TrUAPIV2SpecConnectionPool: ApplicationHandlerDelegate {
     public func didReceiveDidEnterBackground(notification _: Notification) {
-        let enteredAt = now()
+        enqueueLifecycleEvent { pool in
+            await pool.markBackgrounded()
+        }
+    }
+
+    public func didReceiveWillEnterForeground(notification _: Notification) {
+        enqueueLifecycleEvent { pool in
+            await pool.revalidateAfterBackground()
+        }
+    }
+}
+
+extension TrUAPIV2SpecConnectionPool {
+    /// Waits until every background/foreground notification received so far has been handled.
+    func awaitLifecycleEvents() async {
+        await state.withLockUnchecked { $0.lifecycleTask }?.value
+    }
+}
+
+private extension TrUAPIV2SpecConnectionPool {
+    func makeSocket(for genesisHash: Data) -> ChainSocketProtocol? {
+        guard let chain = chainRegistry.getChainByGenesis(for: genesisHash.toHex()) else { return nil }
+
+        let attempt = state.withLockUnchecked { $0.takeNodeAttempt(for: chain.chainId) }
+        return chainRegistry.makeChainSocket(for: chain.chainId, attempt: attempt)
+    }
+
+    // Date reads are async, so each event runs after the previous one to keep background before foreground.
+    func enqueueLifecycleEvent(_ handle: @escaping @Sendable (TrUAPIV2SpecConnectionPool) async -> Void) {
+        state.withLockUnchecked { state in
+            let previous = state.lifecycleTask
+            state.lifecycleTask = Task { [weak self] in
+                await previous?.value
+                guard let self else { return }
+                await handle(self)
+            }
+        }
+    }
+
+    func markBackgrounded() async {
+        let enteredAt = await dateProvider.read()
 
         state.withLockUnchecked { state in
             state.backgroundedAt = state.backgroundedAt ?? enteredAt
         }
     }
 
-    public func didReceiveWillEnterForeground(notification _: Notification) {
-        let (backgroundedAt, sockets) = state.withLockUnchecked { state in
-            defer { state.backgroundedAt = nil }
-            return (state.backgroundedAt, Array(state.sockets.values))
+    func revalidateAfterBackground() async {
+        guard let backgroundedAt = state.withLockUnchecked({ $0.backgroundedAt }) else { return }
+
+        let duration = await dateProvider.read().timeIntervalSince(backgroundedAt)
+
+        let sockets = state.withLockUnchecked { state in
+            state.backgroundedAt = nil
+            return Array(state.sockets.values)
         }
 
-        guard let backgroundedAt else { return }
-
-        revalidate(sockets, afterBackground: now().timeIntervalSince(backgroundedAt))
+        revalidate(sockets, afterBackground: duration)
     }
-}
 
-private extension TrUAPIV2SpecConnectionPool {
     // Socket callbacks re-enter the pool lock, so sockets are touched only outside it.
     func revalidate(_ sockets: [ChainSocketProtocol], afterBackground duration: TimeInterval) {
         guard !sockets.isEmpty else { return }
@@ -195,9 +217,9 @@ private extension TrUAPIV2SpecConnectionPool {
 }
 
 private extension TrUAPIV2SpecConnectionPool.State {
-    mutating func takeNodeAttempt(for genesisHash: Data) -> Int {
-        let attempt = nodeAttempts[genesisHash, default: 0]
-        nodeAttempts[genesisHash] = attempt + 1
+    mutating func takeNodeAttempt(for chainId: ChainModel.Id) -> Int {
+        let attempt = nodeAttempts[chainId, default: 0]
+        nodeAttempts[chainId] = attempt + 1
         return attempt
     }
 

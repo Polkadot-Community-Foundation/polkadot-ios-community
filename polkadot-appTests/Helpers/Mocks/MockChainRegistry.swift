@@ -14,8 +14,8 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     private var storedChainsByGenesis: [String: ChainModel] = [:]
     private var storedRuntimeProviders: [String: RuntimeProviderProtocol] = [:]
     private var storedConnectionsByChainId: [ChainModel.Id: ChainConnection] = [:]
-    private var storedChainSocketsById: [ChainModel.Id: ChainSocketProtocol] = [:]
-    private var storedChainSocketAttempts: [Int] = []
+    private var storedChainSockets: [ChainModel.Id: [ChainSocketProtocol]] = [:]
+    private var storedChainSocketRequests: [(chainId: ChainModel.Id, attempt: Int)] = []
 
     var chainsByGenesis: [String: ChainModel] {
         get { mutex.withLock { storedChainsByGenesis } }
@@ -32,13 +32,15 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
         set { mutex.withLock { storedConnectionsByChainId = newValue } }
     }
 
-    var chainSocketsById: [ChainModel.Id: ChainSocketProtocol] {
-        get { mutex.withLock { storedChainSocketsById } }
-        set { mutex.withLock { storedChainSocketsById = newValue } }
+    /// `makeChainSocket` calls, in order.
+    var chainSocketRequests: [(chainId: ChainModel.Id, attempt: Int)] {
+        mutex.withLock { storedChainSocketRequests }
     }
 
-    /// Node attempts passed to `makeChainSocket`, in call order.
-    var chainSocketAttempts: [Int] { mutex.withLock { storedChainSocketAttempts } }
+    /// Queues sockets `makeChainSocket` hands out for `chainId` in order; it returns nil once they run out.
+    func enqueueChainSockets(_ sockets: [ChainSocketProtocol], for chainId: ChainModel.Id) {
+        mutex.withLock { storedChainSockets[chainId, default: []].append(contentsOf: sockets) }
+    }
 
     /// Chains delivered to a new subscriber. Empty by default, so subscribing stays a no-op.
     var chainsOnSubscribe: [ChainModel] = []
@@ -62,8 +64,13 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     func getOneShotConnection(for _: ChainModel.Id) -> JSONRPCEngine? { nil }
     func makeChainSocket(for chainId: ChainModel.Id, attempt: Int) -> ChainSocketProtocol? {
         mutex.withLock {
-            storedChainSocketAttempts.append(attempt)
-            return storedChainSocketsById[chainId]
+            storedChainSocketRequests.append((chainId, attempt))
+
+            guard var queue = storedChainSockets[chainId], !queue.isEmpty else { return nil }
+
+            let socket = queue.removeFirst()
+            storedChainSockets[chainId] = queue
+            return socket
         }
     }
 

@@ -3,6 +3,8 @@ import UIKit
 import UIKitExt
 import TrUAPIHost
 import ChainRegistry
+import Foundation_iOS
+import FoundationExt
 import Products
 import SubstrateSdk
 import KeyDerivation
@@ -82,8 +84,10 @@ final class TrUAPIHostRuntimeProvider: TrUAPIHostRuntimeProviding, @unchecked Se
             networkSuffix: networkSuffix
         )
 
-        let chainConnections = TrUAPIV2SpecConnectionPool.makeChainConnections(
+        let chainConnections = TrUAPIV2SpecConnectionPool(
             chainRegistry: chainRegistry,
+            applicationHandler: ApplicationHandler(),
+            dateProvider: NowDateProvider(),
             logger: logger
         )
 
