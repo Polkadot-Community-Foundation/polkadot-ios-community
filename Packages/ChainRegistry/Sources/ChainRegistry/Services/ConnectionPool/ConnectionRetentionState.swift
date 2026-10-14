@@ -11,17 +11,11 @@ final class ConnectionRetentionState {
     struct Effect {
         var wake: [ChainConnection] = []
         var sleep: [ChainConnection] = []
-        var closeChainSockets = false
     }
 
     private var retainCounts: [ObjectIdentifier: Int] = [:]
     private var allRetainCount = 0
     private var isSleeping = false
-
-    /// A socket opened now would cross an app suspension unnoticed, so new chain sockets are refused.
-    var suspendsChainSockets: Bool {
-        isSleeping && allRetainCount == 0
-    }
 
     func retain(
         _ scope: ResolvedScope,
@@ -54,7 +48,7 @@ final class ConnectionRetentionState {
             return Effect()
         }
 
-        return Effect(sleep: unretained(connections), closeChainSockets: true)
+        return Effect(sleep: unretained(connections))
     }
 
     func becomeActive() {
@@ -156,7 +150,7 @@ private extension ConnectionRetentionState {
             return Effect()
         }
 
-        return Effect(sleep: unretained(currentConnections), closeChainSockets: true)
+        return Effect(sleep: unretained(currentConnections))
     }
 
     func unretained(_ connections: [ChainConnection]) -> [ChainConnection] {

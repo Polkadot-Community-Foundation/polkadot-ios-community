@@ -15,7 +15,6 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     private var storedRuntimeProviders: [String: RuntimeProviderProtocol] = [:]
     private var storedConnectionsByChainId: [ChainModel.Id: ChainConnection] = [:]
     private var storedChainSocketsById: [ChainModel.Id: ChainSocketProtocol] = [:]
-    private var storedChainSocketError: Error?
 
     var chainsByGenesis: [String: ChainModel] {
         get { mutex.withLock { storedChainsByGenesis } }
@@ -35,12 +34,6 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     var chainSocketsById: [ChainModel.Id: ChainSocketProtocol] {
         get { mutex.withLock { storedChainSocketsById } }
         set { mutex.withLock { storedChainSocketsById = newValue } }
-    }
-
-    /// Thrown by `makeChainSocket` when set, e.g. `ConnectionPoolError.suspended`.
-    var chainSocketError: Error? {
-        get { mutex.withLock { storedChainSocketError } }
-        set { mutex.withLock { storedChainSocketError = newValue } }
     }
 
     /// Chains delivered to a new subscriber. Empty by default, so subscribing stays a no-op.
@@ -63,11 +56,7 @@ final class MockChainRegistry: ChainRegistryProtocol, @unchecked Sendable {
     func getChainByGenesis(for genesisHash: ChainModel.Id) -> ChainModel? { chainsByGenesis[genesisHash] }
     func getConnection(for chainId: ChainModel.Id) -> ChainConnection? { connectionsByChainId[chainId] }
     func getOneShotConnection(for _: ChainModel.Id) -> JSONRPCEngine? { nil }
-    func makeChainSocket(for chainId: ChainModel.Id) throws -> ChainSocketProtocol? {
-        if let chainSocketError { throw chainSocketError }
-        return chainSocketsById[chainId]
-    }
-
+    func makeChainSocket(for chainId: ChainModel.Id) -> ChainSocketProtocol? { chainSocketsById[chainId] }
     func retainConnections(_: ConnectionRetainScope) -> ConnectionRetainToken { ConnectionRetainToken() }
     func getRuntimeProvider(for chainId: ChainModel.Id) -> RuntimeProviderProtocol? { runtimeProviders[chainId] }
     func switchSync(mode _: ChainSyncMode, chainId _: ChainModel.Id) throws {}

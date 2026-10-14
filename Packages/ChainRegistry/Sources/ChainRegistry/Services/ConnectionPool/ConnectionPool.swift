@@ -11,11 +11,8 @@ public protocol ConnectionPoolProtocol {
     func getOneShotConnection(for chain: ChainModel) -> JSONRPCEngine?
     func deactivateConnection(for chainId: ChainModel.Id)
 
-    func makeChainSocket(for chain: ChainModel) throws -> ChainSocket
-}
-
-public enum ConnectionPoolError: Error {
-    case suspended
+    /// Creates an unopened socket, rotating through the chain's nodes on each call.
+    func makeChainSocket(for chain: ChainModel) throws -> ChainSocketProtocol
 }
 
 public protocol ConnectionStateSubscription: AnyObject {
@@ -49,7 +46,6 @@ public class ConnectionPool {
 
     private(set) var stateSubscriptions: [ChainModel.Id: [WeakWrapper]] = [:]
 
-    private var chainSockets: [WeakWrapper] = []
     private var chainSocketAttempts: [ChainModel.Id: Int] = [:]
 
     private func clearUnusedConnections() {
@@ -178,22 +174,15 @@ extension ConnectionPool: ConnectionPoolProtocol {
         }
     }
 
-    public func makeChainSocket(for chain: ChainModel) throws -> ChainSocket {
+    public func makeChainSocket(for chain: ChainModel) throws -> ChainSocketProtocol {
         mutex.lock()
 
         defer { mutex.unlock() }
 
-        guard !retention.suspendsChainSockets else {
-            throw ConnectionPoolError.suspended
-        }
-
         let attempt = chainSocketAttempts[chain.chainId, default: 0]
         chainSocketAttempts[chain.chainId] = attempt + 1
 
-        let socket = try connectionFactory.createChainSocket(for: chain, attempt: attempt)
-        chainSockets = chainSockets.filter { $0.target != nil } + [WeakWrapper(target: socket)]
-
-        return socket
+        return try connectionFactory.createChainSocket(for: chain, attempt: attempt)
     }
 
     public func retainConnections(_ scope: ConnectionRetainScope) -> ConnectionRetainToken {
@@ -220,17 +209,15 @@ extension ConnectionPool: ConnectionRetaining {
     func releaseRetain(_ retained: ConnectionRetainToken.Retained) {
         mutex.lock()
 
+        defer {
+            mutex.unlock()
+        }
+
         let effect = retention.release(
             retained,
             currentConnections: liveConnectionsLocked()
         )
         apply(effect)
-
-        let sockets = socketsToClose(for: effect)
-
-        mutex.unlock()
-
-        sleep(sockets)
     }
 }
 
@@ -242,19 +229,6 @@ private extension ConnectionPool {
     func apply(_ effect: ConnectionRetentionState.Effect) {
         effect.wake.forEach { $0.connect() }
         effect.sleep.forEach { $0.disconnect(true) }
-    }
-
-    func socketsToClose(for effect: ConnectionRetentionState.Effect) -> [ChainSocket] {
-        guard effect.closeChainSockets else { return [] }
-
-        let sockets = chainSockets.compactMap { $0.target as? ChainSocket }
-        chainSockets.removeAll()
-        return sockets
-    }
-
-    // Must run outside `mutex`: the delegate may synchronously request a replacement socket.
-    func sleep(_ sockets: [ChainSocket]) {
-        sockets.forEach { $0.shutDown(reason: .sleep) }
     }
 }
 
@@ -346,13 +320,11 @@ extension ConnectionPool: ApplicationHandlerDelegate {
     public func didReceiveDidEnterBackground(notification _: Notification) {
         mutex.lock()
 
+        defer {
+            mutex.unlock()
+        }
+
         let effect = retention.enterBackground(connections: liveConnectionsLocked())
         apply(effect)
-
-        let sockets = socketsToClose(for: effect)
-
-        mutex.unlock()
-
-        sleep(sockets)
     }
 }

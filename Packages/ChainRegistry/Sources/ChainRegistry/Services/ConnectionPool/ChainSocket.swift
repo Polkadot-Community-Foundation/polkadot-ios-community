@@ -32,6 +32,7 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
         weak var delegate: ChainSocketDelegate?
         var pingTimer: DispatchSourceTimer?
         var pongDeadline: DispatchWorkItem?
+        var connectDeadline: DispatchWorkItem?
     }
 
     public var delegate: ChainSocketDelegate? {
@@ -80,14 +81,21 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
     }
 
     public func open() {
+        // Starscream's own timeout stops at TCP readiness; this one also bounds the WebSocket upgrade.
+        let deadline = DispatchWorkItem { [weak self] in
+            self?.shutDown(reason: .connectTimeout)
+        }
+
         let shouldConnect = state.withLockUnchecked { state -> Bool in
             guard state.phase == .idle else { return false }
             state.phase = .connecting
+            state.connectDeadline = deadline
             return true
         }
 
         guard shouldConnect else { return }
         connection.connect()
+        queue.asyncAfter(deadline: .now() + configuration.connectionTimeout, execute: deadline)
     }
 
     public func send(text: String) {
@@ -116,7 +124,19 @@ public final class ChainSocket: ChainSocketProtocol, @unchecked Sendable {
         connection.forceDisconnect()
     }
 
-    func shutDown(reason: ChainSocketCloseReason) {
+    public func expire() {
+        queue.async { [weak self] in
+            self?.shutDown(reason: .resumed)
+        }
+    }
+
+    public func probe(timeout: TimeInterval) {
+        queue.async { [weak self] in
+            self?.sendPing(timeout: timeout)
+        }
+    }
+
+    private func shutDown(reason: ChainSocketCloseReason) {
         let (didClose, delegate) = state.withLockUnchecked { state in
             (state.markClosed(), state.delegate)
         }
@@ -169,6 +189,7 @@ private extension ChainSocket {
         state.withLockUnchecked { [connection] state in
             guard state.phase == .connecting else { return }
             state.phase = .open
+            state.cancelConnectDeadline()
             state.pending.forEach { connection.write(string: $0) }
             state.pending.removeAll()
             state.pingTimer = makePingTimer()
@@ -203,19 +224,29 @@ private extension ChainSocket {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
-            self?.sendPing()
+            self?.sendPeriodicPing()
         }
         timer.resume()
         return timer
     }
 
-    func sendPing() {
+    func sendPeriodicPing() {
+        let isAwaitingPong = state.withLockUnchecked { $0.pongDeadline != nil }
+
+        guard !isAwaitingPong else { return }
+
+        sendPing(timeout: configuration.pongTimeout)
+    }
+
+    // Replaces any pending pong deadline, so a probe can tighten it.
+    func sendPing(timeout: TimeInterval) {
         let deadline = DispatchWorkItem { [weak self] in
             self?.shutDown(reason: .livenessTimeout)
         }
 
         let shouldPing = state.withLockUnchecked { state -> Bool in
-            guard state.phase == .open, state.pongDeadline == nil else { return false }
+            guard state.phase == .open else { return false }
+            state.cancelPongDeadline()
             state.pongDeadline = deadline
             return true
         }
@@ -223,7 +254,7 @@ private extension ChainSocket {
         guard shouldPing else { return }
 
         connection.write(ping: Data(), completion: nil)
-        queue.asyncAfter(deadline: .now() + configuration.pongTimeout, execute: deadline)
+        queue.asyncAfter(deadline: .now() + timeout, execute: deadline)
     }
 }
 
@@ -241,9 +272,15 @@ private extension ChainSocket.State {
         pongDeadline = nil
     }
 
+    mutating func cancelConnectDeadline() {
+        connectDeadline?.cancel()
+        connectDeadline = nil
+    }
+
     mutating func cancelLiveness() {
         pingTimer?.cancel()
         pingTimer = nil
         cancelPongDeadline()
+        cancelConnectDeadline()
     }
 }

@@ -6,6 +6,8 @@ final class MockChainSocket: ChainSocketProtocol, @unchecked Sendable {
 
     private(set) var openCallCount = 0
     private(set) var closeCallCount = 0
+    private(set) var expireCallCount = 0
+    private(set) var probeTimeouts: [TimeInterval] = []
     private(set) var sent: [String] = []
 
     var onOpen: ((MockChainSocket) -> Void)?
@@ -21,6 +23,14 @@ final class MockChainSocket: ChainSocketProtocol, @unchecked Sendable {
 
     func close() {
         closeCallCount += 1
+    }
+
+    func expire() {
+        expireCallCount += 1
+    }
+
+    func probe(timeout: TimeInterval) {
+        probeTimeouts.append(timeout)
     }
 
     func simulateReceive(_ text: String) {

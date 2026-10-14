@@ -16,6 +16,9 @@ final class RecordingWebSocketConnection: WebSocketConnectionProtocol, @unchecke
     let callbackQueue: DispatchQueue
     weak var delegate: WebSocketDelegate?
 
+    /// Runs after each ping is recorded, so a test can answer it.
+    var onPing: (() -> Void)?
+
     private let calls = OSAllocatedUnfairLock(initialState: Calls())
 
     var connectCount: Int { calls.withLock { $0.connectCount } }
@@ -46,6 +49,7 @@ final class RecordingWebSocketConnection: WebSocketConnectionProtocol, @unchecke
 
     func write(ping _: Data, completion _: (() -> Void)?) {
         calls.withLock { $0.pingCount += 1 }
+        onPing?()
     }
 
     func write(pong _: Data, completion _: (() -> Void)?) {}
@@ -110,8 +114,13 @@ extension ChainSocketCloseReason {
         return false
     }
 
-    var isSleep: Bool {
-        if case .sleep = self { return true }
+    var isConnectTimeout: Bool {
+        if case .connectTimeout = self { return true }
+        return false
+    }
+
+    var isResumed: Bool {
+        if case .resumed = self { return true }
         return false
     }
 }

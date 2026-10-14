@@ -152,47 +152,6 @@ struct ConnectionRetentionTests {
 
     // MARK: - Chain sockets
 
-    @Test func backgroundWithoutRetainClosesChainSockets() throws {
-        let pool = makePool()
-        let (socket, delegate) = try openChainSocket(in: pool, chainId: "chain-1")
-
-        pool.enterBackground()
-
-        withExtendedLifetime(socket) {
-            #expect(delegate.closeReasons.count == 1)
-            #expect(delegate.closeReasons.first?.isSleep == true)
-        }
-    }
-
-    @Test func allRetainDefersChainSocketCloseUntilRelease() throws {
-        let pool = makePool()
-        let (socket, delegate) = try openChainSocket(in: pool, chainId: "chain-1")
-
-        let token = pool.retainConnections(.all)
-        pool.enterBackground()
-        #expect(delegate.closeReasons.isEmpty)
-
-        token.release()
-
-        withExtendedLifetime(socket) {
-            #expect(delegate.closeReasons.count == 1)
-            #expect(delegate.closeReasons.first?.isSleep == true)
-        }
-    }
-
-    @Test func perChainRetainDoesNotKeepChainSockets() throws {
-        let pool = makePool()
-        _ = try register(in: pool, id: "chain-1")
-        let (socket, delegate) = try openChainSocket(in: pool, chainId: "chain-1")
-
-        let token = pool.retainConnections(.chains(["chain-1"]))
-        pool.enterBackground()
-
-        withExtendedLifetime((socket, token)) {
-            #expect(delegate.closeReasons.count == 1)
-        }
-    }
-
     @Test func chainSocketsRotateNodesPerChain() throws {
         let factory = StubConnectionFactory()
         let pool = makePool(factory: factory)
@@ -202,39 +161,6 @@ struct ConnectionRetentionTests {
         _ = try pool.makeChainSocket(for: makeChain(id: "chain-2"))
 
         #expect(factory.socketAttempts == ["chain-1": [0, 1], "chain-2": [0]])
-    }
-
-    @Test func chainSocketRefusedWhileBackgrounded() {
-        let pool = makePool()
-
-        pool.enterBackground()
-
-        #expect(throws: ConnectionPoolError.suspended) {
-            try pool.makeChainSocket(for: makeChain(id: "chain-1"))
-        }
-    }
-
-    @Test func allRetainAllowsChainSocketWhileBackgrounded() throws {
-        let pool = makePool()
-        let token = pool.retainConnections(.all)
-        pool.enterBackground()
-
-        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
-
-        token.release()
-
-        #expect(throws: ConnectionPoolError.suspended) {
-            try pool.makeChainSocket(for: makeChain(id: "chain-1"))
-        }
-    }
-
-    @Test func chainSocketAllowedAfterBecomingActive() throws {
-        let pool = makePool()
-        pool.enterBackground()
-
-        pool.becomeActive()
-
-        _ = try pool.makeChainSocket(for: makeChain(id: "chain-1"))
     }
 }
 
@@ -246,17 +172,6 @@ private extension ConnectionRetentionTests {
             connectionFactory: factory,
             applicationHandler: StubApplicationHandler()
         )
-    }
-
-    func openChainSocket(
-        in pool: ConnectionPool,
-        chainId: ChainModel.Id
-    ) throws -> (ChainSocket, RecordingChainSocketDelegate) {
-        let socket = try pool.makeChainSocket(for: makeChain(id: chainId))
-        let delegate = RecordingChainSocketDelegate()
-        socket.delegate = delegate
-        socket.open()
-        return (socket, delegate)
     }
 
     func register(in pool: ConnectionPool, id: ChainModel.Id) throws -> RecordingChainConnection {
@@ -289,10 +204,6 @@ private extension ConnectionRetentionTests {
 private extension ConnectionPool {
     func enterBackground() {
         didReceiveDidEnterBackground(notification: Notification(name: .init("test.background")))
-    }
-
-    func becomeActive() {
-        didReceiveDidBecomeActive(notification: Notification(name: .init("test.active")))
     }
 }
 

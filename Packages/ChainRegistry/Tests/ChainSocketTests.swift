@@ -127,6 +127,75 @@ struct ChainSocketTests {
         #expect(connection.pingCount >= 1)
         #expect(delegate.closeReasons.count == 1)
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func expireReportsResumedOnce() async throws {
+        let (socket, connection, delegate) = try makeSocket()
+        socket.open()
+        socket.handle(.connected([:]))
+
+        let reason = await withCheckedContinuation { continuation in
+            delegate.onClose = { continuation.resume(returning: $0) }
+            socket.expire()
+        }
+        socket.handle(.error(nil))
+
+        #expect(reason.isResumed)
+        #expect(delegate.closeReasons.count == 1)
+        #expect(connection.forceDisconnectCount == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func unansweredProbeClosesWithLivenessTimeout() async throws {
+        let (socket, connection, delegate) = try makeSocket()
+        socket.open()
+        socket.handle(.connected([:]))
+
+        let reason = await withCheckedContinuation { continuation in
+            delegate.onClose = { continuation.resume(returning: $0) }
+            socket.probe(timeout: 0.05)
+        }
+
+        #expect(reason.isLivenessTimeout)
+        #expect(connection.pingCount == 1)
+    }
+
+    @Test func answeredProbeKeepsSocketOpen() async throws {
+        let (socket, connection, delegate) = try makeSocket()
+        socket.open()
+        socket.handle(.connected([:]))
+        connection.onPing = { socket.handle(.pong(nil)) }
+
+        socket.probe(timeout: 0.05)
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(connection.pingCount == 1)
+        #expect(delegate.closeReasons.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func stalledConnectClosesWithConnectTimeout() async throws {
+        let configuration = ChainSocket.Configuration(connectionTimeout: 0.05, pingInterval: 30, pongTimeout: 15)
+        let (socket, _, delegate) = try makeSocket(configuration: configuration)
+
+        let reason = await withCheckedContinuation { continuation in
+            delegate.onClose = { continuation.resume(returning: $0) }
+            socket.open()
+        }
+
+        #expect(reason.isConnectTimeout)
+    }
+
+    @Test func completedConnectCancelsConnectTimeout() async throws {
+        let configuration = ChainSocket.Configuration(connectionTimeout: 0.05, pingInterval: 30, pongTimeout: 15)
+        let (socket, _, delegate) = try makeSocket(configuration: configuration)
+
+        socket.open()
+        socket.handle(.connected([:]))
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(delegate.closeReasons.isEmpty)
+    }
 }
 
 private extension ChainSocketTests {
