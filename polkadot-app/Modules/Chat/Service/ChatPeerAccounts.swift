@@ -37,15 +37,24 @@ extension ChatPeerAccounts: PeerSessionAccountsProviding {
     }
 }
 
-protocol ChatStatementAccountResolving {
-    func statementAccountId(for peerAccountId: AccountId) throws -> AccountId
+protocol ChatStatementSignerResolving {
+    /// Signer of the per-chat statement account toward the peer.
+    func statementSigner(for peerAccountId: AccountId) throws -> StatementStoreSigning
 }
 
-struct ChatStatementAccountResolver: ChatStatementAccountResolving {
+struct ChatStatementSignerResolver: ChatStatementSignerResolving {
     let peerAccounts: ChatPeerAccountsProviding
     let signManager: StatementStoreSignerManaging
 
-    func statementAccountId(for peerAccountId: AccountId) throws -> AccountId {
-        try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId)).accountId
+    init(
+        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts(),
+        signManager: StatementStoreSignerManaging = ChatSignerManager()
+    ) {
+        self.peerAccounts = peerAccounts
+        self.signManager = signManager
+    }
+
+    func statementSigner(for peerAccountId: AccountId) throws -> StatementStoreSigning {
+        try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId))
     }
 }

@@ -6,15 +6,15 @@ import SubstrateSdk
 /// Releases chat allowances whose contact is gone or has no established chat; every established chat keeps renewing.
 final class ChatAllowanceFilter: @unchecked Sendable {
     private let contactsStorageService: ContactsLocalStorageServicing
-    private let statementAccountResolver: ChatStatementAccountResolving
+    private let statementSignerResolver: ChatStatementSignerResolving
     private let statementAccountByPeer = OSAllocatedUnfairLock<[AccountId: AccountId]>(initialState: [:])
 
     init(
         contactsStorageService: ContactsLocalStorageServicing,
-        statementAccountResolver: ChatStatementAccountResolving
+        statementSignerResolver: ChatStatementSignerResolving
     ) {
         self.contactsStorageService = contactsStorageService
-        self.statementAccountResolver = statementAccountResolver
+        self.statementSignerResolver = statementSignerResolver
     }
 }
 
@@ -38,7 +38,7 @@ private extension ChatAllowanceFilter {
             return cached
         }
 
-        let accountId = try statementAccountResolver.statementAccountId(for: peer)
+        let accountId = try statementSignerResolver.statementSigner(for: peer).accountId
         statementAccountByPeer.withLock { $0[peer] = accountId }
         return accountId
     }

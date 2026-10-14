@@ -11,13 +11,20 @@ struct PerChatRequestAccountsTests {
     private let peerAccountId = Data(repeating: 0xAB, count: 32)
     private let peerAccounts = ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot"))
 
+    private var signerResolver: ChatStatementSignerResolver {
+        ChatStatementSignerResolver(
+            peerAccounts: peerAccounts,
+            signManager: ChatSignerManager(entropyManager: entropyManager)
+        )
+    }
+
     @Test func innerRequestProofIsSignedByPerChatAccount() throws {
         let acceptorKey = Curve25519.KeyAgreement.PrivateKey()
         let factory = ChatRequestFactory(
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             signManager: ChatSignerManager(entropyManager: entropyManager),
             remoteContactResolver: MockRemoteContactResolver(result: .success(nil)),
-            peerAccounts: peerAccounts
+            statementSignerResolver: signerResolver
         )
 
         let encrypted = try factory.createRemoteRequest(
@@ -56,8 +63,7 @@ struct PerChatRequestAccountsTests {
             ),
             deviceEncryptionKeyManager: deviceKeyManager,
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
-            signManager: ChatSignerManager(entropyManager: entropyManager),
-            peerAccounts: peerAccounts
+            statementSignerResolver: signerResolver
         )
         let ownKeyId = Chat.Contact.Own(
             signKeyId: WalletDerivationPath.main(for: "dot"),

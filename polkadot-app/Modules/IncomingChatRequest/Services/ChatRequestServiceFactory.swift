@@ -88,7 +88,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         let chatRequestFactory = ChatRequestFactory(
             encryptionManager: encryptionManager,
             signManager: signManager,
-            remoteContactResolver: remoteContactResolver
+            remoteContactResolver: remoteContactResolver,
+            statementSignerResolver: ChatStatementSignerResolver(signManager: signManager)
         )
 
         return ChatDiscoveryService(
@@ -114,7 +115,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         let chatRequestFactory = ChatRequestFactory(
             encryptionManager: encryptionManager,
             signManager: signManager,
-            remoteContactResolver: remoteContactResolver
+            remoteContactResolver: remoteContactResolver,
+            statementSignerResolver: ChatStatementSignerResolver(signManager: signManager)
         )
 
         return IncomingChatRequestService(
@@ -139,7 +141,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         let chatRequestFactory = ChatRequestFactory(
             encryptionManager: encryptionManager,
             signManager: accountSignManager,
-            remoteContactResolver: remoteContactResolver
+            remoteContactResolver: remoteContactResolver,
+            statementSignerResolver: ChatStatementSignerResolver(signManager: accountSignManager)
         )
 
         return OutgoingChatRequestService(
@@ -272,7 +275,8 @@ private extension ChatRequestServiceFactory {
                 sessionIdFactory: PeerSessionIdFactory(),
                 logger: logger
             ),
-            deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared
+            deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared,
+            statementSignerResolver: ChatStatementSignerResolver(signManager: signManager)
         )
     }
 

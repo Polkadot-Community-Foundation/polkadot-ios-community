@@ -36,10 +36,7 @@ extension AllowanceManagerFacade {
     private static func makeCleanupService(sssManager: AllowanceManaging) -> AllowanceCleanupServicing {
         let chatFilter = ChatAllowanceFilter(
             contactsStorageService: ContactsLocalStorageService(),
-            statementAccountResolver: ChatStatementAccountResolver(
-                peerAccounts: ChatPeerAccounts(),
-                signManager: ChatSignerManager()
-            )
+            statementSignerResolver: ChatStatementSignerResolver()
         )
 
         return AllowanceCleanupService(

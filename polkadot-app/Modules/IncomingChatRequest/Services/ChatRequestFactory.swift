@@ -29,18 +29,18 @@ final class ChatRequestFactory {
     let encryptionManager: MessageExchangeEncryptionManaging
     let signManager: StatementStoreSignerManaging
     let remoteContactResolver: RemoteContactResolving
-    let peerAccounts: ChatPeerAccountsProviding
+    let statementSignerResolver: ChatStatementSignerResolving
 
     init(
         encryptionManager: MessageExchangeEncryptionManaging,
         signManager: StatementStoreSignerManaging,
         remoteContactResolver: RemoteContactResolving,
-        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts()
+        statementSignerResolver: ChatStatementSignerResolving
     ) {
         self.encryptionManager = encryptionManager
         self.signManager = signManager
         self.remoteContactResolver = remoteContactResolver
-        self.peerAccounts = peerAccounts
+        self.statementSignerResolver = statementSignerResolver
     }
 }
 
@@ -56,7 +56,7 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
         )
         .scaleEncoded()
 
-        let proof = try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId)).sign(messageData)
+        let proof = try statementSignerResolver.statementSigner(for: peerAccountId).sign(messageData)
 
         let remoteModel = ChatRequest.RemoteModel(
             message: message,

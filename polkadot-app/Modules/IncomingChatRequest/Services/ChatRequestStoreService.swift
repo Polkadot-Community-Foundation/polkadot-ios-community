@@ -48,9 +48,8 @@ final class ChatRequestStoreService {
     let deviceEncryptionKeyManager: DeviceEncryptionKeyManaging
     let messageExchangeModeProvider: MessageExchangeModeProviding
     let encryptionManager: MessageExchangeEncryptionManaging
-    let signManager: StatementStoreSignerManaging
     let walletRepo: WalletManagerRepositoryProtocol
-    let peerAccounts: ChatPeerAccountsProviding
+    let statementSignerResolver: ChatStatementSignerResolving
 
     init(
         messageExchangeModeProvider: MessageExchangeModeProviding,
@@ -58,18 +57,16 @@ final class ChatRequestStoreService {
         pushIdFactory: ChatPushIdMaking,
         deviceEncryptionKeyManager: DeviceEncryptionKeyManaging,
         encryptionManager: MessageExchangeEncryptionManaging = ChatEncryptionManager(),
-        signManager: StatementStoreSignerManaging = ChatSignerManager(),
         walletRepo: WalletManagerRepositoryProtocol = .shared,
-        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts()
+        statementSignerResolver: ChatStatementSignerResolving = ChatStatementSignerResolver()
     ) {
         self.storageFacade = storageFacade
         self.pushIdFactory = pushIdFactory
         self.deviceEncryptionKeyManager = deviceEncryptionKeyManager
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.encryptionManager = encryptionManager
-        self.signManager = signManager
         self.walletRepo = walletRepo
-        self.peerAccounts = peerAccounts
+        self.statementSignerResolver = statementSignerResolver
     }
 }
 
@@ -149,7 +146,7 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
             let identityAccountId = try walletRepo.main().getRawPublicKey()
             let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
 
-            let signer = try signManager.makeSigner(for: peerAccounts.statementKeyId(for: contact.accountId))
+            let signer = try statementSignerResolver.statementSigner(for: contact.accountId)
             let identityProof = try makeIdentityProof(
                 identityAccountId: identityAccountId,
                 deviceAccountId: signer.accountId,
@@ -249,8 +246,7 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
         case .identity:
             return nil
         case .multidevice:
-            let statementAccountId = try signManager.makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId))
-                .accountId
+            let statementAccountId = try statementSignerResolver.statementSigner(for: peerAccountId).accountId
             let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
 
             return Chat.PeerDevice(

@@ -7,14 +7,14 @@ struct ChatAllowanceFilterTests {
     private let fixture = ChatContactsFixture()
     private let establishedPeer = Data(repeating: 0x0A, count: 32)
     private let pendingPeer = Data(repeating: 0x0B, count: 32)
-    private let resolver = ChatStatementAccountResolver(
+    private let resolver = ChatStatementSignerResolver(
         peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
         signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager())
     )
 
     @Test func releasesChatRecordsWithoutEstablishedChat() async throws {
-        let established = try record(for: resolver.statementAccountId(for: establishedPeer), domain: .chat)
-        let pending = try record(for: resolver.statementAccountId(for: pendingPeer), domain: .chat)
+        let established = try record(for: resolver.statementSigner(for: establishedPeer).accountId, domain: .chat)
+        let pending = try record(for: resolver.statementSigner(for: pendingPeer).accountId, domain: .chat)
         let orphan = record(for: Data(repeating: 0x0C, count: 32), domain: .chat)
         try await fixture.insertContact(establishedPeer)
         try await fixture.insertContact(pendingPeer, hasPendingRequest: true)
@@ -39,7 +39,7 @@ private extension ChatAllowanceFilterTests {
     func makeFilter() -> ChatAllowanceFilter {
         ChatAllowanceFilter(
             contactsStorageService: ContactsLocalStorageService(storageFacade: fixture.facade, logger: MockLogger()),
-            statementAccountResolver: resolver
+            statementSignerResolver: resolver
         )
     }
 
