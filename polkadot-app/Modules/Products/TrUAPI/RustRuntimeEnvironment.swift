@@ -6,6 +6,7 @@ import Foundation_iOS
 import FoundationExt
 import SubstrateSdk
 import BulletinChain
+import DesignSystem
 
 /// Shared dependencies for opening one product execution off the process-wide
 /// ``TrUAPIHostRuntime``. Embedded by both the SPA and chat rust runtime
@@ -17,6 +18,7 @@ struct RustRuntimeEnvironment {
     let notificationScheduler: ProductNotificationScheduling
     let ipfsFetcher: IpfsFetching
     let hostProvider: ProductHostProviding
+    let themeManager: ThemeManagerProtocol
     let logger: LoggerProtocol
 
     /// The rust pieces a runtime needs: the opened execution and its chain
@@ -113,6 +115,7 @@ private extension RustRuntimeEnvironment {
                 }
             },
             hostProvider: hostProvider,
+            themeManager: themeManager,
             logger: logger
         )
     }
