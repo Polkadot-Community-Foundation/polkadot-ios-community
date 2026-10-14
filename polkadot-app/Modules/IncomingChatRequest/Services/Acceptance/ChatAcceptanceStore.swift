@@ -6,6 +6,7 @@ import Operation_iOS
 struct ChatAcceptanceCandidate {
     let message: Chat.LocalMessage
     let requestId: String
+    let contact: Chat.Contact
     let session: MessageExchange.SessionRequest
     /// Period of the last publication; nil until published.
     let period: UInt32?
@@ -143,6 +144,7 @@ private extension ChatAcceptanceStore {
         return ChatAcceptanceCandidate(
             message: message,
             requestId: acceptance.requestId,
+            contact: contact,
             session: contact.toMessageExchangeSessionRequest(),
             period: period.map { UInt32(bitPattern: $0.int32Value) }
         )

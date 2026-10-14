@@ -200,7 +200,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
             signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
-            statementService: makeAcceptanceStatementService()
+            statementService: makeAcceptanceStatementService(),
+            notifier: makeAcceptanceNotifier()
         )
 
         let deliveryService = ChatAcceptanceDeliveryService(
@@ -284,6 +285,28 @@ private extension ChatRequestServiceFactory {
             ),
             deviceEncryptionKeyManager: DeviceEncryptionKeyManager.shared,
             statementSignerResolver: ChatStatementSignerResolver(signManager: signManager)
+        )
+    }
+
+    func makeAcceptanceNotifier() -> ChatAcceptanceNotifying {
+        let encryptionManager = makeAccountEncryptionManager()
+
+        return ChatAcceptanceNotifier(
+            apnsClientService: APNSClientService(
+                pushIdFactory: ChatPushIdFactory(
+                    encryptionManager: encryptionManager,
+                    signManager: makeAccountSignManager(),
+                    sessionIdFactory: PeerSessionIdFactory(),
+                    logger: logger
+                ),
+                messageCoder: ChatPushMessageCoder(encryptionManager: encryptionManager),
+                payloadBuilder: ChatNotificationPayloadBuilder(logger: logger),
+                tokenProvider: JWTTokenManager.shared,
+                workQueue: DispatchQueue(label: "io.chat.acceptance.push.queue")
+            ),
+            notifiedMessageIdRepository: NotifiedMessageIdRepositoryFactory(storageFacade: storageFacade)
+                .createRepository(),
+            logger: logger
         )
     }
 

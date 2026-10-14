@@ -78,7 +78,34 @@ struct ChatAcceptanceFixture {
             )
         )
 
-        return ChatAcceptanceCandidate(message: message, requestId: requestId, session: session, period: period)
+        return ChatAcceptanceCandidate(
+            message: message,
+            requestId: requestId,
+            contact: makeContact(),
+            session: session,
+            period: period
+        )
+    }
+
+    func makeContact() -> Chat.Contact {
+        Chat.Contact(
+            accountId: peerAccountId,
+            username: "peer",
+            publicKey: Data(repeating: 0x02, count: 32),
+            pin: nil,
+            pushId: nil,
+            pushToken: Data(repeating: 0x03, count: 32),
+            voipPushToken: nil,
+            peerPlatform: nil,
+            lastOwnToken: nil,
+            voipLastOwnToken: nil,
+            chatRequest: nil,
+            ownKeyId: .init(signKeyId: identityKeyId, encryptionKeyId: ""),
+            imageData: nil,
+            isBlocked: false,
+            devices: [],
+            pendingDevicesFanOut: false
+        )
     }
 }
 
@@ -140,5 +167,15 @@ final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
 extension ChatAcceptanceIssueDiagnostics {
     static func recording(unacknowledged: IssueDiagnostic = NoopIssueDiagnostic()) -> Self {
         Self(publishFailing: NoopIssueDiagnostic(), unacknowledged: unacknowledged)
+    }
+}
+
+final class RecordingAcceptanceNotifier: ChatAcceptanceNotifying, @unchecked Sendable {
+    private let notified = OSAllocatedUnfairLock<[String]>(initialState: [])
+
+    var notifiedMessageIds: [String] { notified.withLock { $0 } }
+
+    func notify(_ candidate: ChatAcceptanceCandidate) async {
+        notified.withLock { $0.append(candidate.message.messageId) }
     }
 }

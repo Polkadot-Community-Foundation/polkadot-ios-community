@@ -5,6 +5,7 @@ import Testing
 
 struct ChatAcceptanceDeliveryServiceTests {
     private let fixture = ChatAcceptanceFixture()
+    private let notifier = RecordingAcceptanceNotifier()
 
     @Test func publishesFromCurrentPeriodAccountAndRecordsPeriod() async throws {
         let store = InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: nil)])
@@ -15,6 +16,7 @@ struct ChatAcceptanceDeliveryServiceTests {
         #expect(try fixture.senders() == [account])
         #expect(fixture.allocator.initiatedTargets == [account])
         #expect(store.published == [fixture.allocator.period])
+        #expect(notifier.notifiedMessageIds == ["acceptance"])
     }
 
     @Test func doesNothingOnceNoLongerAwaitingPublication() async throws {
@@ -36,6 +38,7 @@ struct ChatAcceptanceDeliveryServiceTests {
         #expect(store.awaitingReadsLeft == -1)
         #expect(try fixture.senders().isEmpty)
         #expect(store.published.isEmpty)
+        #expect(notifier.notifiedMessageIds.isEmpty)
     }
 
     @Test func identityAccountNeverSignsAcceptance() async throws {
@@ -54,7 +57,8 @@ private extension ChatAcceptanceDeliveryServiceTests {
                 store: store,
                 allocator: fixture.allocator,
                 signers: fixture.signers,
-                statementService: fixture.statementService
+                statementService: fixture.statementService,
+                notifier: notifier
             ),
             execution: ChatRequestDeliveryExecution(
                 backgroundExecutor: InlineBackgroundExecutor(),

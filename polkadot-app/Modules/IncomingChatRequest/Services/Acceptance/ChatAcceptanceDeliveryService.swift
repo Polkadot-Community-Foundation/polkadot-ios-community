@@ -12,6 +12,7 @@ struct ChatAcceptanceDeliveryDependencies {
     let allocator: NotificationStatementAccountAllocating
     let signers: ChatAcceptanceSigning
     let statementService: ChatAcceptanceStatementServicing
+    let notifier: ChatAcceptanceNotifying
 }
 
 /// First publication of acceptances from the current period's one-shot account.
@@ -76,6 +77,7 @@ private extension ChatAcceptanceDeliveryService {
 
         try await dependencies.statementService.send(candidate, signer: signer.signer)
         try await dependencies.store.markPublished(candidate, period: period)
+        await dependencies.notifier.notify(candidate)
     }
 
     func isAwaitingPublication(_ messageId: String) async -> Bool {
