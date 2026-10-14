@@ -6,7 +6,7 @@ import SubstrateSdk
 
 protocol ChatPeerAccountsProviding {
     func statementKeyId(for peerAccountId: AccountId) throws -> String
-    func uploadKeyId(for peerAccountId: AccountId) throws -> String
+    func uploadKeyId() throws -> String
 }
 
 struct ChatPeerAccounts {
@@ -22,8 +22,8 @@ extension ChatPeerAccounts: ChatPeerAccountsProviding {
         try ChatKeyPaths.statement(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
     }
 
-    func uploadKeyId(for peerAccountId: AccountId) throws -> String {
-        try ChatKeyPaths.hop(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
+    func uploadKeyId() throws -> String {
+        try ChatKeyPaths.hop(tld: tldProvider.currentTldOrError())
     }
 }
 
@@ -32,8 +32,8 @@ extension ChatPeerAccounts: PeerSessionAccountsProviding {
         try statementKeyId(for: request.peer.accountId)
     }
 
-    func uploadSignKeyId(for request: MessageExchange.SessionRequest) throws -> String {
-        try uploadKeyId(for: request.peer.accountId)
+    func uploadSignKeyId() throws -> String {
+        try uploadKeyId()
     }
 }
 

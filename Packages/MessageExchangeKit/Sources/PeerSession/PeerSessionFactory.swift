@@ -152,7 +152,7 @@ extension PeerSessionFactory: PeerSessionMaking {
             )
 
             let messageCompacter = try compactorFactory?.createCompactor(
-                for: accountsProvider?.uploadSignKeyId(for: request) ?? request.own.signKeyId
+                for: accountsProvider?.uploadSignKeyId() ?? request.own.signKeyId
             )
 
             let outgoingInterface: AnyOutgoingMessageChannel<M>

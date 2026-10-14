@@ -2,11 +2,7 @@ import Foundation
 import KeyDerivation
 
 protocol AttachmentsSenderProviding {
-    func getWallet(for chatId: Chat.Id) async throws -> WalletManaging
-}
-
-enum AttachmentsSenderProviderError: Error, Equatable {
-    case unsupportedChat
+    func getWallet() async throws -> WalletManaging
 }
 
 final class AttachmentsSenderProvider {
@@ -23,14 +19,7 @@ final class AttachmentsSenderProvider {
 }
 
 extension AttachmentsSenderProvider: AttachmentsSenderProviding {
-    func getWallet(for chatId: Chat.Id) async throws -> WalletManaging {
-        guard let peerAccountId = chatId.accountId else {
-            throw AttachmentsSenderProviderError.unsupportedChat
-        }
-
-        return try DynamicDerivedWallet(
-            derivationPath: peerAccounts.uploadKeyId(for: peerAccountId),
-            entropyManager: entropyManager
-        )
+    func getWallet() async throws -> WalletManaging {
+        try DynamicDerivedWallet(derivationPath: peerAccounts.uploadKeyId(), entropyManager: entropyManager)
     }
 }

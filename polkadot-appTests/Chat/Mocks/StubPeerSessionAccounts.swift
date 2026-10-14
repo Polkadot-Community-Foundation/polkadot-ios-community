@@ -9,7 +9,7 @@ struct StubPeerSessionAccounts: PeerSessionAccountsProviding {
         statementKeyId
     }
 
-    func uploadSignKeyId(for _: MessageExchange.SessionRequest) throws -> String {
+    func uploadSignKeyId() throws -> String {
         uploadKeyId
     }
 }

@@ -4,20 +4,11 @@ import Testing
 
 struct AttachmentsSenderProviderTests {
     private let entropyManager = FixedRootEntropyManager()
-    private let peerAccountId = Data(repeating: 0xAB, count: 32)
 
-    @Test func personChatUploadsFromPerChatHopAccount() async throws {
-        let wallet = try await makeProvider().getWallet(for: .person(peerAccountId))
+    @Test func uploadsFromSharedChatHopAccount() async throws {
+        let wallet = try await makeProvider().getWallet()
 
-        let expected = try account(at: ChatKeyPaths.hop(tld: "dot", peerAccountId: peerAccountId))
-
-        #expect(try wallet.getRawPublicKey() == expected)
-    }
-
-    @Test func refusesChatWithoutContact() async {
-        await #expect(throws: AttachmentsSenderProviderError.unsupportedChat) {
-            try await makeProvider().getWallet(for: .chatExtension("extension", roomId: nil))
-        }
+        #expect(try wallet.getRawPublicKey() == account(at: ChatKeyPaths.hop(tld: "dot")))
     }
 }
 

@@ -13,11 +13,8 @@ struct ChatKeyPathsTests {
         )
     }
 
-    @Test func hopAccountLivesUnderChatProduct() {
-        #expect(
-            ChatKeyPaths.hop(tld: "dot", peerAccountId: peerAccountId) ==
-                "//product//chat.dot//peer-hop//" + peerHex
-        )
+    @Test func hopAccountIsSharedUnderChatProduct() {
+        #expect(ChatKeyPaths.hop(tld: "dot") == "//product//chat.dot//hop")
     }
 
     @Test func requestAccountIsOneShotPerPeriod() throws {
@@ -44,7 +41,7 @@ struct ChatKeyPathsTests {
         let paths = try [
             WalletDerivationPath.main(for: "dot"),
             ChatKeyPaths.statement(tld: "dot", peerAccountId: peerAccountId),
-            ChatKeyPaths.hop(tld: "dot", peerAccountId: peerAccountId),
+            ChatKeyPaths.hop(tld: "dot"),
             ChatKeyPaths.statement(tld: "dot", peerAccountId: otherPeer),
             ChatKeyPaths.statement(tld: "paseo", peerAccountId: peerAccountId),
             ChatKeyPaths.request(requestId: "request-1", period: 1),

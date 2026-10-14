@@ -11,8 +11,9 @@ enum ChatKeyPaths {
         perChatPath(tld: tld, role: "peer-statement", peerAccountId: peerAccountId)
     }
 
-    static func hop(tld: String, peerAccountId: AccountId) -> String {
-        perChatPath(tld: tld, role: "peer-hop", peerAccountId: peerAccountId)
+    /// Shared by all chats: promotion only needs an unexpired authorization, so per-chat accounts just add claims.
+    static func hop(tld: String) -> String {
+        ProductDerivationPath.builtInRoot(BuiltInProduct.chat(for: tld)) + "//hop"
     }
 
     static func request(requestId: String, period: UInt32) throws -> String {
