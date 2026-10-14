@@ -70,6 +70,11 @@ extension SSStoreAllowanceManager: AllowanceManaging {
 }
 
 extension SSStoreAllowanceManager: StatementAccountFunding {
+    public func hasAllocation(accountId: AccountId, coveringPeriod period: UInt32) async throws -> Bool {
+        let record = try await repository.fetchOperation(by: { accountId.toHex() }, options: .init()).asyncExecute()
+        return record?.latestRenewedPeriod.map { $0 >= period } ?? false
+    }
+
     public func ensureFunded(
         accountId: AccountId,
         priority: AllowanceRecord.Priority,

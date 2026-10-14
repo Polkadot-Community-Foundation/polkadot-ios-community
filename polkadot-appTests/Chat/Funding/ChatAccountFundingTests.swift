@@ -1,4 +1,6 @@
+import Clocks
 import Foundation
+import FoundationExt
 import IssueMonitoring
 import Testing
 @testable import polkadot_app
@@ -9,20 +11,29 @@ struct ChatAccountFundingTests {
     private let funding = FakeStatementAccountFunding()
     private let dateProvider = MockDateProvider()
 
-    @Test func fundsAccountOncePerDay() async throws {
+    @Test func skipsFundingWhileRecordCoversCurrentPeriod() async throws {
+        try await funding.setRecord(period: currentPeriod())
+
+        try await makeGate().awaitSubmittable(accountId: accountId)
+
+        #expect(funding.calls.isEmpty)
+    }
+
+    @Test func fundsOnceWhenRecordIsStale() async throws {
+        let period = try await currentPeriod()
+        funding.setRecord(period: period - 1)
+        funding.recordOnFund(period: period)
         let gate = makeGate()
 
         try await gate.awaitSubmittable(accountId: accountId)
         try await gate.awaitSubmittable(accountId: accountId)
+
         #expect(funding.calls.count == 1)
         #expect(funding.priorities == [.critical])
-
-        await dateProvider.advance(by: 86_400)
-        try await gate.awaitSubmittable(accountId: accountId)
-        #expect(funding.calls.count == 2)
     }
 
     @Test func concurrentSubmissionsShareOneFunding() async throws {
+        try await funding.recordOnFund(period: currentPeriod())
         let gate = makeGate()
         funding.holdNext()
 
@@ -38,33 +49,41 @@ struct ChatAccountFundingTests {
         #expect(funding.calls.count == 1)
     }
 
-    @Test func failsFastDuringCooldownThenRetries() async throws {
+    @Test func retriesWithBackoffUntilFunded() async throws {
+        try await funding.recordOnFund(period: currentPeriod())
+        funding.fail(times: 2)
+
+        try await makeGate(clock: ImmediateClock()).awaitSubmittable(accountId: accountId)
+
+        #expect(funding.calls.count == 3)
+    }
+
+    @Test func cancellationStopsRetrying() async throws {
+        funding.fail(times: .max)
         let gate = makeGate()
-        funding.fail(with: StatementAccountFundingTestError())
 
-        await #expect(throws: StatementAccountFundingTestError.self) {
-            try await gate.awaitSubmittable(accountId: accountId)
+        let submission = Task { [accountId] in try await gate.awaitSubmittable(accountId: accountId) }
+        while funding.calls.isEmpty {
+            await Task.yield()
         }
-        await #expect(throws: ChatAccountFundingError.recentlyFailed) {
-            try await gate.awaitSubmittable(accountId: accountId)
-        }
+        submission.cancel()
+
+        await #expect(throws: CancellationError.self) { try await submission.value }
         #expect(funding.calls.count == 1)
-
-        funding.fail(with: nil)
-        await dateProvider.advance(by: 61)
-        try await gate.awaitSubmittable(accountId: accountId)
-        #expect(funding.calls.count == 2)
     }
 }
 
-private struct StatementAccountFundingTestError: Error {}
-
 private extension ChatAccountFundingTests {
-    func makeGate() -> ChatAccountFunding {
+    func currentPeriod() async throws -> UInt32 {
+        await UInt32(dateProvider.read().timeIntervalSince1970 / .secondsInDay)
+    }
+
+    func makeGate(clock: any Clock<Duration> = ContinuousClock()) -> ChatAccountFunding {
         ChatAccountFunding(
             funding: funding,
             dateProvider: dateProvider,
-            issueDiagnostics: .make(reporter: NoopIssueReporter())
+            issueDiagnostics: .make(reporter: NoopIssueReporter()),
+            clock: clock
         )
     }
 }

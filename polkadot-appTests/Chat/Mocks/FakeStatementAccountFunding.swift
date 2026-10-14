@@ -3,12 +3,15 @@ import Individuality
 import os
 import SubstrateSdk
 
-/// Records funding calls; `holdNext()` keeps the next call pending until `release()`.
+/// Records funding calls and keeps one record period like the allowance manager; `holdNext()` keeps the next
+/// call pending until `release()`.
 final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sendable {
     private struct State {
         var calls: [AccountId] = []
         var priorities: [AllowanceRecord.Priority] = []
-        var failure: Error?
+        var recordPeriod: UInt32?
+        var periodOnFund: UInt32 = 0
+        var failuresLeft = 0
         var holdsNext = false
         var released = false
     }
@@ -18,8 +21,16 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
     var calls: [AccountId] { state.withLock { $0.calls } }
     var priorities: [AllowanceRecord.Priority] { state.withLock { $0.priorities } }
 
-    func fail(with error: Error?) {
-        state.withLock { $0.failure = error }
+    func setRecord(period: UInt32?) {
+        state.withLock { $0.recordPeriod = period }
+    }
+
+    func recordOnFund(period: UInt32) {
+        state.withLock { $0.periodOnFund = period }
+    }
+
+    func fail(times: Int) {
+        state.withLock { $0.failuresLeft = times }
     }
 
     func holdNext() {
@@ -28,6 +39,10 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
 
     func release() {
         state.withLock { $0.released = true }
+    }
+
+    func hasAllocation(accountId _: AccountId, coveringPeriod period: UInt32) async throws -> Bool {
+        state.withLock { state in state.recordPeriod.map { $0 >= period } ?? false }
     }
 
     func ensureFunded(
@@ -46,8 +61,19 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
             await Task.yield()
         }
 
-        if let failure = state.withLock({ $0.failure }) {
-            throw failure
+        let shouldFail = state.withLock { state in
+            guard state.failuresLeft > 0 else {
+                state.recordPeriod = state.periodOnFund
+                return false
+            }
+            state.failuresLeft -= 1
+            return true
+        }
+
+        if shouldFail {
+            throw FakeStatementAccountFundingError()
         }
     }
 }
+
+struct FakeStatementAccountFundingError: Error {}

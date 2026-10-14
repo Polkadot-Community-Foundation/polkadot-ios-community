@@ -144,6 +144,28 @@ struct SSStoreAllowanceManagerTests {
         #expect(capturingRepo.savedRecords.isEmpty)
     }
 
+    @Test(arguments: [(UInt32?.some(100), true), (.some(101), true), (.some(99), false), (nil, false)])
+    func hasAllocationWhenRecordCoversPeriod(recordPeriod: UInt32?, expected: Bool) async throws {
+        let stored = recordPeriod.map { period in
+            AllowanceRecord(
+                accountId: testAccountId,
+                allocatedAt: Date(),
+                kind: .statementStore,
+                domain: .chat,
+                priority: .critical,
+                latestRenewedPeriod: period
+            )
+        }
+
+        let manager = makeManager(
+            allocator: FakeAllowanceSlotAllocating(period: 100),
+            repository: AnyDataProviderRepository(CapturingRepository(storedRecords: stored.map { [$0] } ?? [])),
+            slotInfoProvider: FakeSlotInfoProvider()
+        )
+
+        #expect(try await manager.hasAllocation(accountId: testAccountId, coveringPeriod: 100) == expected)
+    }
+
     @Test func releaseByAccountIdsDeletesWithoutReadingRecords() async throws {
         let capturingRepo = CapturingRepository()
 
@@ -217,10 +239,13 @@ final class CapturingRepository: DataProviderRepositoryProtocol {
     }
 
     func fetchOperation(
-        by _: @escaping () throws -> String,
+        by identifierBlock: @escaping () throws -> String,
         options _: RepositoryFetchOptions
     ) -> BaseOperation<Model?> {
-        fatalError("Should not be called in tests")
+        ClosureOperation { [storedRecords] in
+            let identifier = try identifierBlock()
+            return storedRecords.first { $0.identifier == identifier }
+        }
     }
 
     func fetchAllOperation(with _: RepositoryFetchOptions) -> BaseOperation<[Model]> {
