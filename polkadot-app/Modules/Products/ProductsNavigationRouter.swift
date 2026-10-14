@@ -5,7 +5,8 @@ import UIKitExt
 @MainActor
 final class ProductsNavigationRouter: ProductsNavigationRouting, WebPresentable {
     private let anchor = ProductsRouter()
-    private let deepLinkHandler: DeferredLinkHandling
+    // Set once in the nonisolated init and only used from MainActor-isolated methods.
+    private nonisolated(unsafe) let deepLinkHandler: DeferredLinkHandling
     private let deeplinkMatcher: AppDeeplinkMatching
 
     nonisolated init(
