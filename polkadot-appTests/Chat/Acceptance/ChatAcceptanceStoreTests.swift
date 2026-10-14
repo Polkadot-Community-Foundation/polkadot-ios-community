@@ -5,6 +5,7 @@ import Testing
 
 struct ChatAcceptanceStoreTests {
     private let facade = UserDataStorageTestFacade()
+    private let orderAllocator = InMemoryChatMessageOrderAllocator()
     private let peer = Data(repeating: 0x07, count: 32)
     private let requestId = "request"
     private let acceptanceTimestamp: UInt64 = 1_000
@@ -103,7 +104,7 @@ private extension ChatAcceptanceStoreTests {
             relatedMessages: []
         )
 
-        try await facade.databaseService.performWrite { [peer, chatId, requestId] context in
+        try await facade.databaseService.performWrite { [peer, chatId, requestId, orderAllocator] context in
             let contact = CDChatContact(context: context)
             contact.identifier = peer.toHex()
             contact.username = "peer"
@@ -119,7 +120,7 @@ private extension ChatAcceptanceStoreTests {
             request.identifier = requestId
             request.status = Chat.RequestStatus.incoming(.accepted).rawValue
 
-            try ChatMessageEntityMapper().populate(
+            try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(
                 entity: CDChatMessage(context: context),
                 from: acceptance,
                 using: context
@@ -141,8 +142,8 @@ private extension ChatAcceptanceStoreTests {
             relatedMessages: []
         )
 
-        try await facade.databaseService.performWrite { context in
-            try ChatMessageEntityMapper().populate(
+        try await facade.databaseService.performWrite { [orderAllocator] context in
+            try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(
                 entity: CDChatMessage(context: context),
                 from: message,
                 using: context
