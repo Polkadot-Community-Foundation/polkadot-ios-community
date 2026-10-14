@@ -3,10 +3,10 @@ import Operation_iOS
 
 @MainActor
 enum BlockedUsersViewFactory {
-    static func createView(allowanceCleanupService: AllowanceCleanupServicing) -> BlockedUsersViewProtocol? {
+    static func createView() -> BlockedUsersViewProtocol? {
         let interactor = BlockedUsersInteractor(
             chatContactDataProviderFactory: ChatContactDataProviderFactory(),
-            blockUserService: BlockUserService(allowanceCleanupService: allowanceCleanupService)
+            blockUserService: BlockUserService()
         )
 
         let wireframe = BlockedUsersWireframe()

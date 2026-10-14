@@ -49,7 +49,7 @@ final class ChatEngineFactory: ChatEngineFactoryProtocol {
             messageExchangeModeProvider: messageExchangeModeProvider,
             allowanceCleanupService: flowState.allowanceCleanupService
         )
-        let blockUserService = BlockUserService(allowanceCleanupService: flowState.allowanceCleanupService)
+        let blockUserService = BlockUserService()
 
         let requestContext = ChatRequestEngineContext(
             pendingRequest: request,

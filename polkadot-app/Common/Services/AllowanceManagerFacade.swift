@@ -1,5 +1,4 @@
 import Foundation
-import FoundationExt
 import Individuality
 import ChainRegistry
 
@@ -36,12 +35,11 @@ extension AllowanceManagerFacade {
 
     private static func makeCleanupService(sssManager: AllowanceManaging) -> AllowanceCleanupServicing {
         let chatFilter = ChatAllowanceFilter(
-            activityProvider: ChatActivityStore(storageFacade: UserDataStorageFacade.shared),
+            contactsStorageService: ContactsLocalStorageService(),
             statementAccountResolver: ChatStatementAccountResolver(
                 peerAccounts: ChatPeerAccounts(),
                 signManager: ChatSignerManager()
-            ),
-            dateProvider: NowDateProvider()
+            )
         )
 
         return AllowanceCleanupService(
