@@ -12,7 +12,7 @@ name: Release (Dev)
 # its Firebase app id and the `build_channel=dev` custom signal set by
 # FirebaseApplicationService. Network wiring is delivered at runtime from Firebase Remote Config
 # (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
-# project whose GoogleService-Info plist you supply below.
+# project of the app's GoogleService-Info plist.
 #
 # Build numbers are stamped from the CI run number (CURRENT_PROJECT_VERSION) so repeated
 # uploads of the same marketing version are accepted. The first build of each version sent
@@ -29,20 +29,7 @@ name: Release (Dev)
 # each devnet release reuse an already-approved version and reach testers immediately — the
 # first build of a NEW version goes through Beta App Review and can lag a day.
 #
-# Required secrets (environment `devnet`; repository level is the fallback):
-#   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key; needs the
-#                                        App Manager role to manage TestFlight groups)
-#   APP_STORE_CONNECT_ISSUER_ID          API issuer id
-#   APP_STORE_CONNECT_KEY_CONTENT        base64 of the .p8 private key
-#   APPLE_TEAM_ID                        Developer team id (for signing + ExportOptions)
-#   GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64  base64 of the GoogleService-Info.plist of the
-#                                           io.pcf.polkadotapp.devnet Firebase iOS app
-# Optional: SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN, MELD_BASIC_AUTH_TOKEN.
-#
-# W3S_AUTH_KEY is NO LONGER USED. Upstream deleted W3SAuthorizedSigner and the
-# ValueTransferAuthPallet signing protocol it implemented; W3S statements are now signed with
-# the user's own wallet key. The repository secret can be revoked once this lands.
-# Optional repository variable:
+# Optional variables:
 #   TESTFLIGHT_JOIN_URL  Public join link shown in the GitHub release body (falls back to the
 #                        hardcoded link if unset).
 #   TESTFLIGHT_GROUP     External TestFlight group name (default "Polkadot Devnet Testers").
