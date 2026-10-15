@@ -45,7 +45,7 @@ final class ChatEngineFactory: ChatEngineFactoryProtocol {
             outboxService: flowState.outboxService,
             allowanceCleanupService: flowState.allowanceCleanupService
         )
-        let blockUserService = BlockUserService()
+        let blockUserService = BlockUserService(allowanceCleanupService: flowState.allowanceCleanupService)
 
         let requestContext = ChatRequestEngineContext(
             pendingRequest: request,

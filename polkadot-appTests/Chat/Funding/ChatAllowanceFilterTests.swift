@@ -7,6 +7,7 @@ struct ChatAllowanceFilterTests {
     private let fixture = ChatContactsFixture()
     private let establishedPeer = Data(repeating: 0x0A, count: 32)
     private let pendingPeer = Data(repeating: 0x0B, count: 32)
+    private let blockedPeer = Data(repeating: 0x0E, count: 32)
     private let resolver = ChatStatementSignerResolver(
         peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
         signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager())
@@ -22,6 +23,17 @@ struct ChatAllowanceFilterTests {
         let released = try await makeFilter().recordsToRelease(from: [established, pending, orphan])
 
         #expect(released.map(\.accountId) == [pending.accountId, orphan.accountId])
+    }
+
+    @Test func releasesChatRecordsOfBlockedContacts() async throws {
+        let established = try record(for: resolver.statementSigner(for: establishedPeer).accountId, domain: .chat)
+        let blocked = try record(for: resolver.statementSigner(for: blockedPeer).accountId, domain: .chat)
+        try await fixture.insertContact(establishedPeer)
+        try await fixture.insertContact(blockedPeer, isBlocked: true)
+
+        let released = try await makeFilter().recordsToRelease(from: [established, blocked])
+
+        #expect(released.map(\.accountId) == [blocked.accountId])
     }
 
     @Test func neverReleasesOtherDomains() async throws {
