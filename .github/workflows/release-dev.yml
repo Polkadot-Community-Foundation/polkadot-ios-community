@@ -204,6 +204,7 @@ jobs:
           # Read from the environment, never interpolated into the script body.
           TAG: ${{ needs.tag.outputs.tag }}
           TF_GROUP: ${{ vars.TESTFLIGHT_GROUP || 'Polkadot Devnet Testers' }}
+          FEEDBACK_EMAIL: ${{ vars.BETA_FEEDBACK_EMAIL || 'info@pcf.network' }}
         run: |
           CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${TAG}."
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
@@ -221,7 +222,7 @@ jobs:
             --distribute_external true \
             --groups "$TF_GROUP" \
             --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
-            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
+            --beta_app_feedback_email "$FEEDBACK_EMAIL" \
             --changelog "$CHANGELOG"
 
       # The GitHub release carries no binary: it records the tag, commit and build number.
