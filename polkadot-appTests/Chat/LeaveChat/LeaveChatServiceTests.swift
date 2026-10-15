@@ -27,13 +27,34 @@ struct LeaveChatServiceTests {
         #expect(cleanupService.cleanupCount == 1)
         #expect(contactsAtCleanup == 0)
     }
+
+    @Test func revokesIdentitySigningConsent() async throws {
+        try await insertContact()
+        try await consentStore().grant(for: peerAccountId)
+
+        try await makeService().leaveChat(.init(
+            peer: .person(makeContact()),
+            message: nil,
+            unreadDisplayMessageCount: 0,
+            hasIncomingReaction: false,
+            createdAt: nil,
+            roomMetadata: nil
+        ))
+
+        #expect(try await !consentStore().hasConsent(for: peerAccountId))
+    }
 }
 
 private extension LeaveChatServiceTests {
+    func consentStore() -> ChatSigningConsentStore {
+        ChatSigningConsentStore(storageFacade: facade, dateProvider: MockDateProvider())
+    }
+
     func makeService() -> LeaveChatService {
         LeaveChatService(
             outboxService: StubLeaveOutbox(),
             allowanceCleanupService: cleanupService,
+            signingConsentStore: consentStore(),
             storageFacade: facade
         )
     }

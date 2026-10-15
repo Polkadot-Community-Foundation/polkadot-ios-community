@@ -18,14 +18,17 @@ final class LeaveChatService {
     private let contactRepository: AnyDataProviderRepository<Chat.Contact>
     private let removedChatRepository: AnyDataProviderRepository<Chat.RemovedChat>
     private let allowanceCleanupService: AllowanceCleanupServicing
+    private let signingConsentStore: ChatSigningConsentStoring
 
     init(
         outboxService: ChatOutboxServicing,
         allowanceCleanupService: AllowanceCleanupServicing,
+        signingConsentStore: ChatSigningConsentStoring,
         storageFacade: StorageFacadeProtocol = UserDataStorageFacade.shared
     ) {
         self.outboxService = outboxService
         self.allowanceCleanupService = allowanceCleanupService
+        self.signingConsentStore = signingConsentStore
 
         chatRepository = AnyDataProviderRepository(
             storageFacade.createRepository(
@@ -69,6 +72,7 @@ extension LeaveChatService: LeaveChatServicing {
         try await contactRepository.saveOperation({ [] }, { [contact.identifier] }).asyncExecute()
 
         try await saveRemovedChatTombstoneIfNeeded(for: contact)
+        try await signingConsentStore.revoke(for: contact.accountId)
 
         await allowanceCleanupService.cleanup()
     }

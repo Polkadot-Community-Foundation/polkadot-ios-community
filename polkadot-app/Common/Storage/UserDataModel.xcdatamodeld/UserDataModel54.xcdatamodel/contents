@@ -47,6 +47,15 @@
         <attribute name="extensionId" optional="YES" attributeType="String"/>
         <attribute name="identifier" optional="YES" attributeType="String"/>
     </entity>
+    <entity name="CDChatIdentitySigningConsent" representedClassName="CDChatIdentitySigningConsent" syncable="YES" codeGenerationType="class">
+        <attribute name="grantedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="identifier" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="identifier"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
     <entity name="CDChatMessage" representedClassName="CDChatMessage" syncable="YES" codeGenerationType="class">
         <attribute name="compactionId" optional="YES" attributeType="String"/>
         <attribute name="contentExpanded" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>

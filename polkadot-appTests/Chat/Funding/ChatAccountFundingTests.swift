@@ -1,6 +1,7 @@
 import Clocks
 import Foundation
 import FoundationExt
+import Individuality
 import IssueMonitoring
 import MessageExchangeKit
 import Testing
@@ -16,6 +17,9 @@ struct ChatAccountFundingTests {
         peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
         signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager())
     )
+    private let fallback = FakeIdentitySigningFallback(
+        signer: StubStatementSigner(accountId: Data(repeating: 0x0C, count: 32))
+    )
 
     @Test func signsWithFundedPerChatAccountOfThePeer() async throws {
         try await funding.recordOnFund(period: currentPeriod())
@@ -25,6 +29,37 @@ struct ChatAccountFundingTests {
 
         #expect(signer.accountId == expected)
         #expect(funding.calls == [expected])
+    }
+
+    @Test func fallsBackToIdentityWhenNoSlotCanBeEvicted() async throws {
+        funding.fail(times: 1, with: StatementStoreAllowanceError.noEvictableSlots)
+
+        let signer = try await makeGate().signer(for: sessionRequest())
+
+        #expect(signer.accountId == fallback.signer.accountId)
+        #expect(fallback.contacts == [peerAccountId])
+    }
+
+    @Test func skipsAllocationForRestOfPeriodOnceNoSlotCanBeEvicted() async throws {
+        funding.fail(times: 1, with: StatementStoreAllowanceError.noEvictableSlots)
+        let gate = makeGate()
+
+        _ = try await gate.signer(for: sessionRequest())
+        _ = try await gate.signer(for: sessionRequest())
+
+        #expect(funding.calls.count == 1)
+        #expect(fallback.contacts.count == 2)
+    }
+
+    @Test func cooldownKeepsBackoffWithoutFallback() async throws {
+        try await funding.recordOnFund(period: currentPeriod())
+        funding.fail(times: 2, with: StatementStoreAllowanceError.noSlotsAvailable(secsToWait: 60))
+
+        let signer = try await makeGate(clock: ImmediateClock()).signer(for: sessionRequest())
+
+        #expect(try signer.accountId == resolver.statementSigner(for: peerAccountId).accountId)
+        #expect(funding.calls.count == 3)
+        #expect(fallback.contacts.isEmpty)
     }
 
     @Test func skipsFundingWhileRecordCoversCurrentPeriod() async throws {
@@ -105,6 +140,7 @@ private extension ChatAccountFundingTests {
         ChatAccountFunding(
             funding: funding,
             statementSignerResolver: resolver,
+            identityFallback: fallback,
             dateProvider: dateProvider,
             issueDiagnostics: .make(reporter: NoopIssueReporter()),
             clock: clock

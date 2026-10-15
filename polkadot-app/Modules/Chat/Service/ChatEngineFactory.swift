@@ -43,7 +43,8 @@ final class ChatEngineFactory: ChatEngineFactoryProtocol {
         let storageFacade = UserDataStorageFacade.shared
         let leaveChatService = LeaveChatService(
             outboxService: flowState.outboxService,
-            allowanceCleanupService: flowState.allowanceCleanupService
+            allowanceCleanupService: flowState.allowanceCleanupService,
+            signingConsentStore: ChatSigningConsentStore(storageFacade: storageFacade)
         )
         let blockUserService = BlockUserService(allowanceCleanupService: flowState.allowanceCleanupService)
 

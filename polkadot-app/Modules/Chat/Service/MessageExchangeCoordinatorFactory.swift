@@ -26,6 +26,7 @@ final class MessageExchangeCoordinatorFactory {
     private let storageFacade: StorageFacadeProtocol
     private let bulletInManager: AllowanceManaging
     private let statementAccountFunding: StatementAccountFunding
+    private let identitySigningFallback: NonPrivateSigningFallbacking
     private let statementStoreMonitor: StatementStoreActivityMonitoring
     private let operationQueue: OperationQueue
     private let logger: LoggerProtocol
@@ -35,6 +36,7 @@ final class MessageExchangeCoordinatorFactory {
         storageFacade: StorageFacadeProtocol = UserDataStorageFacade.shared,
         bulletInManager: AllowanceManaging,
         statementAccountFunding: StatementAccountFunding,
+        identitySigningFallback: NonPrivateSigningFallbacking,
         statementStoreMonitor: StatementStoreActivityMonitoring,
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
         logger: LoggerProtocol = Logger.shared
@@ -43,6 +45,7 @@ final class MessageExchangeCoordinatorFactory {
         self.storageFacade = storageFacade
         self.bulletInManager = bulletInManager
         self.statementAccountFunding = statementAccountFunding
+        self.identitySigningFallback = identitySigningFallback
         self.statementStoreMonitor = statementStoreMonitor
         self.operationQueue = operationQueue
         self.logger = logger
@@ -88,6 +91,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                 submissionGate: ChatAccountFunding(
                     funding: statementAccountFunding,
                     statementSignerResolver: ChatStatementSignerResolver(signManager: signerManager),
+                    identityFallback: identitySigningFallback,
                     dateProvider: NowDateProvider(),
                     issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
                 ),

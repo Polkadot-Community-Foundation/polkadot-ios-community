@@ -12,6 +12,7 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
         var recordPeriod: UInt32?
         var periodOnFund: UInt32 = 0
         var failuresLeft = 0
+        var failure: Error = FakeStatementAccountFundingError()
         var holdsNext = false
         var released = false
     }
@@ -29,8 +30,11 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
         state.withLock { $0.periodOnFund = period }
     }
 
-    func fail(times: Int) {
-        state.withLock { $0.failuresLeft = times }
+    func fail(times: Int, with failure: Error = FakeStatementAccountFundingError()) {
+        state.withLock { state in
+            state.failuresLeft = times
+            state.failure = failure
+        }
     }
 
     func holdNext() {
@@ -61,17 +65,17 @@ final class FakeStatementAccountFunding: StatementAccountFunding, @unchecked Sen
             await Task.yield()
         }
 
-        let shouldFail = state.withLock { state in
+        let failure: Error? = state.withLock { state in
             guard state.failuresLeft > 0 else {
                 state.recordPeriod = state.periodOnFund
-                return false
+                return nil
             }
             state.failuresLeft -= 1
-            return true
+            return state.failure
         }
 
-        if shouldFail {
-            throw FakeStatementAccountFundingError()
+        if let failure {
+            throw failure
         }
     }
 }

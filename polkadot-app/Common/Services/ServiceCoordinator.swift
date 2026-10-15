@@ -239,9 +239,11 @@ extension ServiceCoordinator {
         }
 
         let statementStoreMonitor = StatementStoreActivityMonitor()
+        let identitySigningFallback = ChatIdentitySigningFallback.makeDefault()
         let chatCoordinatorFactory = MessageExchangeCoordinatorFactory(
             bulletInManager: allowanceManagerFacade.bulletInManager,
             statementAccountFunding: allowanceManagerFacade.sssManager,
+            identitySigningFallback: identitySigningFallback,
             statementStoreMonitor: statementStoreMonitor
         )
 

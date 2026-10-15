@@ -4,7 +4,11 @@ import Foundation
 
 /// Inserts contacts into an in-memory user database.
 struct ChatContactsFixture {
-    let facade = UserDataStorageTestFacade()
+    let facade: UserDataStorageTestFacade
+
+    init(facade: UserDataStorageTestFacade = UserDataStorageTestFacade()) {
+        self.facade = facade
+    }
 
     func insertContact(_ peer: Data, isBlocked: Bool = false, hasPendingRequest: Bool = false) async throws {
         try await facade.databaseService.performWrite { context in

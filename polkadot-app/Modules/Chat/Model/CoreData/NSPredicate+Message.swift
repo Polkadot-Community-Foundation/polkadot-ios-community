@@ -160,6 +160,16 @@ extension NSPredicate {
         return NSCompoundPredicate(andPredicateWithSubpredicates: [byContactId, byStatus])
     }
 
+    /// The acceptance is excluded: it stays new while its renewer keeps publishing it.
+    static func newLocalDeviceMessages(to chatId: Chat.Id) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            localMessages(from: chatId),
+            byStatus(Chat.LocalMessage.Status.outgoing(.new)),
+            byCreationSource(.localDevice),
+            NSCompoundPredicate(notPredicateWithSubpredicate: messageByContentType(.multiChatAccepted))
+        ])
+    }
+
     /// Messages compacted into a blob are excluded: their delivery is tracked
     /// through the compacted parent, so they must not re-enter sync logic.
     static func sentLocalDeviceMessages(to chatId: Chat.Id) -> NSPredicate {
