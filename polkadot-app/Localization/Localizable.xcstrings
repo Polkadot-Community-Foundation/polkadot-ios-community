@@ -3469,17 +3469,6 @@
         }
       }
     },
-    "wallet.main.balanceCard" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ Card"
-          }
-        }
-      }
-    },
     "wallet.main.idCard" : {
       "extractionState" : "manual",
       "localizations" : {
