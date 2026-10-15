@@ -150,7 +150,7 @@ private extension IncomingChatRequestCoordinationContext {
             return
         }
 
-        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(peerAccountId: contact.accountId)
+        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice()
         try await requestStoreService.acceptOutgoingRequest(
             existingOutgoingRequest.requestId,
             remoteIncoming: remoteRequest,
@@ -199,7 +199,7 @@ private extension IncomingChatRequestCoordinationContext {
             return
         }
 
-        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice(peerAccountId: contact.accountId)
+        let acceptorDevice = try requestStoreService.buildLocalAcceptorDevice()
         try await requestStoreService.acceptIncomingRequest(
             .new(remoteRequest, acceptorDevice: acceptorDevice)
         )

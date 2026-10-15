@@ -13,25 +13,24 @@ struct PerChatSessionSigningTests {
         let store = MockStatementStore()
         let alice = try Participant()
         let bob = try Participant()
-        let aliceService = try alice.makeService(store: store)
-        let bobService = try bob.makeService(store: store)
 
-        aliceService.updateSessions([alice.request(for: bob, knowingDevices: true)])
-        bobService.updateSessions([bob.request(for: alice, knowingDevices: true)])
-
-        bob.delegate.didReceiveMessagesClosure = { _, _, completion in completion(.success) }
-
-        await withCheckedContinuation { continuation in
-            alice.delegate.didDeliverMessagesClosure = { _, _, _ in continuation.resume() }
-            aliceService.addMessagesToQueue(
-                [alice.textMessage()],
-                for: alice.request(for: bob, knowingDevices: true).peer
-            )
-        }
+        try await deliverText(from: alice, to: bob, store: store)
 
         let senders = try Set(store.senderAccountIds())
 
         #expect(senders == [alice.statementAccountId, bob.statementAccountId])
+    }
+
+    @Test func deliversWhenSenderSignsWithIdentityAccount() async throws {
+        let store = MockStatementStore()
+        let alice = try Participant(signsWithIdentity: true)
+        let bob = try Participant()
+
+        try await deliverText(from: alice, to: bob, store: store)
+
+        let senders = try Set(store.senderAccountIds())
+
+        #expect(senders == [alice.identityAccountId, bob.statementAccountId])
     }
 
     @Test func noSessionUntilPeerDevicesAreKnown() async throws {
@@ -54,14 +53,36 @@ struct PerChatSessionSigningTests {
     }
 }
 
+private extension PerChatSessionSigningTests {
+    func deliverText(from alice: Participant, to bob: Participant, store: MockStatementStore) async throws {
+        let aliceService = try alice.makeService(store: store)
+        let bobService = try bob.makeService(store: store)
+
+        aliceService.updateSessions([alice.request(for: bob, knowingDevices: true)])
+        bobService.updateSessions([bob.request(for: alice, knowingDevices: true)])
+
+        bob.delegate.didReceiveMessagesClosure = { _, _, completion in completion(.success) }
+
+        await withCheckedContinuation { continuation in
+            alice.delegate.didDeliverMessagesClosure = { _, _, _ in continuation.resume() }
+            aliceService.addMessagesToQueue(
+                [alice.textMessage()],
+                for: alice.request(for: bob, knowingDevices: true).peer
+            )
+        }
+    }
+}
+
 private struct Participant {
     let identityKeypair: SNKeypairProtocol
     let statementKeypair: SNKeypairProtocol
     let identityEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
     let deviceEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
     let delegate = MockChatParticipant()
+    let statementKeyId: String
 
-    init() throws {
+    init(signsWithIdentity: Bool = false) throws {
+        statementKeyId = signsWithIdentity ? "identity" : "statement"
         identityKeypair = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
         statementKeypair = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
     }
@@ -81,7 +102,7 @@ private struct Participant {
                 X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
             },
             deviceEncryptionKeyFactory: X25519ChaChaPolyEncryptorFactory(privateKey: deviceEncryptionKey),
-            accountsProvider: StubPeerSessionAccounts(statementKeyId: "statement", uploadKeyId: "upload"),
+            accountsProvider: StubPeerSessionAccounts(statementKeyId: statementKeyId, uploadKeyId: "upload"),
             maxStatementSize: 4_096
         )
         .makeService(statementStoreConnection: store, delegate: AnyPeerSessionDelegate(delegate))
@@ -90,7 +111,7 @@ private struct Participant {
     func request(for peer: Participant, knowingDevices: Bool) -> MessageExchange.SessionRequest {
         let devices = knowingDevices ? [
             MessageExchange.DeviceInfo(
-                statementAccountId: peer.statementAccountId,
+                statementAccountId: peer.identityAccountId,
                 encryptionPublicKey: peer.deviceEncryptionKey.publicKey.rawRepresentation
             )
         ] : []

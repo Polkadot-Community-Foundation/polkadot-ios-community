@@ -37,7 +37,7 @@ protocol ChatRequestStoreServicing {
 
     func declineIncomingRequest(_ requestId: String) async throws
 
-    func buildLocalAcceptorDevice(peerAccountId: AccountId) throws -> Chat.PeerDevice
+    func buildLocalAcceptorDevice() throws -> Chat.PeerDevice
 }
 
 final class ChatRequestStoreService {
@@ -46,22 +46,19 @@ final class ChatRequestStoreService {
     let deviceEncryptionKeyManager: DeviceEncryptionKeyManaging
     let encryptionManager: MessageExchangeEncryptionManaging
     let walletRepo: WalletManagerRepositoryProtocol
-    let statementSignerResolver: ChatStatementSignerResolving
 
     init(
         storageFacade: StorageFacadeProtocol,
         pushIdFactory: ChatPushIdMaking,
         deviceEncryptionKeyManager: DeviceEncryptionKeyManaging,
         encryptionManager: MessageExchangeEncryptionManaging = ChatEncryptionManager(),
-        walletRepo: WalletManagerRepositoryProtocol = .shared,
-        statementSignerResolver: ChatStatementSignerResolving = ChatStatementSignerResolver()
+        walletRepo: WalletManagerRepositoryProtocol = .shared
     ) {
         self.storageFacade = storageFacade
         self.pushIdFactory = pushIdFactory
         self.deviceEncryptionKeyManager = deviceEncryptionKeyManager
         self.encryptionManager = encryptionManager
         self.walletRepo = walletRepo
-        self.statementSignerResolver = statementSignerResolver
     }
 }
 
@@ -120,10 +117,9 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
         let identityAccountId = try walletRepo.main().getRawPublicKey()
         let devicePublicKey = try deviceEncryptionKeyManager.getPublicKey()
 
-        let signer = try statementSignerResolver.statementSigner(for: contact.accountId)
         let identityProof = try makeIdentityProof(
             identityAccountId: identityAccountId,
-            deviceAccountId: signer.accountId,
+            deviceAccountId: identityAccountId,
             peerEncryptionPubKey: contact.chatPublicKey.rawData,
             ownEncryptionKeyId: ownKeyId.encryptionKeyId
         )
@@ -211,9 +207,9 @@ extension ChatRequestStoreService: ChatRequestStoreServicing {
         .asyncExecute()
     }
 
-    func buildLocalAcceptorDevice(peerAccountId: AccountId) throws -> Chat.PeerDevice {
+    func buildLocalAcceptorDevice() throws -> Chat.PeerDevice {
         try Chat.PeerDevice(
-            statementAccountId: statementSignerResolver.statementSigner(for: peerAccountId).accountId,
+            statementAccountId: walletRepo.main().getRawPublicKey(),
             encryptionPublicKey: deviceEncryptionKeyManager.getPublicKey()
         )
     }

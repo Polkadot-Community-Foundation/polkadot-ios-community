@@ -238,7 +238,7 @@ private extension PeerSessionInitializer {
                 return nil
             }
 
-            let senderAccountId = statement.getSenderAccountId()
+            let senderAccountId = sessionStatement.topicAccountId
             let result: StatementDataDecodingResult<Message>
 
             do {

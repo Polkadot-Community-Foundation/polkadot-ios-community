@@ -101,7 +101,7 @@ extension PeerSessionFactory: PeerSessionMaking {
 
             let primarySessionId = try sessionIdFactory.createSessionId(
                 for: .init(
-                    ownAccountId: signer.accountId,
+                    ownAccountId: identitySigner.accountId,
                     ownPin: request.own.pin,
                     peerAccountId: request.peer.accountId,
                     peerPin: request.peer.pin,
@@ -127,7 +127,7 @@ extension PeerSessionFactory: PeerSessionMaking {
                 messageExchangeMode: messageExchangeMode,
                 identityEncryptor: identityEncryptor,
                 identityEncryptionKeyFactory: identityEncryptionKeyFactory,
-                signer: signer
+                ownAccountId: identitySigner.accountId
             )
 
             let routeContexts = try makeRouteContexts(
@@ -191,7 +191,7 @@ extension PeerSessionFactory: PeerSessionMaking {
                 messageExchangeMode: messageExchangeMode,
                 identitySessionId: identitySessionId,
                 primarySessionId: primarySessionId,
-                accountIds: (identity: identitySigner.accountId, device: signer.accountId)
+                ownAccountId: identitySigner.accountId
             )
 
             let peerSubscription = try makePeerSubscription(
@@ -305,7 +305,7 @@ private extension PeerSessionFactory {
         messageExchangeMode: MessageExchangeMode,
         identityEncryptor: MessageExchangeEncrypting,
         identityEncryptionKeyFactory: MessageExchangeEncryptionMaking,
-        signer: StatementStoreSigning
+        ownAccountId: AccountId
     ) throws -> StatementDataCoding {
         let identityCoder = StatementDataCoder(encryptor: identityEncryptor, logger: logger)
 
@@ -331,7 +331,7 @@ private extension PeerSessionFactory {
                 identityCoder: identityCoder,
                 identityEncryptionKeyFactory: identityEncryptionKeyFactory,
                 deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
-                signer: signer
+                ownAccountId: ownAccountId
             )
             return deviceCoder
         }
@@ -342,7 +342,7 @@ private extension PeerSessionFactory {
         identityCoder: StatementDataCoding,
         identityEncryptionKeyFactory: MessageExchangeEncryptionMaking,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking,
-        signer: StatementStoreSigning
+        ownAccountId: AccountId
     ) throws -> StatementDataCoding {
         let outgoingCoder = try makeMultiDeviceOutgoingCoder(
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
@@ -361,7 +361,7 @@ private extension PeerSessionFactory {
                 logger: logger
             ),
             recipientDevices: makeRecipientDevices(peerDevices: request.peer.devices),
-            ownStatementAccountId: signer.accountId,
+            ownStatementAccountId: ownAccountId,
             deviceKeysByAccountId: makeDeviceKeysByAccountId(peerDevices: request.peer.devices),
             logger: logger
         )
@@ -426,6 +426,7 @@ private extension PeerSessionFactory {
             return makeStatementSubscription(inputs: [
                 .init(
                     route: .identity,
+                    topicAccountId: request.peer.accountId,
                     subscription: identityStatementSubscription
                 )
             ])
@@ -448,6 +449,7 @@ private extension PeerSessionFactory {
                 ))
                 return PeerSessionStatementSubscription.Input(
                     route: .device,
+                    topicAccountId: device.statementAccountId,
                     subscription: deviceStatementSubscription
                 )
             }
@@ -461,30 +463,32 @@ private extension PeerSessionFactory {
         messageExchangeMode: MessageExchangeMode,
         identitySessionId: MessageExchange.SessionId,
         primarySessionId: MessageExchange.SessionId,
-        accountIds: (identity: AccountId, device: AccountId)
+        ownAccountId: AccountId
     ) throws -> PeerSessionStatementSubscribing {
         switch messageExchangeMode {
         case .identity:
             let identityStatementSubscription = try subscriptionFactory.createSubscription(for: .init(
-                accountId: accountIds.identity,
+                accountId: ownAccountId,
                 rawSessionId: identitySessionId.own
             ))
 
             return makeStatementSubscription(inputs: [
                 .init(
                     route: .identity,
+                    topicAccountId: ownAccountId,
                     subscription: identityStatementSubscription
                 )
             ])
         case .multidevice:
             let deviceStatementSubscription = try subscriptionFactory.createSubscription(for: .init(
-                accountId: accountIds.device,
+                accountId: ownAccountId,
                 rawSessionId: primarySessionId.own
             ))
 
             return makeStatementSubscription(inputs: [
                 .init(
                     route: .device,
+                    topicAccountId: ownAccountId,
                     subscription: deviceStatementSubscription
                 )
             ])

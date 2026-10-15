@@ -9,32 +9,20 @@ import Testing
 struct PerChatRequestAccountsTests {
     private let entropyManager = FixedRootEntropyManager()
     private let peerAccountId = Data(repeating: 0xAB, count: 32)
-    private let peerAccounts = ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot"))
+    private let ownSignKeyId = WalletDerivationPath.main(for: "dot")
 
-    private var signerResolver: ChatStatementSignerResolver {
-        ChatStatementSignerResolver(
-            peerAccounts: peerAccounts,
-            signManager: ChatSignerManager(entropyManager: entropyManager)
-        )
-    }
-
-    @Test func innerRequestProofIsSignedByPerChatAccount() throws {
+    @Test func innerRequestProofIsSignedByIdentityAccount() throws {
         let acceptorKey = Curve25519.KeyAgreement.PrivateKey()
-        let factory = ChatRequestFactory(
-            encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
-            signManager: ChatSignerManager(entropyManager: entropyManager),
-            remoteContactResolver: MockRemoteContactResolver(result: .success(nil)),
-            statementSignerResolver: signerResolver
-        )
 
-        let encrypted = try factory.createRemoteRequest(
+        let encrypted = try makeRequestFactory().createRemoteRequest(
             from: Chat.RequestMessage(
                 messageId: UUID().uuidString,
                 timestamp: Date().toChatTimestamp(),
                 content: .v1(Chat.RequestContentV1(pushToken: nil, welcomeMessage: nil))
             ),
             peerEncryptionPubKey: acceptorKey.publicKey.rawRepresentation,
-            peerAccountId: peerAccountId
+            peerAccountId: peerAccountId,
+            ownSignKeyId: ownSignKeyId
         )
 
         let decrypted = try X25519ChaChaPolyEncryptorFactory(privateKey: acceptorKey)
@@ -47,13 +35,13 @@ struct PerChatRequestAccountsTests {
             return
         }
 
-        #expect(try signer == statementAccountId())
+        #expect(try signer == identityAccountId())
     }
 
     @Test func acceptorRejectsRequestWithoutDevice() async throws {
         let acceptorKey = Curve25519.KeyAgreement.PrivateKey()
         let ownKeyId = Chat.Contact.Own(
-            signKeyId: WalletDerivationPath.main(for: "dot"),
+            signKeyId: ownSignKeyId,
             encryptionKeyId: ChatEncryptionDomain.mainChat.rawValue
         )
         let acceptorAccountId = try ChatSignerManager(entropyManager: entropyManager)
@@ -67,7 +55,8 @@ struct PerChatRequestAccountsTests {
                 content: .v1(Chat.RequestContentV1(pushToken: nil, welcomeMessage: nil))
             ),
             peerEncryptionPubKey: acceptorKey.publicKey.rawRepresentation,
-            peerAccountId: acceptorAccountId
+            peerAccountId: acceptorAccountId,
+            ownSignKeyId: ownSignKeyId
         )
 
         let acceptorFactory = ChatRequestFactory(
@@ -75,8 +64,7 @@ struct PerChatRequestAccountsTests {
                 X25519ChaChaPolyEncryptorFactory(privateKey: acceptorKey)
             },
             signManager: ChatSignerManager(entropyManager: entropyManager),
-            remoteContactResolver: MockRemoteContactResolver(result: .success(nil)),
-            statementSignerResolver: signerResolver
+            remoteContactResolver: MockRemoteContactResolver(result: .success(nil))
         )
 
         await #expect(throws: ChatRequestFactoryError.unsupportedRequestVersion) {
@@ -84,7 +72,7 @@ struct PerChatRequestAccountsTests {
         }
     }
 
-    @Test func acceptorAdvertisesPerChatAccountAsDevice() throws {
+    @Test func acceptorAdvertisesIdentityAccountAsDevice() throws {
         let deviceKeyManager = StubDeviceEncryptionKeyManager()
         let service = ChatRequestStoreService(
             storageFacade: UserDataStorageTestFacade(),
@@ -96,11 +84,11 @@ struct PerChatRequestAccountsTests {
             ),
             deviceEncryptionKeyManager: deviceKeyManager,
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
-            statementSignerResolver: signerResolver
+            walletRepo: MockWalletManagerRepository(entropyManager: entropyManager)
         )
-        let device = try service.buildLocalAcceptorDevice(peerAccountId: peerAccountId)
+        let device = try service.buildLocalAcceptorDevice()
 
-        #expect(try device.statementAccountId == statementAccountId())
+        #expect(try device.statementAccountId == identityAccountId())
         #expect(try device.encryptionPublicKey == (deviceKeyManager.getPublicKey()))
     }
 }
@@ -110,14 +98,13 @@ private extension PerChatRequestAccountsTests {
         ChatRequestFactory(
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             signManager: ChatSignerManager(entropyManager: entropyManager),
-            remoteContactResolver: MockRemoteContactResolver(result: .success(nil)),
-            statementSignerResolver: signerResolver
+            remoteContactResolver: MockRemoteContactResolver(result: .success(nil))
         )
     }
 
-    func statementAccountId() throws -> AccountId {
+    func identityAccountId() throws -> AccountId {
         try ChatSignerManager(entropyManager: entropyManager)
-            .makeSigner(for: peerAccounts.statementKeyId(for: peerAccountId))
+            .makeSigner(for: ownSignKeyId)
             .accountId
     }
 }

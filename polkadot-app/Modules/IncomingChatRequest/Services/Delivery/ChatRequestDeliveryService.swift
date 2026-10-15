@@ -67,7 +67,7 @@ extension ChatRequestDeliveryService: ChatRequestDelivering {
 
 private extension ChatRequestDeliveryService {
     func deliver(_ message: Chat.RequestMessage, session: MessageExchange.SessionRequest) async throws {
-        let size = try outgoingService.encodedSize(of: message, to: session.peer)
+        let size = try outgoingService.encodedSize(of: message, to: session.peer, ownKeyId: session.own)
 
         guard try await size <= resolver.maxStatementSize() else {
             diagnostics.logger.error("Chat request \(message.messageId) is \(size) bytes; marking it undeliverable")

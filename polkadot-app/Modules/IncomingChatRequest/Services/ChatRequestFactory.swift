@@ -10,7 +10,8 @@ protocol ChatRequestFactoryProtocol {
     func createRemoteRequest(
         from message: Chat.RequestMessage,
         peerEncryptionPubKey: Data,
-        peerAccountId: AccountId
+        peerAccountId: AccountId,
+        ownSignKeyId: String
     ) throws -> ChatRequest.EncryptedRemoteModel
 
     func decodeAndValidate(
@@ -31,18 +32,15 @@ final class ChatRequestFactory {
     let encryptionManager: MessageExchangeEncryptionManaging
     let signManager: StatementStoreSignerManaging
     let remoteContactResolver: RemoteContactResolving
-    let statementSignerResolver: ChatStatementSignerResolving
 
     init(
         encryptionManager: MessageExchangeEncryptionManaging,
         signManager: StatementStoreSignerManaging,
-        remoteContactResolver: RemoteContactResolving,
-        statementSignerResolver: ChatStatementSignerResolving
+        remoteContactResolver: RemoteContactResolving
     ) {
         self.encryptionManager = encryptionManager
         self.signManager = signManager
         self.remoteContactResolver = remoteContactResolver
-        self.statementSignerResolver = statementSignerResolver
     }
 }
 
@@ -50,7 +48,8 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
     func createRemoteRequest(
         from message: Chat.RequestMessage,
         peerEncryptionPubKey: Data,
-        peerAccountId: AccountId
+        peerAccountId: AccountId,
+        ownSignKeyId: String
     ) throws -> ChatRequest.EncryptedRemoteModel {
         let messageData = try ChatRequest.ProofPayload(
             message: message,
@@ -58,7 +57,7 @@ extension ChatRequestFactory: ChatRequestFactoryProtocol {
         )
         .scaleEncoded()
 
-        let proof = try statementSignerResolver.statementSigner(for: peerAccountId).sign(messageData)
+        let proof = try signManager.makeSigner(for: ownSignKeyId).sign(messageData)
 
         let remoteModel = ChatRequest.RemoteModel(
             message: message,

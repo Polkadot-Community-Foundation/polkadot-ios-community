@@ -16,7 +16,8 @@ protocol OutgoingChatRequestServicing {
 
     func encodedSize(
         of message: Chat.RequestMessage,
-        to peer: MessageExchange.Peer
+        to peer: MessageExchange.Peer,
+        ownKeyId: MessageExchange.Own
     ) throws -> Int
 
     func isStored(
@@ -69,7 +70,7 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
         let topic2 = try ChatRequest.paginationTopic(from: peer.accountId, day: pagination.day)
         let channel = try channelFactory.outgoingChannel(with: peer, ownKeyId: ownKeyId)
 
-        let scaleEncodedPayload = try makePayload(message: message, to: peer)
+        let scaleEncodedPayload = try makePayload(message: message, to: peer, ownKeyId: ownKeyId)
 
         let builder = StatementSubmitParametersBuilder(
             signer: signer,
@@ -87,9 +88,10 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
 
     func encodedSize(
         of message: Chat.RequestMessage,
-        to peer: MessageExchange.Peer
+        to peer: MessageExchange.Peer,
+        ownKeyId: MessageExchange.Own
     ) throws -> Int {
-        try makePayload(message: message, to: peer).count
+        try makePayload(message: message, to: peer, ownKeyId: ownKeyId).count
             + StatementSize.overhead(topicCount: Self.topicCount)
     }
 
@@ -112,11 +114,16 @@ extension OutgoingChatRequestService: OutgoingChatRequestServicing {
 }
 
 private extension OutgoingChatRequestService {
-    func makePayload(message: Chat.RequestMessage, to peer: MessageExchange.Peer) throws -> Data {
+    func makePayload(
+        message: Chat.RequestMessage,
+        to peer: MessageExchange.Peer,
+        ownKeyId: MessageExchange.Own
+    ) throws -> Data {
         let remoteRequest = try requestFactory.createRemoteRequest(
             from: message,
             peerEncryptionPubKey: peer.publicKey,
-            peerAccountId: peer.accountId
+            peerAccountId: peer.accountId,
+            ownSignKeyId: ownKeyId.signKeyId
         )
 
         return try remoteRequest.scaleEncoded().scaleEncoded()
