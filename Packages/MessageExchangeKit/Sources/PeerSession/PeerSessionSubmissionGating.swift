@@ -1,19 +1,32 @@
 import Foundation
 import StatementStore
-import SubstrateSdk
 
-/// Waits until `accountId` may submit statements, for example until its allowance is funded.
+/// Picks the account that signs a session's next statement, waiting until it may submit (for example, until funded).
 public protocol PeerSessionSubmissionGating: Sendable {
-    func awaitSubmittable(accountId: AccountId) async throws
+    func signer(for request: MessageExchange.SessionRequest) async throws -> StatementStoreSigning
 }
 
-struct GatedStatementSubmitter: StatementStoreSubmitting {
+/// Signs and submits a session's statements; channels hand over fields only.
+protocol PeerSessionStatementSubmitting {
+    func submit(_ statement: UnsignedStatement) async throws
+}
+
+struct SigningStatementSubmitter: PeerSessionStatementSubmitting {
+    let signer: StatementStoreSigning
     let base: StatementStoreSubmitting
-    let accountId: AccountId
+
+    func submit(_ statement: UnsignedStatement) async throws {
+        try await base.submitStatement(with: statement.signed(by: signer))
+    }
+}
+
+struct GatedStatementSubmitter: PeerSessionStatementSubmitting {
+    let base: StatementStoreSubmitting
+    let request: MessageExchange.SessionRequest
     let gate: PeerSessionSubmissionGating
 
-    func submitStatement(with builder: StatementSubmitParametersBuilding) async throws {
-        try await gate.awaitSubmittable(accountId: accountId)
-        try await base.submitStatement(with: builder)
+    func submit(_ statement: UnsignedStatement) async throws {
+        let signer = try await gate.signer(for: request)
+        try await base.submitStatement(with: statement.signed(by: signer))
     }
 }

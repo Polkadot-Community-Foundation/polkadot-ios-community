@@ -87,6 +87,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                 accountsProvider: ChatPeerAccounts(),
                 submissionGate: ChatAccountFunding(
                     funding: statementAccountFunding,
+                    statementSignerResolver: ChatStatementSignerResolver(signManager: signerManager),
                     dateProvider: NowDateProvider(),
                     issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
                 ),

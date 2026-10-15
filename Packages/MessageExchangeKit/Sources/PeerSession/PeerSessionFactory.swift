@@ -82,8 +82,11 @@ extension PeerSessionFactory: PeerSessionMaking {
 
         do {
             let identitySigner = try signerManager.makeSigner(for: request.own.signKeyId)
-            let signer = try makeSigner(for: request, mode: messageExchangeMode, identitySigner: identitySigner)
-            let sessionSubmitter = makeSubmitter(for: signer.accountId)
+            let sessionSubmitter = makeSubmitter(
+                for: request,
+                mode: messageExchangeMode,
+                identitySigner: identitySigner
+            )
 
             let identityEncryptionKeyFactory = try encryptionManager
                 .makeEncryptorFactory(ownEncryptionKeyId: request.own.encryptionKeyId)
@@ -139,7 +142,6 @@ extension PeerSessionFactory: PeerSessionMaking {
 
             let outgoingChannel = try makeOutgoingChannel(
                 routeContexts: routeContexts,
-                signer: signer,
                 submitter: sessionSubmitter,
                 priorityProvider: priorityProvider,
                 requestQueue: AnyOutgoingRequestQueue(OutgoingRequestQueue(
@@ -180,7 +182,6 @@ extension PeerSessionFactory: PeerSessionMaking {
 
             let incomingChannel = try makeIncomingChannel(
                 routeContexts: routeContexts,
-                signer: signer,
                 submitter: sessionSubmitter,
                 priorityProvider: priorityProvider,
                 statementDataCoder: statementDataCoder
@@ -254,23 +255,17 @@ private extension PeerSessionFactory {
         let effectiveRouteSelector: PeerSessionRouteSelector<Message>
     }
 
-    // A session uses exactly one route, so it has exactly one signer.
-    func makeSigner(
+    // Device-route statements are signed by whatever the gate picks; everything else by the identity account.
+    func makeSubmitter(
         for request: MessageExchange.SessionRequest,
         mode: MessageExchangeMode,
         identitySigner: StatementStoreSigning
-    ) throws -> StatementStoreSigning {
-        guard mode == .multidevice, let accountsProvider else {
-            return identitySigner
+    ) -> PeerSessionStatementSubmitting {
+        guard mode == .multidevice, let submissionGate else {
+            return SigningStatementSubmitter(signer: identitySigner, base: submitter)
         }
 
-        return try signerManager.makeSigner(for: accountsProvider.statementSignKeyId(for: request))
-    }
-
-    func makeSubmitter(for accountId: AccountId) -> StatementStoreSubmitting {
-        guard let submissionGate else { return submitter }
-
-        return GatedStatementSubmitter(base: submitter, accountId: accountId, gate: submissionGate)
+        return GatedStatementSubmitter(base: submitter, request: request, gate: submissionGate)
     }
 
     func makeRouteConfiguration(messageExchangeMode: MessageExchangeMode) -> RouteConfiguration<Message> {
@@ -524,8 +519,7 @@ private extension PeerSessionFactory {
 
     func makeOutgoingChannel(
         routeContexts: PeerSessionRoute.Contexts,
-        signer: StatementStoreSigning,
-        submitter: StatementStoreSubmitting,
+        submitter: PeerSessionStatementSubmitting,
         priorityProvider: PeerSessionPriorityProviding,
         requestQueue: AnyOutgoingRequestQueue<Message>
     ) throws -> OutgoingMessageChannel<M> {
@@ -533,7 +527,6 @@ private extension PeerSessionFactory {
             workQueue: workQueue,
             routeContexts: routeContexts,
             submitter: submitter,
-            signer: signer,
             preSendHandler: preSendHandler,
             priorityProvider: priorityProvider,
             requestQueue: requestQueue,
@@ -544,8 +537,7 @@ private extension PeerSessionFactory {
 
     func makeIncomingChannel(
         routeContexts: PeerSessionRoute.Contexts,
-        signer: StatementStoreSigning,
-        submitter: StatementStoreSubmitting,
+        submitter: PeerSessionStatementSubmitting,
         priorityProvider: PeerSessionPriorityProviding,
         statementDataCoder: StatementDataCoding
     ) throws -> IncomingMessageChannel<M> {
@@ -553,7 +545,6 @@ private extension PeerSessionFactory {
             workQueue: workQueue,
             routeContexts: routeContexts,
             submitter: submitter,
-            signer: signer,
             priorityProvider: priorityProvider,
             statementDataCoder: statementDataCoder,
             operationQueue: operationQueue,

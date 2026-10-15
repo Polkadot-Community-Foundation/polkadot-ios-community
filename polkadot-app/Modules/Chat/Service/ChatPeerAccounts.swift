@@ -28,10 +28,6 @@ extension ChatPeerAccounts: ChatPeerAccountsProviding {
 }
 
 extension ChatPeerAccounts: PeerSessionAccountsProviding {
-    func statementSignKeyId(for request: MessageExchange.SessionRequest) throws -> String {
-        try statementKeyId(for: request.peer.accountId)
-    }
-
     func uploadSignKeyId() throws -> String {
         try uploadKeyId()
     }

@@ -3,9 +3,10 @@ import FoundationExt
 import Individuality
 import MessageExchangeKit
 import os
+import StatementStore
 import SubstrateSdk
 
-/// Funds a chat statement account before it submits, retrying with backoff until the account is funded.
+/// Signs chat statements with the per-chat account, funding it first and retrying with backoff until funded.
 final class ChatAccountFunding: @unchecked Sendable {
     private struct State {
         var consecutiveFailures: [AccountId: Int] = [:]
@@ -17,6 +18,7 @@ final class ChatAccountFunding: @unchecked Sendable {
     private static let maxBackoffDoublings = 8
 
     private let funding: StatementAccountFunding
+    private let statementSignerResolver: ChatStatementSignerResolving
     private let dateProvider: DateProviding
     private let clock: any Clock<Duration>
     private let issueDiagnostics: ChatAccountFundingIssueDiagnostics
@@ -24,11 +26,13 @@ final class ChatAccountFunding: @unchecked Sendable {
 
     init(
         funding: StatementAccountFunding,
+        statementSignerResolver: ChatStatementSignerResolving,
         dateProvider: DateProviding,
         issueDiagnostics: ChatAccountFundingIssueDiagnostics,
         clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.funding = funding
+        self.statementSignerResolver = statementSignerResolver
         self.dateProvider = dateProvider
         self.issueDiagnostics = issueDiagnostics
         self.clock = clock
@@ -36,7 +40,15 @@ final class ChatAccountFunding: @unchecked Sendable {
 }
 
 extension ChatAccountFunding: PeerSessionSubmissionGating {
-    func awaitSubmittable(accountId: AccountId) async throws {
+    func signer(for request: MessageExchange.SessionRequest) async throws -> StatementStoreSigning {
+        let signer = try statementSignerResolver.statementSigner(for: request.peer.accountId)
+        try await awaitFunded(accountId: signer.accountId)
+        return signer
+    }
+}
+
+extension ChatAccountFunding {
+    func awaitFunded(accountId: AccountId) async throws {
         while try await !isFundedForCurrentPeriod(accountId) {
             do {
                 try await fundingTask(for: accountId).value

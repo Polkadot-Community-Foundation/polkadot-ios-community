@@ -79,10 +79,10 @@ private struct Participant {
     let identityEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
     let deviceEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
     let delegate = MockChatParticipant()
-    let statementKeyId: String
+    let signsWithIdentity: Bool
 
     init(signsWithIdentity: Bool = false) throws {
-        statementKeyId = signsWithIdentity ? "identity" : "statement"
+        self.signsWithIdentity = signsWithIdentity
         identityKeypair = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
         statementKeypair = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
     }
@@ -91,8 +91,8 @@ private struct Participant {
     var statementAccountId: AccountId { statementKeypair.publicKey().rawData() }
 
     func makeService(store: MockStatementStore) throws -> AnyMessageExchangeService<Chat.OpaqueMessage> {
-        let signManager = ClosureSignerManager { [identityKeypair, statementKeypair] keyId in
-            StatementStoreKeypairSigner(keypair: keyId == "statement" ? statementKeypair : identityKeypair)
+        let signManager = ClosureSignerManager { [identityKeypair] _ in
+            StatementStoreKeypairSigner(keypair: identityKeypair)
         }
 
         return try MessageExchangeServiceFactory(
@@ -102,7 +102,10 @@ private struct Participant {
                 X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
             },
             deviceEncryptionKeyFactory: X25519ChaChaPolyEncryptorFactory(privateKey: deviceEncryptionKey),
-            accountsProvider: StubPeerSessionAccounts(statementKeyId: statementKeyId, uploadKeyId: "upload"),
+            accountsProvider: StubPeerSessionAccounts(uploadKeyId: "upload"),
+            submissionGate: StubSubmissionGate(signer: StatementStoreKeypairSigner(
+                keypair: signsWithIdentity ? identityKeypair : statementKeypair
+            )),
             maxStatementSize: 4_096
         )
         .makeService(statementStoreConnection: store, delegate: AnyPeerSessionDelegate(delegate))
@@ -133,5 +136,13 @@ private struct Participant {
             timestamp: Date().toChatTimestamp(),
             versioned: .v1(.init(content: .text("hello")))
         ))
+    }
+}
+
+private struct StubSubmissionGate: PeerSessionSubmissionGating, @unchecked Sendable {
+    let signer: StatementStoreSigning
+
+    func signer(for _: MessageExchange.SessionRequest) async throws -> StatementStoreSigning {
+        signer
     }
 }
