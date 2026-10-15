@@ -9,21 +9,6 @@ name: Build (Production)
 # Outputs never become Actions artifacts: this repository is public. Build numbers are
 # 10000 + run number, so they never collide with the devnet lane in the shared App Store record.
 #
-# Environment `production` (ungated), `build` job:
-#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  optional; falls back to the repo-level
-#                                                io.pcf.polkadotapp plist, then to the placeholder
-#   secret MELD_BASIC_AUTH_TOKEN                 optional; absent leaves the Meld on-ramp inert
-#   var    PRODUCTION_BUNDLE_ID                  asserted against the resolved bundle id
-#
-# Environment `production-distribution` (required reviewers), `sign` job. No fallback to
-# repo-level material, and no GitHub secret holds Apple signing material:
-#   secret GOOGLESERVICE_INFO_PLIST_PROD_BASE64  required; BUNDLE_ID must be PRODUCTION_BUNDLE_ID
-#   secret MELD_BASIC_AUTH_TOKEN                 optional
-#   var    PRODUCTION_BUNDLE_ID                  required; the signed .ipa is checked against it
-#   var    IOS_SIGNING_SECRET                    Secret Manager secret with the App Store Connect key
-#   var    IOS_SIGNING_SERVICE_ACCOUNT           the only identity allowed to read it
-#   var    GCP_WORKLOAD_IDENTITY_PROVIDER
-#
 # Signing runs only when dispatched on `production` or a production/* tag, because the built
 # code's build phases run while the key is on disk. The signing helper always comes from the
 # dispatched commit, never from `ref`.
@@ -403,7 +388,6 @@ jobs:
         with:
           xcode-version: '26.4.1'
 
-      # production-distribution only: no fallback to the repo-level plist.
       - name: Provide GoogleService-Info.plist (production Firebase app)
         env:
           GS_PROD_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_PROD_BASE64 }}
