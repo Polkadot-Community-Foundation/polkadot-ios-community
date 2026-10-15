@@ -17,6 +17,5 @@ APP_NAME        = $(BRAND_DISPLAY_NAME)
 APP_MAIN_BUNDLE = $(BRAND_BUNDLE_ROOT)
 DEEPLINK        = $(BRAND_DEEPLINK)
 
-// App Group container. Defaults to the upstream expansion (group.<app bundle id>); a
-// configuration whose registered App Group is not derived from its bundle id overrides it.
+// Overridden where the registered App Group is not derived from the bundle id.
 APP_GROUP       = group.$(APP_MAIN_BUNDLE)

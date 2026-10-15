@@ -65,10 +65,7 @@ extension ModuleNavigator: ModuleNavigating {
             tabNavigation.viewControllers = [rootViewController, topViewController]
         }
 
-        // A chat notification tap must land on the conversation even when a
-        // Browse/product page is presented modally on top of the tab bar.
-        // Dismiss it first, otherwise the chat is selected *behind* the open
-        // page and nothing appears to happen — see products-devnet-issues#2.
+        // Dismiss any presented page first, or the chat opens behind it.
         ModalDismiss.dismissingPresented(on: view, then: navigate)
     }
 

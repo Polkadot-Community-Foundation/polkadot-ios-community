@@ -19,16 +19,12 @@ import Testing
 ///     personhood::SCORE        = Index(0)     (pallets/score/src/lib.rs `score_context()`)
 ///     personhood::RESOURCES    = Index(1)     (pallets/resources/src/lib.rs `resources_context()`)
 ///
-/// The same construction is pinned on Android by `PersonhoodProductContextTest` and
-/// `ProductProofContextTest` at `polkadot-android-community@7b0c63e`.
-///
-/// A wrong byte here produces a valid-looking 32-byte context and a valid-looking alias that only
-/// the live chain rejects — there is no type error and no crash. Do not "fix" a failing vector by
-/// re-deriving it from this Swift code; re-derive it from the Rust.
+/// A wrong byte yields a valid-looking context that only the live chain rejects. Re-derive a
+/// failing vector from the Rust, not from this Swift code.
 @Suite("Personhood product contexts")
 struct PersonhoodProductContextTests {
     /// `blake2b256("product-account-index")[..28]`, as asserted by the pallet's own
-    /// `index_magic_matches_rfc_derivation` test and by Android's `DerivationIndex32Test`.
+    /// `index_magic_matches_rfc_derivation` test.
     private static let indexMagicHex = "12e86013736c5498f050b03cdc16957dff0e422fb92ca77ec3ab168f"
 
     // MARK: - Cross-implementation vectors
@@ -76,9 +72,8 @@ struct PersonhoodProductContextTests {
         #expect(PersonhoodProductContext.resources.index == 1)
     }
 
-    /// `ProductContextSuffix::Index(n).bytes()` — little-endian `u32` then the magic. Mirrors
-    /// Android's `index suffix layout is pinned` and the pallet's
-    /// `index_suffix_uses_little_endian_index_and_magic`. Big-endian would be silent: index 0
+    /// `ProductContextSuffix::Index(n).bytes()` — little-endian `u32` then the magic, as in the
+    /// pallet's `index_suffix_uses_little_endian_index_and_magic`. Big-endian would be silent: index 0
     /// is byte-identical either way, index 1 is not.
     @Test
     func indexSuffixIsLittleEndianFollowedByTheMagic() throws {

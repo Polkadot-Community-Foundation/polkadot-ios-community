@@ -1,42 +1,13 @@
 name: Build (Dev, unsigned)
 
-# The fork's own gate for the Dev configuration. Two jobs, running in parallel:
-#
-#   build                    - compiles the app and its embedded NotificationServiceExtension for
-#                              a generic iOS device WITHOUT code signing, so it needs no Apple
-#                              Developer portal registration, no provisioning profile and no App
-#                              Store Connect API key. Catches Swift compile errors behind the
-#                              -DDEV flag (`#elseif NIGHTLY || DEV` gates), pbxproj configuration
-#                              mistakes in the Dev build configuration, and SwiftPM resolution
-#                              failures before the signed TestFlight lane (release-dev.yml) is
-#                              exercised. It also asserts the Dev lane's pinned PCF identity.
-#   storage-migration-tests  - the only lane in this repo that EXECUTES code. Runs the v36 -> v42
-#                              Core Data migration on a simulator. Upstream's 0.10.0 squash
-#                              deleted models 1...36 while every pre-squash PCF install is at v36,
-#                              so this upgrade path is the fork's highest-consequence claim and
-#                              the one that source review cannot settle.
-#
-# Neither job needs Parity's signing material, which is what makes them runnable on this fork at
-# all — upstream's pr.yml cannot pass here (it wants secrets.FASTLANE_RO_PAT for Parity's Match
-# repo and a GoogleService-Info.plist pinned to io.parity.polkadotapp.develop).
-#
-# Required repository secrets:
-#   GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64  plist of the io.pcf.polkadotapp.devnet Firebase iOS app (Dev build)
-#   GOOGLESERVICE_INFO_PLIST_DEV_BASE64     plist of the io.pcf.polkadotapp Firebase iOS app (migration tests)
-#
-# W3S_AUTH_KEY is no longer used — see release-dev.yml.
+# Builds the Dev configuration unsigned and asserts its identity, and runs the Core Data
+# migration tests on a simulator. Neither job needs signing material.
 
 on:
   workflow_dispatch:
   pull_request:
-    # Stacked PRs target the in-flight sync branch rather than main, and would otherwise get no
-    # gate at all on the one lane that can actually validate them.
     branches:
       - main
-      # `develop` mirrors upstream's integration branch. Without it a PR targeting develop
-      # would get NO fork gate at all: upstream's pr.yml has no branch filter so it runs and
-      # fails (Parity Match PAT + a plist pinned to io.parity.polkadotapp.develop), while this
-      # lane - the only one that can actually validate a PCF build - would be skipped.
       - develop
       - 'chore/sync-upstream-**'
 
@@ -63,7 +34,6 @@ jobs:
           GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
-      # Upstream replaced Scripts/inject-keys.sh with Runscripts/generate_secrets.sh.
       # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
       - name: Generate build-time secrets
         run: ./Runscripts/generate_secrets.sh
@@ -71,13 +41,7 @@ jobs:
       - name: Resolve SwiftPM dependencies
         run: xcodebuild -resolvePackageDependencies -project polkadot-app.xcodeproj -scheme polkadot-app
 
-      # The fork's whole reason for existing on this lane is that the Dev configuration is pinned
-      # to PCF's own identity. Configs/brand.xcconfig is deliberately kept byte-identical to
-      # upstream (so it never conflicts on a sync), which means BRAND_BUNDLE_ROOT is still
-      # io.parity.polkadotapp and the pinning in polkadot-app/Configs/polkadot-app.dev.xcconfig is
-      # the only thing overriding it. A sync that silently drops that override would still build,
-      # still pass every other check, and ship under Parity's identity into Parity's App Group.
-      # Assert it instead of trusting it.
+      # brand.xcconfig keeps upstream's identity, so a sync that drops the Dev overrides would still build.
       - name: Verify the Dev lane's pinned identity
         run: |
           set -o pipefail
@@ -103,16 +67,11 @@ jobs:
           expect "PRODUCT_BUNDLE_IDENTIFIER = io.pcf.polkadotapp.devnet"
           expect "APP_GROUP = group.pcf.polkadotapp.devnet"
 
-          # The Dev leaf includes base.release.xcconfig, which leaves ICON_SUFFIX unset on purpose
-          # so Release ships "AppIcon". Inheriting that empty default is exactly the bug this lane
-          # now guards: the build succeeds, every other check passes, and the public DEV build goes
-          # out wearing the production (black, unlabelled) icon. Assert the selection rather than
-          # trusting the xcconfig to still carry the override after the next sync.
+          # base.release.xcconfig leaves ICON_SUFFIX empty, so the Dev leaf must set it.
           expect "ICON_SUFFIX = Dev"
           expect "ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev"
 
-          # DEEPLINK is derived from BRAND_DEEPLINK by upstream's 4c1a647 refactor. An empty value
-          # here flows into Info.plist's CFBundleURLSchemes and silently kills the custom scheme.
+          # An empty DEEPLINK silently drops the custom URL scheme from Info.plist.
           if grep -qxE "DEEPLINK = .+" build-settings.txt; then
             echo "ok: $(grep -m1 -xE 'DEEPLINK = .+' build-settings.txt)"
           else
@@ -142,12 +101,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      # -showBuildSettings proves which icon was SELECTED. It cannot prove what actool actually
-      # compiled, and this lane builds unsigned and never runs the app, so the rendered artwork is
-      # otherwise unverifiable. Pull the compiled icon out of the built bundle and publish it.
-      #
-      # Diagnostic only: the selection assertion above is the gate. actool's output layout is an
-      # Xcode implementation detail, so a layout change here must not turn the lane red.
+      # Diagnostic only: publishes the compiled icon, which -showBuildSettings cannot show.
       - name: Extract the compiled app icon
         if: always()
         continue-on-error: true
@@ -178,8 +132,7 @@ jobs:
 
           find "$app" -maxdepth 2 -iname 'AppIcon*.png' -exec cp {} icon-evidence/ \; 2>/dev/null
 
-          # The rendered artwork lives in Assets.car. Dump the catalog inventory, then rip out
-          # every AppIcon rendition so the shipped tile can be looked at directly.
+          # The rendered artwork lives in Assets.car: extract every AppIcon rendition.
           if [ -f "$app/Assets.car" ]; then
             xcrun assetutil --info "$app/Assets.car" > icon-evidence/assets-car-info.json 2>&1
             grep -iE '"Name"|"Image Type"|AppIcon' icon-evidence/assets-car-info.json \
@@ -199,12 +152,7 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # Runs in parallel with `build`: that lane targets a generic device, this one a simulator, so
-  # there is no shared derived data to reuse and serialising them would only add wall clock.
-  #
-  # This is the only lane in the repo that EXECUTES anything. `build` proves the code compiles;
-  # this proves the v36 -> v42 Core Data migration actually works, which is the fork's central
-  # claim about the upgrade path and cannot be established by reading source.
+  # Runs the Core Data migration from v36, the model older installs carry, on a simulator.
   storage-migration-tests:
     runs-on: macos-26
     timeout-minutes: 90
@@ -250,14 +198,8 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices available | grep "$udid"
 
-      # Scoped to the migration tests on purpose. The rest of the suite has never run in CI, so
-      # adopting it wholesale here would make this lane red for reasons unrelated to the upgrade
-      # path it is meant to guard. Widen once the suite is known green.
-      #
-      # No -configuration override: the Dev configuration builds without testability, so
-      # `@testable import polkadot_app` fails to compile. The polkadot-appTests scheme's own Debug
-      # configuration has ENABLE_TESTABILITY, and the Core Data models are identical across
-      # configurations, so nothing under test is configuration-specific.
+      # Only the migration and crypto suites run here. No -configuration override: Dev builds
+      # without testability, and the scheme's Debug configuration has it.
       - name: Test (user store v36 migration)
         run: |
           set -o pipefail
@@ -275,20 +217,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             test 2>&1 | tee xcodebuild-test.log
 
-      # An -only-testing: filter that matches nothing passes VACUOUSLY: xcodebuild reports
-      # ** TEST SUCCEEDED ** having run zero tests, and exits 0. A renamed class, or one that never
-      # made it into the target, would therefore turn this lane into a permanent false green —
-      # worse than having no lane at all, because it looks like proof.
-      #
-      # The count is read from the result bundle rather than grepped out of the log on purpose:
-      # xcodebuild's console format is not a stable contract (it differs between XCTest and
-      # swift-testing and has changed across Xcode releases), so a log regex that silently stops
-      # matching would reintroduce exactly the false green this step exists to prevent.
-      #
-      # A non-zero total is not sufficient here: this lane runs two suites, so if the crypto
-      # vectors silently stopped matching, the six migration tests alone would still make the
-      # count non-zero and the lane green. Every suite named in REQUIRED_SUITES must therefore be
-      # shown to have executed by name.
+      # A filter that matches nothing passes with zero tests, so every suite in REQUIRED_SUITES must
+      # appear by name in the result bundle (the console format is not stable).
       - name: Assert the tests actually executed
         env:
           REQUIRED_SUITES: UserStorageMigrationV36Tests PersonhoodProductContextTests
@@ -367,9 +297,7 @@ jobs:
                 f"({os.environ['REQUIRED_SUITES']})")
           PY
 
-      # Diagnostic only — never fails the job. If the assertion above ever reports zero tests, the
-      # question is always the same: did the class make it into the built test bundle? Answer it
-      # here rather than guessing from the console log on the next iteration.
+      # Diagnostic only: lists the test classes in the built bundle.
       - name: Diagnose the built test bundle
         if: always()
         run: |

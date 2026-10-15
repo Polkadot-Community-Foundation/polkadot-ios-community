@@ -7,9 +7,7 @@ name: TestFlight prune (Dev)
 # Dry-run by default: it only LISTS what would be expired. Expiry (irreversible —
 # Apple has no un-expire) runs only when dispatched with apply=true.
 #
-# Reuses the same App Store Connect API secrets as release-dev.yml:
-#   APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID / APP_STORE_CONNECT_KEY_CONTENT
-# The key must have the App Manager role to manage TestFlight builds.
+# The App Store Connect key needs the App Manager role.
 
 on:
   workflow_dispatch:

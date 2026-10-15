@@ -55,17 +55,9 @@ extension UserStorageMigrator: StorageMigrating {
         do {
             try addPersistentStore(to: psc, options: options)
         } catch where Self.isUnmigratableStore(error) {
-            // 0.10.0 squashed UserDataModel 1...36 into UserDataModel41, so a store written by
-            // any earlier build has no source model left in the bundle and Core Data cannot
-            // infer a mapping. Nothing can migrate it, so drop it and start clean rather than
-            // crashing on every launch.
-            //
-            // Neither keys nor funds live in this store: the wallet entropy is in the keychain
-            // (and optionally iCloud, via Settings -> Backup), the username is Identity-pallet
-            // state keyed by account id, and CoinKeypairFactory derives coin keys from the root
-            // entropy along `//pps//coin`, so CoinageBackupRecoveryService re-derives coins and
-            // vouchers by scanning the chain. What is lost is local-only state, chiefly chat
-            // history — see the release notes for this build.
+            // The model that wrote this store is no longer shipped, so nothing can migrate it.
+            // Keys and funds are not stored here (the entropy is in the keychain and coins are
+            // re-derived from the chain), so recreate it; local-only state such as chats is lost.
             (Logger.shared as LoggerProtocol).error(
                 "User store predates \(destinationVersion.rawValue) and cannot be migrated, "
                     + "recreating it: \(error)"
@@ -101,12 +93,8 @@ extension UserStorageMigrator: StorageMigrating {
 // MARK: - Error classification
 
 extension UserStorageMigrator {
-    /// True only when the store cannot be migrated because the model that wrote it is no longer
-    /// shipped — as opposed to a transient failure (disk full, permissions, a locked file), where
-    /// destroying the store would throw away recoverable user data.
-    ///
-    /// Not private so `UserStorageMigratorTests` can pin the classification: widening it is how
-    /// this turns from a crash fix into data loss.
+    /// True only when the model that wrote the store is no longer shipped. Transient failures
+    /// (disk full, permissions, a locked file) must not match, or recoverable data is destroyed.
     static func isUnmigratableStore(_ error: Error) -> Bool {
         let error = error as NSError
 
