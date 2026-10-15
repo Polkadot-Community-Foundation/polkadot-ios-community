@@ -1,9 +1,5 @@
-// NotificationServiceExtension for the PCF public Dev build. Identity must agree with
-// polkadot-app/Configs/polkadot-app.dev.xcconfig — same APP_MAIN_BUNDLE, same APP_GROUP —
-// or the extension cannot read the shared container the app writes.
-//
-// OTHER_SWIFT_FLAGS carries no feature flag; -DNOTIFICATION_SERVICE_EXTENSION identifies the target,
-// and selects the extension's serial Core Data topology (CoreDataConcurrencyPolicy).
+// Must match polkadot-app.dev.xcconfig (APP_MAIN_BUNDLE, APP_GROUP) to read the app's shared container.
+// -DNOTIFICATION_SERVICE_EXTENSION selects the extension's serial Core Data topology.
 
 #include "../../Configs/base.release.xcconfig"
 

@@ -31,9 +31,7 @@ struct ModalDismissTests {
         #expect(presenter.dismissCallCount == 0)
     }
 
-    // Regression for products-devnet-issues#2: tapping a chat notification while a
-    // Browse/product page is open must dismiss that page before navigating, so the
-    // conversation is not selected behind the still-visible page.
+    // A chat notification tap while a Browse/product page is open dismisses the page first.
     @Test("Dismisses the open page without animation, then runs the action")
     func dismissesPresentedThenRuns() {
         let presenter = MockPresenter()

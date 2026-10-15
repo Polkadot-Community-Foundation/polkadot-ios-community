@@ -15,11 +15,8 @@ extension UIViewController: ModalPresenting {}
 
 /// Helper that dismisses an open modal page before performing navigation.
 ///
-/// A notification tap (or any programmatic navigation) must land on its
-/// destination even when a Browse/product page is presented modally on top of
-/// the tab bar. Without dismissing it first, the destination is selected
-/// *behind* the open page and nothing appears to happen — see
-/// `products-devnet-issues#2`.
+/// Without it, navigation from a notification tap selects its destination behind a
+/// Browse/product page presented over the tab bar.
 @MainActor
 enum ModalDismiss {
     /// Runs `action` after ensuring nothing is presented on `presenter`.

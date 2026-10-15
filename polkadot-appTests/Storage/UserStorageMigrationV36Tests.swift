@@ -2,26 +2,9 @@ import CoreData
 @testable import polkadot_app
 import XCTest
 
-/// Executes the upgrade path that every existing PCF install has to survive: a store written by
-/// `UserDataModel36` opening against the current model (`UserStorageParams.modelVersion`).
-///
-/// Upstream's 0.10.0 squash (`a6ce195`) deleted models 1...36 and restarted the version enum at 41,
-/// but every PCF build shipped before that squash wrote a **v36** store. Without
-/// `UserDataModel36.xcdatamodel` in the bundle Core Data has no source model to migrate from,
-/// `addPersistentStore` throws `NSMigrationMissingSourceModelError`, and
-/// `UserStorageMigrator.performMigration` ends in `fatalError` — a crash on every launch, with no
-/// way to reach Settings -> Backup to export the recovery phrase first.
-///
-/// Restoring the model is what makes the migration *possible*. Whether Core Data can actually
-/// **infer** a lightweight mapping from v36 to v42 is not something source review can establish —
-/// it is decided at runtime by Core Data's inference engine, against the real compiled models. That
-/// is precisely what these tests run, and it is the reason they exist: before this file, the
-/// fork's central claim about the v36 upgrade path had never been executed anywhere.
-///
-/// If `testVersion36StoreMigratesPreservingData` fails, do **not** "fix" it by deleting the v36
-/// model or the `version36` enum case. A failure here means the v36 -> v42 delta is not
-/// lightweight-inferable and needs an explicit `NSEntityMigrationPolicy` (or a staged v36 -> v41
-/// -> v42 migration), which is a real piece of work and not a test problem.
+/// Migrates a store written by `UserDataModel36`, the model older installs carry, to the current
+/// model (`UserStorageParams.modelVersion`). Only running it shows whether Core Data can infer the
+/// mapping. If it fails, the delta needs an explicit mapping; do not remove the v36 model or case.
 final class UserStorageMigrationV36Tests: XCTestCase {
     private var directory: URL!
 
@@ -48,12 +31,10 @@ final class UserStorageMigrationV36Tests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - The fork delta itself
+    // MARK: - The v36 model
 
-    /// The `version36` enum case and `UserDataModel36.xcdatamodel` are hard-coupled in both
-    /// directions: `createManagedObjectModel` traps when the .mom is missing, so the case without
-    /// the model turns every launch into a crash. A future upstream sync that drops the model
-    /// while keeping the case would be caught here rather than in the field.
+    /// The `version36` case and `UserDataModel36.xcdatamodel` must ship together: the case without
+    /// the model traps at launch.
     func testVersion36ModelIsShippedInTheAppBundle() throws {
         let name = UserStorageVersion.version36.rawValue
         let directory = UserStorageParams.modelDirectory
@@ -63,8 +44,7 @@ final class UserStorageMigrationV36Tests: XCTestCase {
 
         let modelURL = try XCTUnwrap(
             url,
-            "\(name) is missing from \(directory). The fork restores it precisely so a v36 store "
-                + "has a source model; without it every pre-squash install crashes on launch."
+            "\(name) is missing from \(directory); a v36 store has no source model without it."
         )
 
         XCTAssertNotNil(NSManagedObjectModel(contentsOf: modelURL))
@@ -73,10 +53,8 @@ final class UserStorageMigrationV36Tests: XCTestCase {
     /// Ascending declaration order is load-bearing: `checkIfMigrationNeeded` takes the *first*
     /// hash-compatible match out of `allCases`.
     func testVersionsAreDeclaredAscending() {
-        // The destination moves with every upstream model bump (v42 -> v45 so far), so derive it
-        // from the app's own declaration instead of pinning a literal. What must hold: the shipped
-        // v36 model is matched FIRST, the declared order is strictly ascending by model number, and
-        // the last declared version is the one the app opens stores with.
+        // The destination moves with each model bump, so it is read from the declaration: v36 comes
+        // first, the order is strictly ascending, and the last case is the one the app opens.
         let cases = UserStorageVersion.allCases
         let numbers = cases.map { Int($0.rawValue.replacingOccurrences(of: "UserDataModel", with: "")) ?? -1 }
         XCTAssertEqual(cases.first, .version36, "the v36 case must be matched before any newer model")
@@ -107,10 +85,8 @@ final class UserStorageMigrationV36Tests: XCTestCase {
     /// The load-bearing test. Writes a row under the real v36 model, migrates, and reads it back
     /// under v42.
     ///
-    /// `CDProduct` is the fixture on purpose (`CDKeystoreIntegrity`, the previous one, was removed
-    /// upstream in v44): its definition is byte-identical in
-    /// `UserDataModel36` and the current model, so a value that fails to survive indicates the
-    /// migration itself went wrong rather than an intentional schema change to that entity.
+    /// `CDProduct` is identical in `UserDataModel36` and the current model, so a value that does not
+    /// survive means the migration went wrong, not the entity.
     func testVersion36StoreMigratesPreservingData() throws {
         let identifier = "v36-survivor-\(UUID().uuidString)"
         let name = "survivor-name"
@@ -223,8 +199,7 @@ private extension UserStorageMigrationV36Tests {
         return coordinator
     }
 
-    /// Writes a store using the **real** shipped `UserDataModel36`, which is what an install from
-    /// any pre-squash PCF build looks like on disk.
+    /// Writes a store using the shipped `UserDataModel36`, as an older install has on disk.
     func makeVersion36Store(
         identifier: String = "seed",
         name: String = "seed-name"
