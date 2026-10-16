@@ -61,11 +61,20 @@ jobs:
           cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
           echo "key_path=$PWD/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
 
-      # Isolated venv: the runner's Homebrew python refuses a global pip install.
-      # Hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
+      # The lock holds wheels only, so the interpreter is pinned rather than taken from the image,
+      # whose default python3 moves between image releases.
+      - name: Select Python for the signing tooling
+        id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      # Isolated venv, hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
       - name: Install App Store Connect tooling
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
-          python3 -m venv "$RUNNER_TEMP/ascenv"
+          "$PYTHON" -m venv "$RUNNER_TEMP/ascenv"
           "$RUNNER_TEMP/ascenv/bin/pip" install --quiet --require-hashes --no-deps --only-binary :all: \
             -r .github/scripts/requirements-asc.txt
 
