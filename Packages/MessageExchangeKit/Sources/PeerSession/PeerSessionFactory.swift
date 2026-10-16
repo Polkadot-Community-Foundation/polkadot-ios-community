@@ -24,7 +24,6 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
     private let subscriptionFactory: StatementSubscriptionFactoryProtocol
     private let maxStatementSize: Int
     private let compactorFactory: AnyMessageCompactorFactory<M>?
-    private let accountsProvider: PeerSessionAccountsProviding?
     private let submissionGate: PeerSessionSubmissionGating?
     private let operationQueue: OperationQueue
     private let logger: SDKLoggerProtocol?
@@ -43,7 +42,6 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         subscriptionFactory: StatementSubscriptionFactoryProtocol,
         maxStatementSize: Int,
         compactorFactory: AnyMessageCompactorFactory<M>? = nil,
-        accountsProvider: PeerSessionAccountsProviding? = nil,
         submissionGate: PeerSessionSubmissionGating? = nil,
         operationQueue: OperationQueue,
         logger: SDKLoggerProtocol?
@@ -61,7 +59,6 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         self.subscriptionFactory = subscriptionFactory
         self.maxStatementSize = maxStatementSize
         self.compactorFactory = compactorFactory
-        self.accountsProvider = accountsProvider
         self.submissionGate = submissionGate
         self.operationQueue = operationQueue
         self.logger = logger
@@ -153,9 +150,7 @@ extension PeerSessionFactory: PeerSessionMaking {
                 ))
             )
 
-            let messageCompacter = try compactorFactory?.createCompactor(
-                for: accountsProvider?.uploadSignKeyId() ?? request.own.signKeyId
-            )
+            let messageCompacter = try compactorFactory?.createCompactor()
 
             let outgoingInterface: AnyOutgoingMessageChannel<M>
             var compactionProxy: OutgoingChannelCompactionProxy<M>?

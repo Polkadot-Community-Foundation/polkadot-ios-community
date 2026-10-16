@@ -31,7 +31,6 @@ final class MessageExchangeServiceFactory {
     let signManager: StatementStoreSignerManaging
     let encryptionManager: MessageExchangeEncryptionManaging
     let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
-    let accountsProvider: PeerSessionAccountsProviding?
     let submissionGate: PeerSessionSubmissionGating?
     let messageExchangeModeProvider: MessageExchangeModeProviding
     let workQueue: DispatchQueue
@@ -44,7 +43,6 @@ final class MessageExchangeServiceFactory {
         signManager: StatementStoreSignerManaging,
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
-        accountsProvider: PeerSessionAccountsProviding? = nil,
         submissionGate: PeerSessionSubmissionGating? = nil,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -54,7 +52,6 @@ final class MessageExchangeServiceFactory {
         self.signManager = signManager
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
-        self.accountsProvider = accountsProvider
         self.submissionGate = submissionGate
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.workQueue = workQueue
@@ -67,7 +64,6 @@ final class MessageExchangeServiceFactory {
         messageExchangeModeProvider: MessageExchangeModeProviding,
         entropyManager: RootEntropyManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
-        accountsProvider: PeerSessionAccountsProviding? = nil,
         submissionGate: PeerSessionSubmissionGating? = nil,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
@@ -79,7 +75,6 @@ final class MessageExchangeServiceFactory {
             signManager: ChatSignerManager(entropyManager: entropyManager),
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
-            accountsProvider: accountsProvider,
             submissionGate: submissionGate,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
@@ -116,7 +111,6 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             subscriptionFactory: subscriptionFactory,
             maxStatementSize: maxStatementSize,
             compactorFactory: compactorFactory,
-            accountsProvider: accountsProvider,
             submissionGate: submissionGate,
             operationQueue: operationQueue,
             logger: logger

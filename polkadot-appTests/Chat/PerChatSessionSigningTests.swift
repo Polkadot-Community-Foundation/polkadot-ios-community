@@ -102,7 +102,6 @@ private struct Participant {
                 X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
             },
             deviceEncryptionKeyFactory: X25519ChaChaPolyEncryptorFactory(privateKey: deviceEncryptionKey),
-            accountsProvider: StubPeerSessionAccounts(uploadKeyId: "upload"),
             submissionGate: StubSubmissionGate(signer: StatementStoreKeypairSigner(
                 keypair: signsWithIdentity ? identityKeypair : statementKeypair
             )),

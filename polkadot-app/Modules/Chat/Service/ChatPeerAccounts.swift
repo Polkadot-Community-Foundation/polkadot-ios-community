@@ -27,12 +27,6 @@ extension ChatPeerAccounts: ChatPeerAccountsProviding {
     }
 }
 
-extension ChatPeerAccounts: PeerSessionAccountsProviding {
-    func uploadSignKeyId() throws -> String {
-        try uploadKeyId()
-    }
-}
-
 protocol ChatStatementSignerResolving {
     /// Signer of the per-chat statement account toward the peer.
     func statementSigner(for peerAccountId: AccountId) throws -> StatementStoreSigning
