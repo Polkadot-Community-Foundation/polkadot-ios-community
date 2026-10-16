@@ -71,7 +71,7 @@ private extension ChatPendingMessagesServiceTests {
 
         try await facade.databaseService.performWrite { context in
             try insertChatIfNeeded(for: contactId, in: context)
-            try ChatMessageEntityMapper().populate(
+            try ChatMessageEntityMapper(orderAllocator: InMemoryChatMessageOrderAllocator()).populate(
                 entity: CDChatMessage(context: context),
                 from: message,
                 using: context

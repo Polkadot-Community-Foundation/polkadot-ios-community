@@ -80,7 +80,7 @@ private extension ChatAcceptancePublisherTests {
         )
 
         try await facade.databaseService.performWrite { context in
-            try ChatMessageEntityMapper().populate(
+            try ChatMessageEntityMapper(orderAllocator: InMemoryChatMessageOrderAllocator()).populate(
                 entity: CDChatMessage(context: context),
                 from: acceptance,
                 using: context
