@@ -26,7 +26,7 @@ on:
           - production
         default: none
       ref:
-        description: 'Git ref to build (branch, tag or SHA). Empty = the ref this workflow was dispatched on. Lets a frozen production baseline be rebuilt later without editing this file. signing=production accepts only empty or a production/* tag.'
+        description: 'Empty = the dispatched commit. Otherwise a production/* tag, to rebuild a frozen baseline.'
         type: string
         required: false
         default: ''
@@ -49,8 +49,51 @@ env:
   CLOUDSDK_STORAGE_PARALLEL_COMPOSITE_UPLOAD_ENABLED: "False"
 
 jobs:
+  # Production builds come only from the production branch or a production/* tag. INPUT_REF
+  # comes through env, never into the script text, and is echoed only once it matched the pattern.
+  resolve:
+    name: Require a production ref
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.trusted.outputs.sha }}
+    steps:
+      - name: Resolve the commit to build
+        id: trusted
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/heads/production | refs/tags/production/*) ;;
+            *)
+              echo "::error::production builds run only when dispatched on the production branch or a production/* tag"
+              exit 1
+              ;;
+          esac
+          if [ -z "$INPUT_REF" ]; then
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "building the dispatched commit $GITHUB_SHA ($GITHUB_REF)"
+            exit 0
+          fi
+          if [[ ! "$INPUT_REF" =~ ^production/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::ref must be empty or a production/* tag; branches and SHAs are refused"
+            exit 1
+          fi
+          # Public repository: no credential needed. Annotated tags resolve through their peeled ^{} line.
+          refs=$(git ls-remote --tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" \
+            "refs/tags/$INPUT_REF" "refs/tags/$INPUT_REF^{}")
+          sha=$(awk -v t="refs/tags/$INPUT_REF" '$2 == t "^{}" {p = $1} $2 == t {d = $1} END {print (p != "" ? p : d)}' <<< "$refs")
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::tag $INPUT_REF does not exist"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "building tag $INPUT_REF at $sha"
+
+
   build:
     name: Build Release (unsigned)
+    needs: resolve
     if: inputs.signing == 'none' || inputs.signing == 'production'
     runs-on: macos-26
     timeout-minutes: 90
@@ -81,8 +124,7 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # Empty string = actions/checkout's default (the dispatched ref).
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       # From the dispatched commit, so rebuilding an older baseline still runs today's guard.
       - name: Check out the Sentry guard (dispatched commit)
@@ -289,9 +331,9 @@ jobs:
   # under $RUNNER_TEMP and removed at the end.
   sign:
     name: Sign + TestFlight (Release Internal)
-    needs: build
+    needs: [resolve, build]
     # !cancelled() is required: without a status function, a skipped `build` (validate mode) skips this job too.
-    if: ${{ !cancelled() && (inputs.signing == 'validate' || inputs.signing == 'upload' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
+    if: ${{ !cancelled() && needs.resolve.result == 'success' && (inputs.signing == 'validate' || inputs.signing == 'upload' || (inputs.signing == 'production' && needs.build.result == 'success')) }}
     runs-on: macos-26
     timeout-minutes: 120
     environment: production-distribution
@@ -304,41 +346,6 @@ jobs:
       # The version testers see. Upstream's own MARKETING_VERSION is used when this is unset.
       MARKETING_VERSION: ${{ vars.PRODUCTION_MARKETING_VERSION }}
     steps:
-      # Before any checkout or credential. INPUT_REF comes through env, never into the script text,
-      # and is echoed only once it has matched the tag pattern.
-      - name: Require a trusted ref
-        id: trusted
-        env:
-          INPUT_REF: ${{ inputs.ref }}
-        run: |
-          set -euo pipefail
-          case "$GITHUB_REF" in
-            refs/heads/production | refs/tags/production/*) ;;
-            *)
-              echo "::error::signing runs only when dispatched on the production branch or a production/* tag"
-              exit 1
-              ;;
-          esac
-          if [ -z "$INPUT_REF" ]; then
-            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-            echo "building the dispatched commit $GITHUB_SHA ($GITHUB_REF)"
-            exit 0
-          fi
-          if [[ ! "$INPUT_REF" =~ ^production/[A-Za-z0-9._-]+$ ]]; then
-            echo "::error::with signing=production, ref must be empty or a production/* tag; branches and SHAs are refused"
-            exit 1
-          fi
-          # Public repository: no credential needed. Annotated tags resolve through their peeled ^{} line.
-          refs=$(git ls-remote --tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" \
-            "refs/tags/$INPUT_REF" "refs/tags/$INPUT_REF^{}")
-          sha=$(awk -v t="refs/tags/$INPUT_REF" '$2 == t "^{}" {p = $1} $2 == t {d = $1} END {print (p != "" ? p : d)}' <<< "$refs")
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::tag $INPUT_REF does not exist"
-            exit 1
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "building tag $INPUT_REF at $sha"
-
       - name: Require the signing configuration
         env:
           GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -369,7 +376,7 @@ jobs:
       # Exactly the commit the guard resolved; a tag moved since cannot swap it.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ steps.trusted.outputs.sha }}
+          ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
 
       # The helper that holds the GCP token and the key runs from the dispatched commit only.
@@ -697,29 +704,22 @@ jobs:
             echo "Uploaded build ${BUILD_NUMBER}. Internal groups, including **${TESTFLIGHT_GROUP}**, receive it automatically once processed."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Tag the built commit production/<version>-<build>, a ref this lane accepts for rebuilds.
-      # Production mode only: `upload` re-sends an .ipa built by an earlier run.
+      # A signed build tags the commit it built. Rebuilds of a production/* tag are already tagged.
       - name: Tag the shipped commit
-        if: inputs.signing == 'production'
+        if: inputs.signing == 'production' && inputs.ref == ''
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ steps.trusted.outputs.sha }}
+          SHA: ${{ needs.resolve.outputs.sha }}
         run: |
           set -euo pipefail
-          tag="production/${SHIPPED_VERSION}-${BUILD_NUMBER}"
-          # gh writes its error body to stdout, so a 404 would otherwise read as the current sha.
-          existing=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq .object.sha 2>/dev/null || true)
-          [[ "$existing" =~ ^[0-9a-f]{40}$ ]] || existing=""
-          if [ "$existing" = "$SHA" ]; then
-            echo "$tag already points at $SHA"
-          elif [ -n "$existing" ]; then
-            echo "::error::$tag already exists at $existing, not $SHA"
-            exit 1
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${tag}" -f "sha=${SHA}" --silent
-            echo "tagged $SHA as $tag"
-          fi
-          echo "- Tagged \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
+          DATE=$(date -u +%Y-%m-%d)
+          LAST=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/production/${DATE}." --jq '.[].ref' \
+            | sed -n "s#^refs/tags/production/${DATE}\.\([0-9]*\)\$#\1#p" | sort -n | tail -1)
+          TAG="production/${DATE}.$(( ${LAST:-0} + 1 ))"
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" -f "tag=${TAG}" -f "object=${SHA}" -f type=commit \
+            -f "message=iOS production build ${BUILD_NUMBER} (run ${GITHUB_RUN_ID}), signed" --jq .sha)
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${TAG}" -f "sha=${TAG_SHA}" --silent
+          echo "- Tagged \`${TAG}\` at ${SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
       # Revoke development certificates created during this run so the team's certificate limit
       # is never reached. Runs even when signing failed.
