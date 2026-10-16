@@ -32,6 +32,7 @@ final class TabBarBottomChromeController: UIViewController {
     private lazy var foldController = TabBarFoldController(
         foldSurface: chromeSurface,
         chromeBounds: { [unowned self] in view.bounds },
+        bottomSafeAreaInset: { [unowned self] in view.safeAreaInsets.bottom },
         grabZoneSink: { [weak self] zone in
             (self?.viewIfLoaded as? TabBarChromePassthroughView)?.foldGrabZone = zone
         },
@@ -100,7 +101,7 @@ final class TabBarBottomChromeController: UIViewController {
         guard TabBarVisibilityPolicy.contributesClearance(isTabRoot: foldController.isTabRoot) else {
             return view.safeAreaInsets.bottom
         }
-        return DSTabBarStyle.restingHeight
+        return DSTabBarStyle.restingHeight(bottomSafeAreaInset: view.safeAreaInsets.bottom)
     }
 
     /// The part of `restingBarHeight` the safe area does not already cover.
@@ -462,7 +463,8 @@ private extension TabBarBottomChromeController {
         }
         let keyboardTop = view.convert(keyboardFrame, from: nil).minY
         let keyboardOverlap = max(0, view.bounds.maxY - keyboardTop)
-        let buttonFootOffset = DSTabBarStyle.restingHeight - DSTabBarStyle.centerButtonFootFromRowTop
+        let restingHeight = DSTabBarStyle.restingHeight(bottomSafeAreaInset: view.safeAreaInsets.bottom)
+        let buttonFootOffset = restingHeight - DSTabBarStyle.centerButtonFootFromRowTop
         let allowedOverlap = buttonFootOffset + Self.keyboardButtonOverlap
         return max(0, keyboardOverlap - allowedOverlap)
     }

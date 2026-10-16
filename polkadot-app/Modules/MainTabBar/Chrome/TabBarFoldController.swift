@@ -20,6 +20,8 @@ final class TabBarFoldController {
 
     /// Bounds of the chrome's own full-bleed view; every fold distance derives from it.
     private let chromeBounds: () -> CGRect
+    /// The bottom safe area inset the resting bar's gap depends on.
+    private let bottomSafeAreaInset: () -> CGFloat
     /// Receives the folded bar's tap target, or `.zero` when it is not folded.
     private let grabZoneSink: (CGRect) -> Void
     /// A state other than `.shown` must dismiss any open panel.
@@ -46,12 +48,14 @@ final class TabBarFoldController {
     init(
         foldSurface: UIView,
         chromeBounds: @escaping () -> CGRect,
+        bottomSafeAreaInset: @escaping () -> CGFloat,
         grabZoneSink: @escaping (CGRect) -> Void,
         closePanel: @escaping () -> Void,
         stateSink: @escaping (TabBarVisibilityState) -> Void
     ) {
         self.foldSurface = foldSurface
         self.chromeBounds = chromeBounds
+        self.bottomSafeAreaInset = bottomSafeAreaInset
         self.grabZoneSink = grabZoneSink
         self.closePanel = closePanel
         self.stateSink = stateSink
@@ -250,7 +254,7 @@ private extension TabBarFoldController {
         let height = DSTabBarStyle.height
         grabZoneSink(CGRect(
             x: 0,
-            y: chromeBounds().height - DSTabBarStyle.bottomGap - height,
+            y: chromeBounds().height - DSTabBarStyle.bottomGap(bottomSafeAreaInset: bottomSafeAreaInset()) - height,
             width: Self.grabZoneWidth,
             height: height
         ))

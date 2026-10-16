@@ -87,7 +87,7 @@ private struct TabBarSlotView: View {
                 if let title = item.title {
                     Text(title)
                         .font(Font(UIFont.labelSmallEmphasized))
-                        .foregroundStyle(isEmphasized ? Color.fgPrimary : Color.fgSecondary)
+                        .foregroundStyle(isEmphasized ? Color.fgPrimary : DSTabBarStyle.Spec.inactiveIcon)
                         .padding(.top, 2)
                 }
             }
@@ -109,10 +109,10 @@ private struct TabBarSlotView: View {
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .foregroundStyle(isEmphasized ? Color.fgPrimary : Color.fgSecondary)
+                .foregroundStyle(isEmphasized ? Color.fgPrimary : DSTabBarStyle.Spec.inactiveIcon)
                 .frame(width: Self.iconSize, height: Self.iconSize)
         case let .tabsGlyph(count):
-            TabsGlyph(count: count, color: isEmphasized ? .fgPrimary : .fgSecondary)
+            TabsGlyph(count: count, color: isEmphasized ? .fgPrimary : UIColor(DSTabBarStyle.Spec.inactiveIcon))
                 .frame(width: Self.iconSize, height: Self.iconSize)
         }
     }

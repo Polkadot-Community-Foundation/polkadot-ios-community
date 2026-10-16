@@ -69,11 +69,11 @@ MainTabBarViewController            container, status strip, widget and inset la
 
 ## Bar Row
 
-`DSTabBarContainer` lays out two slots left of the center hole and two right of it. The bar row is 62 pt tall (`DSTabBarStyle.height`) with a 21 pt bottom gap. The bar row takes four `TabBarSlot` values, in the order the presenter lists them. Under `FEATURE_PRODUCTS` they are Chat, Pocket (`wallet`), Browse, and Apps (`.action(.spaTabs)`). Without it they are Chat, Pocket, Settings (`.tab(.settings)`), and Network (`.action(.connectionStatus)`). Network opens the shelf, which then lists the chain connections the connection status sheet shows, and funding products open as a modal sheet instead of a tab.
+`DSTabBarContainer` lays out two slots left of the center hole and two right of it. The bar row is a 62 pt tall capsule (`DSTabBarStyle.height`). Its bottom gap is the bottom safe-area inset minus 7 pt, at least 12 pt (`DSTabBarStyle.bottomGap(bottomSafeAreaInset:)`). The notch is a hole of radius 34 pt centred 21.8 pt below the top edge, and the two inner slots stop at its 73.6 pt shoulders. The bar row takes four `TabBarSlot` values, in the order the presenter lists them. Under `FEATURE_PRODUCTS` they are Chat, Pocket (`wallet`), Browse, and Apps (`.action(.spaTabs)`). Without it they are Chat, Pocket, Settings (`.tab(.settings)`), and Network (`.action(.connectionStatus)`). Network opens the shelf, which then lists the chain connections the connection status sheet shows, and funding products open as a modal sheet instead of a tab.
 
 The row is an accessibility container with the tab-bar trait.
 
-`DSTabBarStyle.rowWidth(inAvailableWidth:)` gives the bar row width. It is the available width minus 21 pt on each side, capped at 500 pt. The fold controller and the center panel sizing both use it.
+`DSTabBarStyle.rowWidth(inAvailableWidth:)` gives the bar row width. It is the available width minus 10 pt on each side, capped at 440 pt. The fold controller and the center panel sizing both use it.
 
 **Center hole.** The center button is 64 pt (`centerButtonSize`). The hole radius is derived as `notchRadius = centerButtonSize / 2 + notchRingGap`, which gives 35 pt with the 3 pt `notchRingGap`. The hole center sits 22 pt below the top of the bar row (`notchCenterY`), so the center button stands 10 pt above the bar. Where the hole meets the bar's top edge, both corners are rounded with `notchFilletRadius` (4 pt). The rounding shrinks as the hole reaches higher above that edge, so it fades out smoothly when the shelf rises past the hole. `DSTabBarShape` and `DSTabBarShadowMask` subtract the same cut-out, the hole plus its rounded corners, from the bar. The rim strokes the bar outline and the edge of the hole.
 

@@ -6,16 +6,25 @@ final class TabBarChromeSurfaceView: UIView {
     private let barContainer = TabBarBarHostView()
 
     private var barHeightConstraint: Constraint?
+    private var barBottomConstraint: Constraint?
     private var barHostHeight = DSTabBarStyle.height
+
+    /// The chrome translates this view, so the gap reads the untransformed host's inset.
+    private var bottomSafeAreaInset: CGFloat {
+        superview?.safeAreaInsets.bottom ?? safeAreaInsets.bottom
+    }
 
     /// The chrome sits at the bottom, clearing the home indicator gap, and a keyboard covers it
     /// like any other bottom bar.
-    private static let restingBottomOffset = -DSTabBarStyle.bottomGap
+    private var restingBottomOffset: CGFloat {
+        -DSTabBarStyle.bottomGap(bottomSafeAreaInset: bottomSafeAreaInset)
+    }
 
     /// The room above the bar at rest. The bar host is sized from this, never from the room left after a keyboard
     /// lift, which the chrome subtracts itself.
     var restingPanelHeight: CGFloat {
-        max(0, bounds.height - safeAreaInsets.top - DSTabBarStyle.restingHeight)
+        let restingHeight = DSTabBarStyle.restingHeight(bottomSafeAreaInset: bottomSafeAreaInset)
+        return max(0, bounds.height - safeAreaInsets.top - restingHeight)
     }
 
     override init(frame: CGRect) {
@@ -30,6 +39,11 @@ final class TabBarChromeSurfaceView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         refreshBarHostHeight()
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        barBottomConstraint?.update(offset: restingBottomOffset)
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -49,7 +63,7 @@ final class TabBarChromeSurfaceView: UIView {
             make.centerX.equalToSuperview()
             make.width.lessThanOrEqualTo(DSTabBarStyle.maxWidth)
             make.width.equalToSuperview().offset(-DSTabBarStyle.horizontalMargin * 2).priority(.high)
-            make.bottom.equalToSuperview().offset(Self.restingBottomOffset)
+            barBottomConstraint = make.bottom.equalToSuperview().offset(restingBottomOffset).constraint
             barHeightConstraint = make.height.equalTo(barHostHeight).constraint
         }
     }

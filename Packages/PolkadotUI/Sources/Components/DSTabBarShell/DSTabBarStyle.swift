@@ -7,12 +7,20 @@ public enum DSTabBarStyle {
     /// Height of the bar row itself, not counting the gap below it.
     public static let height: CGFloat = 62
 
-    /// Gap between the bar row and the bottom of the screen.
-    public static let bottomGap: CGFloat = 21
     /// Inset of the bar row from each side of the screen.
-    public static let horizontalMargin: CGFloat = 21
+    public static let horizontalMargin: CGFloat = 10
     /// Widest the bar row grows. Wider screens leave the extra width to either side.
-    public static let maxWidth: CGFloat = 500
+    public static let maxWidth: CGFloat = 440
+
+    /// Smallest gap between the bar row and the bottom of the screen.
+    private static let minimumBottomGap: CGFloat = 12
+    /// The bottom safe area inset already clears part of the screen, so the gap shrinks by this much of it.
+    private static let bottomGapInsetReduction: CGFloat = 7
+
+    /// Gap between the bar row and the bottom of the screen, given the bottom safe area inset.
+    public static func bottomGap(bottomSafeAreaInset: CGFloat) -> CGFloat {
+        max(minimumBottomGap, bottomSafeAreaInset - bottomGapInsetReduction)
+    }
 
     /// Width of the bar row in a host `availableWidth` wide: inset by the margins and capped at `maxWidth`.
     public static func rowWidth(inAvailableWidth availableWidth: CGFloat) -> CGFloat {
@@ -21,14 +29,16 @@ public enum DSTabBarStyle {
 
     /// Height the bar occupies once it has settled, which is what a host publishes as bottom
     /// clearance for its content.
-    public static var restingHeight: CGFloat { height + bottomGap }
-    static let cornerRadius: CGFloat = 28
-    static let itemInset: CGFloat = 6
+    public static func restingHeight(bottomSafeAreaInset: CGFloat) -> CGFloat {
+        height + bottomGap(bottomSafeAreaInset: bottomSafeAreaInset)
+    }
+
+    static var cornerRadius: CGFloat { height / 2 }
+    static let itemInset: CGFloat = 4
     /// Vertical inset of the selection pill inside the bar row.
     static let selectionInset: CGFloat = 4
-    /// A flat fill rather than glass, because glass samples whatever scrolls under the bar and the
-    /// selection would drift in colour from screen to screen.
-    static let selectionFillOpacity: Double = 0.12
+    /// Width of the selection pill. It is centred on its slot and may overflow the slot.
+    static let selectionWidth: CGFloat = 80
     /// Response of the spring that carries the selection pill between slots.
     static let selectionSpringResponse: Double = 0.4
     static let selectionSpringDamping: Double = 0.8
@@ -37,16 +47,18 @@ public enum DSTabBarStyle {
     static let strokeWidth: CGFloat = 1
 
     /// Gap between the hole's edge and the centre control sitting in it.
-    static let notchRingGap: CGFloat = 3
+    static let notchRingGap: CGFloat = 2
     /// Radius of the hole cut from the bar: the centre control plus the ring gap around it.
     static var notchRadius: CGFloat { centerButtonSize / 2 + notchRingGap }
     /// Hole centre, measured down from the top of the bar row.
-    static let notchCenterY: CGFloat = 22
+    static let notchCenterY: CGFloat = 21.8
     /// How far the hole reaches above the bar row, into the shelf.
     static var notchOverhang: CGFloat { notchRadius - notchCenterY }
     /// Radius of the rounding where the hole meets the bar's top edge. It shrinks with how far the hole
     /// reaches above that edge, so the outline does not jump as the shelf grows past the hole.
     static let notchFilletRadius: CGFloat = 4
+    /// Gap the two inner slots leave around the notch.
+    static let notchShoulderWidth: CGFloat = 73.6
 
     /// Whether a point in the bar row's coordinate space falls on the centre button, which the
     /// fold gesture must not claim.

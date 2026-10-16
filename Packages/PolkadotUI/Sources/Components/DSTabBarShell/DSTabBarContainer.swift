@@ -71,7 +71,7 @@ public struct DSTabBarContainer<
             HStack(spacing: 0) {
                 slot(first, at: 0)
                 slot(second, at: 1)
-                Color.clear.frame(width: DSTabBarStyle.notchRadius * 2)
+                Color.clear.frame(width: DSTabBarStyle.notchShoulderWidth)
                 slot(third, at: 2)
                 slot(fourth, at: 3)
             }
@@ -118,6 +118,7 @@ private extension DSTabBarContainer {
     var selectionPill: some View {
         DSTabBarSelectionPill.fill(Capsule(style: .continuous))
             .padding(.vertical, DSTabBarStyle.selectionInset)
+            .frame(width: DSTabBarStyle.selectionWidth)
             .matchedGeometryEffect(id: DSTabBarSelectionPill.matchedGeometryId, in: selectionNamespace)
     }
 
