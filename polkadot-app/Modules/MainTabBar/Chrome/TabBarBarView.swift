@@ -28,7 +28,7 @@ struct TabBarBarView: View {
                     accessibilityLabel: String(localized: .Products.productTabsAccessibilityScanner),
                     openAccessibilityLabel: String(localized: .Products.productTabsAccessibilityCloseSearch),
                     onSettled: { model.onCenterPanelOpenChanged?($0) },
-                    onCloseRequested: { model.onCenterPanelCloseRequested?() }
+                    onCloseRequested: { model.onCenterPanelCloseRequested?($0) }
                 ) {
                     TabBarScanPanelContent(makeController: model.makeCenterContent)
                 }
@@ -101,6 +101,7 @@ private struct TabBarSlotView: View {
             .padding(.vertical, item.title == nil ? 0 : 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
+            .animation(DSTabBarStyle.selectionCurve, value: isEmphasized)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.accessibilityLabel)
@@ -280,10 +281,7 @@ private extension TabBarScanPanelContent {
 
         private func finishGesture(_ recognizer: UIPanGestureRecognizer) {
             if panelReceivedInput {
-                let panelTranslation = recognizer.translation(in: nil).y - panelStartTranslation
-                let velocityHeight = recognizer.velocity(in: nil).y
-                let predictedEnd = panelOwnsDrag ? panelTranslation + projectedDistance(velocityHeight) : 0
-                drag?.ended(predictedEndTranslationHeight: predictedEnd)
+                drag?.ended(velocityHeight: panelOwnsDrag ? recognizer.velocity(in: nil).y : 0)
             }
             resetGesture()
         }
@@ -316,12 +314,6 @@ private extension TabBarScanPanelContent {
 
         private func isAtTop(_ scrollView: UIScrollView) -> Bool {
             scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top
-        }
-
-        /// Distance a release at this velocity coasts under `UIScrollView`'s normal deceleration.
-        private func projectedDistance(_ velocity: CGFloat) -> CGFloat {
-            let rate = UIScrollView.DecelerationRate.normal.rawValue
-            return velocity / 1_000 * rate / (1 - rate)
         }
     }
 }

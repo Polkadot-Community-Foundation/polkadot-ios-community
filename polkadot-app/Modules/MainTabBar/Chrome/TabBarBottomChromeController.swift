@@ -312,6 +312,14 @@ private extension TabBarBottomChromeController {
         }
     }
 
+    /// Animates the centre control closed with the requested duration, then commits the close. The progress moves
+    /// here rather than in `applyCommittedPanel`, because a commit of an already closed panel does nothing, and a
+    /// centre control that was grabbed mid-close would otherwise stay where it was left.
+    func closeCenterPanel(duration: TimeInterval?) {
+        barModel.setCenterPanelOpen(false, duration: duration)
+        setPanel(nil)
+    }
+
     /// Only the centre control's own panel is driven here; another open panel is left alone.
     func centerPanelOpenChanged(_ isOpen: Bool) {
         if isOpen {
@@ -521,8 +529,8 @@ private extension TabBarBottomChromeController {
         barModel.onCenterPanelOpenChanged = { [weak self] isOpen in
             self?.centerPanelOpenChanged(isOpen)
         }
-        barModel.onCenterPanelCloseRequested = { [weak self] in
-            self?.setPanel(nil)
+        barModel.onCenterPanelCloseRequested = { [weak self] duration in
+            self?.closeCenterPanel(duration: duration)
         }
         barModel.onShelfContentHeightChanged = { [weak self] in
             self?.applyBarLiveHeight()

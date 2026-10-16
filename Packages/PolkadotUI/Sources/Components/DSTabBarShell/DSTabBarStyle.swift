@@ -1,5 +1,6 @@
 import CoreGraphics
 import DesignSystem
+import SwiftUI
 import UIKit
 
 /// Geometry and fixed visual values of the tab bar. The bar has one shape, so none of these are configurable.
@@ -39,12 +40,32 @@ public enum DSTabBarStyle {
     static let selectionInset: CGFloat = 4
     /// Width of the selection pill. It is centred on its slot and may overflow the slot.
     static let selectionWidth: CGFloat = 80
-    /// Response of the spring that carries the selection pill between slots.
-    static let selectionSpringResponse: Double = 0.4
-    static let selectionSpringDamping: Double = 0.8
+    /// Length of the ease that carries the selection pill between slots and recolours the slot icons.
+    static let selectionDuration: Double = 0.238
+    /// The CSS ease the selection pill moves on. Public so a host's slot icons change colour on the same curve.
+    public static let selectionCurve: Animation = .timingCurve(0.25, 0.1, 0.25, 1, duration: selectionDuration)
     /// Corner radius of the selection pill drawn behind a shelf view.
     static let shelfSelectionCornerRadius: CGFloat = DSRadii.mediumIncreased
     static let strokeWidth: CGFloat = 1
+
+    /// Each axis component of a unit vector at 45°, which is 1 / √2.
+    private static let diagonalAxisFactor = CGFloat(0.5.squareRoot())
+
+    /// Rim gradient for a shape of `size`. It runs along a 45° line from the top leading corner for
+    /// `(width + height) / 2` points, then holds its last stop. A unit-space gradient would stretch that
+    /// diagonal with the shape's aspect ratio, which leaves a wide bar's top edge in the first stops.
+    static func rimGradient(stops: [Gradient.Stop], size: CGSize) -> LinearGradient {
+        guard size.width > 0, size.height > 0 else {
+            return LinearGradient(stops: stops, startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+        let length = (size.width + size.height) / 2
+        let axisOffset = length * diagonalAxisFactor
+        return LinearGradient(
+            stops: stops,
+            startPoint: .topLeading,
+            endPoint: UnitPoint(x: axisOffset / size.width, y: axisOffset / size.height)
+        )
+    }
 
     /// Gap between the hole's edge and the centre control sitting in it.
     static let notchRingGap: CGFloat = 2
@@ -80,8 +101,11 @@ public enum DSTabBarStyle {
     static let barShadowRadius: CGFloat = 15
     /// Distance the bar's shadow falls below the bar.
     static let barShadowY: CGFloat = 14
-    /// How far the shadow's silhouette is pulled in from the bar's outline on every side.
+    /// How far the shadow's silhouette is pulled in from the bar's outline on its sides and bottom.
     static let barShadowSpread: CGFloat = 6
+    /// How far the shadow's silhouette is pulled in from the bar's top edge. Deep enough that the blurred falloff
+    /// ends at the top edge, so none of it shows above the bar and the notch cuts no line across it.
+    static var barShadowTopInset: CGFloat { barShadowRadius * 2 - barShadowY }
     /// Reach of the shadow mask past the bar, so the blurred shadow is not cut off at the bar edge.
     static let shadowMaskSpread: CGFloat = barShadowRadius * 4 + 40
 
@@ -98,14 +122,38 @@ public enum DSTabBarStyle {
     public static let shelfSpringResponse: Double = 0.18
     public static let shelfSpringDamping: Double = 0.9
 
-    /// Response of the spring that settles the centre control open or closed. Public because a host
+    /// Length of the ease that settles the centre control open or closed. Public because a host
     /// driving the control from UIKit has to match the control's own settle.
-    public static let centerSpringResponse: Double = 0.26
-    public static let centerSpringDamping: Double = 0.88
+    public static let centerDuration: Double = 0.329
+    /// Control points of the cubic ease-out `1 − (1 − t)³` that the centre control settles on.
+    private static let easeOutControl1 = CGPoint(x: 0.33, y: 1)
+    private static let easeOutControl2 = CGPoint(x: 0.68, y: 1)
+    /// The centre control's settle at `centerDuration`.
+    public static let centerEaseOut: Animation = centerCurve(duration: centerDuration)
 
-    /// Length of the eased shelf reveal under Reduce Motion, growth and fade together. Matches
-    /// the centre control's.
+    /// The centre control's ease-out over `duration`, for a move that runs longer or shorter than a settle.
+    public static func centerCurve(duration: Double) -> Animation {
+        .timingCurve(
+            Double(easeOutControl1.x),
+            Double(easeOutControl1.y),
+            Double(easeOutControl2.x),
+            Double(easeOutControl2.y),
+            duration: duration
+        )
+    }
+
+    /// Length of the eased shelf reveal under Reduce Motion, growth and fade together.
     static let shelfFadeDuration: Double = 0.2
+    /// Length of the centre control's cross-fade under Reduce Motion, where its geometry snaps.
+    static let centerReduceMotionFade: Double = 0.22
+    /// Share of a close's duration after which centre content starts to fade out, while the shape keeps moving.
+    static let contentCloseFadeStart: Double = 0.3
+    /// Share of a close's duration the centre content's fade out takes.
+    static let contentCloseFadeLength: Double = 0.35
+    /// How long a settle waits after the shape starts to open before centre content fades in.
+    static let contentRevealDelay: Double = 0.224
+    /// Length of the centre content's fade in.
+    static let contentRevealDuration: Double = 0.141
 
     /// Diameter of the centre control at rest. It sits in the hole with a ring gap.
     static let centerButtonSize: CGFloat = 64
@@ -114,10 +162,6 @@ public enum DSTabBarStyle {
     static let centerLobeDepth: CGFloat = 31
     /// Half the lobe's width once the panel is 88 pt wide. Narrower panels scale it down with their width.
     static let centerLobeHalfWidth: CGFloat = 44
-    /// How far a drag can stretch the open panel past its full height before the resistance holds it.
-    static let centerStretchLimit: CGFloat = 32
-    /// How quickly the stretch builds. A larger value stretches the panel further for the same pull.
-    static let centerStretchCoefficient: CGFloat = 0.55
 
     /// Width the open centre panel takes in a bar row of `width`: the full width of the bar.
     public static func centerPanelWidth(inRowOfWidth width: CGFloat) -> CGFloat {
@@ -150,22 +194,22 @@ public enum DSTabBarStyle {
         max(0, rise + centerButtonFootFromRowTop - centerButtonSize / 2)
     }
 
-    /// Runs `changes` on the centre control's spring and lays out `view` inside the same animation, so UIKit
+    /// Runs `changes` on the centre control's ease-out and lays out `view` inside the same animation, so UIKit
     /// moves whatever `changes` touches in step with the control. Snaps under Reduce Motion.
     public static func animateCenterChange(in view: UIView, _ changes: @escaping () -> Void) {
         guard !UIAccessibility.isReduceMotionEnabled else {
             changes()
             return
         }
-        UIView.animate(
-            withDuration: centerSpringResponse,
-            delay: 0,
-            usingSpringWithDamping: centerSpringDamping,
-            initialSpringVelocity: 0
+        let animator = UIViewPropertyAnimator(
+            duration: centerDuration,
+            controlPoint1: easeOutControl1,
+            controlPoint2: easeOutControl2
         ) {
             changes()
             view.layoutIfNeeded()
         }
+        animator.startAnimation()
     }
 
     /// Centre control progress at which its fill and rim start to blend from the closed button to the open panel.

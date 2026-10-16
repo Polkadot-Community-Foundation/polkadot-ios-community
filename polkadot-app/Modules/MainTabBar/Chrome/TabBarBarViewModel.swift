@@ -64,19 +64,20 @@ final class TabBarBarViewModel {
     /// Fires only when the progress settles at either end, not on every intermediate frame of a drag.
     var onCenterPanelOpenChanged: ((Bool) -> Void)?
     /// Fires when the centre control would settle closed from open. The chrome closes the panel, so the close
-    /// animates through `centerProgress` like an outside tap.
-    var onCenterPanelCloseRequested: (() -> Void)?
+    /// animates through `centerProgress` like an outside tap. It receives the close's duration, nil for the default.
+    var onCenterPanelCloseRequested: ((TimeInterval?) -> Void)?
 
     /// Matches the centre control's own settle, so a UIKit-driven move looks like a tap. Snaps under Reduce Motion.
     /// Once the move has logically finished it reports through `onCenterPanelOpenChanged`, as a settle from the
-    /// control does, and then runs `completion`.
-    func setCenterPanelOpen(_ isOpen: Bool, completion: (() -> Void)? = nil) {
+    /// control does, and then runs `completion`. `duration` sets the ease of a close, nil for the default.
+    func setCenterPanelOpen(_ isOpen: Bool, duration: TimeInterval? = nil, completion: (() -> Void)? = nil) {
         let progress: CGFloat = isOpen ? 1 : 0
         guard centerProgress != progress else {
             completion?()
             return
         }
-        withAnimation(centerAnimation, completionCriteria: .logicallyComplete) {
+        let animation = centerAnimation(duration: isOpen ? nil : duration)
+        withAnimation(animation, completionCriteria: .logicallyComplete) {
             centerProgress = progress
         } completion: {
             if self.centerProgress == progress {
@@ -100,22 +101,24 @@ final class TabBarBarViewModel {
         }
     }
 
-    /// Changes the declared height on the centre control's spring, so the open panel moves with the change
+    /// Changes the declared height on the centre control's ease, so the open panel moves with the change
     /// the way it moves on a settle. Unanimated changes land before the first settled layout places the bar.
     func setCenterContentHeight(_ height: CGFloat, animated: Bool = true) {
         guard animated else {
             centerContentHeight = height
             return
         }
-        withAnimation(centerAnimation) {
+        withAnimation(centerAnimation()) {
             centerContentHeight = height
         }
     }
 
-    private var centerAnimation: Animation? {
-        UIAccessibility.isReduceMotionEnabled
-            ? nil
-            : .spring(response: DSTabBarStyle.centerSpringResponse, dampingFraction: DSTabBarStyle.centerSpringDamping)
+    /// The centre control's ease over `duration`, or its default. Snaps under Reduce Motion.
+    private func centerAnimation(duration: TimeInterval? = nil) -> Animation? {
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            return nil
+        }
+        return duration.map { DSTabBarStyle.centerCurve(duration: $0) } ?? DSTabBarStyle.centerEaseOut
     }
 
     private var shelfAnimation: Animation? {

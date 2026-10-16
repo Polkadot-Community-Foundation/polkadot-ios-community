@@ -40,8 +40,9 @@ public extension DSTabBarStyle {
             .white.opacity(0.08)
         ]
 
-        /// The rim of the bar outline, lit from the top leading corner.
-        public static let barRim = diagonalRim(opacities: [0.55, 0.30, 0.08, 0.05, 0.06, 0.24, 0.36])
+        /// Stops of the bar outline's rim. `DSTabBarStyle.rimGradient` lays them out for each size, so the falloff
+        /// follows a 45° line instead of the bar's aspect ratio.
+        public static let barRimStops = diagonalRimStops(opacities: [0.55, 0.30, 0.08, 0.05, 0.06, 0.24, 0.36])
         /// Faint white at each horizontal end of the bar rim, fading out by 8 % of the width.
         public static let barRimEnds = LinearGradient(
             stops: [
@@ -53,19 +54,17 @@ public extension DSTabBarStyle {
             startPoint: .leading,
             endPoint: .trailing
         )
-        /// The rim of the resting centre button, lit from the top leading corner.
-        public static let centerRestingRim = diagonalRim(opacities: [0.62, 0.42, 0.10, 0.04, 0.06, 0.28, 0.44])
+        /// Stops of the resting centre button's rim, laid out per size like `barRimStops`.
+        public static let centerRestingRimStops = diagonalRimStops(
+            opacities: [0.62, 0.42, 0.10, 0.04, 0.06, 0.28, 0.44]
+        )
 
-        /// A white rim lit from the top leading corner, with `opacities` at the stops both rims share.
-        private static func diagonalRim(opacities: [Double]) -> LinearGradient {
+        /// The stops of a white rim, with `opacities` at the locations both rims share.
+        private static func diagonalRimStops(opacities: [Double]) -> [Gradient.Stop] {
             let locations: [CGFloat] = [0, 0.05, 0.12, 0.50, 0.86, 0.95, 1]
-            return LinearGradient(
-                stops: zip(opacities, locations).map { opacity, location in
-                    Gradient.Stop(color: .white.opacity(opacity), location: location)
-                },
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            return zip(opacities, locations).map { opacity, location in
+                Gradient.Stop(color: .white.opacity(opacity), location: location)
+            }
         }
     }
 }

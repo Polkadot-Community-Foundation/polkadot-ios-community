@@ -135,13 +135,10 @@ private extension DSTabBarContainer {
         .easeInOut(duration: DSTabBarStyle.shelfFadeDuration)
     }
 
-    /// Snaps under Reduce Motion so the pill jumps between slots without the spring's travel.
+    /// Snaps under Reduce Motion so the pill jumps between slots without the travel.
     var selectionAnimation: Animation? {
         guard !reduceMotion else { return nil }
-        return .spring(
-            response: DSTabBarStyle.selectionSpringResponse,
-            dampingFraction: DSTabBarStyle.selectionSpringDamping
-        )
+        return DSTabBarStyle.selectionCurve
     }
 
     /// Eased rather than sprung under Reduce Motion, so the shelf reveals without the overshoot
@@ -186,13 +183,18 @@ private extension DSTabBarContainer {
     /// Strokes the outline of the bar. The stroke is clipped back to the bar, which keeps only the inner half of
     /// every line, so its width is doubled first. The notch edge is stroked too, and `notchGlint` draws over it.
     var border: some View {
-        DSTabBarShape()
-            .stroke(DSTabBarStyle.Spec.barRim, lineWidth: DSTabBarStyle.strokeWidth * 2)
-            .overlay {
-                DSTabBarShape()
-                    .stroke(DSTabBarStyle.Spec.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
-            }
-            .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
+        GeometryReader { proxy in
+            DSTabBarShape()
+                .stroke(
+                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Spec.barRimStops, size: proxy.size),
+                    lineWidth: DSTabBarStyle.strokeWidth * 2
+                )
+                .overlay {
+                    DSTabBarShape()
+                        .stroke(DSTabBarStyle.Spec.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
+                }
+                .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
+        }
     }
 
     /// The glint along the notch's edge. Its colours run across the cutout's width, which is centred on the bar.
@@ -220,7 +222,9 @@ private extension DSTabBarContainer {
     var shadow: some View {
         RoundedRectangle(cornerRadius: DSTabBarStyle.cornerRadius - DSTabBarStyle.barShadowSpread, style: .continuous)
             .fill(Color.black)
-            .padding(DSTabBarStyle.barShadowSpread)
+            .padding(.horizontal, DSTabBarStyle.barShadowSpread)
+            .padding(.bottom, DSTabBarStyle.barShadowSpread)
+            .padding(.top, DSTabBarStyle.barShadowTopInset)
             .shadow(
                 color: DSTabBarStyle.Spec.barShadow,
                 radius: DSTabBarStyle.barShadowRadius,

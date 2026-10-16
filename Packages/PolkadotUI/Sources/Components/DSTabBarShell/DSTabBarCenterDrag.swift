@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The drag input a center panel's content feeds to the control hosting it. Translations are in window
-/// space, positive downward, so the panel follows the finger rather than its own moving frame.
+/// The drag input a center panel's content feeds to the control hosting it. Translations and velocities are in
+/// window space, positive downward, so the panel follows the finger rather than its own moving frame.
 public struct DSTabBarCenterDrag {
     private let onChanged: (CGFloat) -> Void
     private let onEnded: (CGFloat) -> Void
@@ -22,9 +22,9 @@ public struct DSTabBarCenterDrag {
         onChanged(translationHeight)
     }
 
-    /// Settles the panel, opening or closing it by where a flick would carry it.
-    public func ended(predictedEndTranslationHeight: CGFloat) {
-        onEnded(predictedEndTranslationHeight)
+    /// Settles the panel from where the release leaves it, by the velocity the finger leaves with.
+    public func ended(velocityHeight: CGFloat) {
+        onEnded(velocityHeight)
     }
 
     /// Settles the panel to the nearer end when the gesture is interrupted.

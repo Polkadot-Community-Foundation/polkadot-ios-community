@@ -122,7 +122,16 @@ public final class ScanPanelViewLayout: UIView {
         } else {
             resultsCollapsedConstraint?.activate()
         }
-        resultsView.alpha = focused ? 1 : 0
+        resultsView.alpha = 0
+        if focused {
+            UIView.animate(
+                withDuration: DSTabBarStyle.contentRevealDuration,
+                delay: DSTabBarStyle.contentRevealDelay,
+                options: .curveEaseOut
+            ) {
+                self.resultsView.alpha = 1
+            }
+        }
         contentStack.directionalLayoutMargins.top = focused
             ? DSSpacings.tiny
             : DSTabBarStyle.scanCameraTopInset
