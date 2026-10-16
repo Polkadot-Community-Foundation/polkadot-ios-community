@@ -33,12 +33,8 @@ struct ChatAcceptanceFixture {
         )
     }
 
-    var signers: ChatAcceptanceSigners {
-        ChatAcceptanceSigners(signManager: signManager)
-    }
-
     func acceptAccountId(period: UInt32) throws -> AccountId {
-        try signers.signer(requestId: requestId, period: period).signer.accountId
+        try signManager.makeChatAcceptanceSigner(for: requestId, period: period).accountId
     }
 
     func identityAccountId() throws -> AccountId {

@@ -53,7 +53,7 @@ actor ChatRequestServiceFactory {
     let issueReporter: IssueReporting
 
     private var connection: StatementStoreConnecting?
-    private var accountSignManager: StatementStoreSignerManaging?
+    private var accountSignManager: ChatSignerManager?
     private var accountEncryptionManager: MessageExchangeEncryptionManaging?
     private var diagnostics: ChatRequestDiagnostics?
 
@@ -181,7 +181,7 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeChatRequestDeliveryService() async throws -> ChatRequestDelivering {
         let resolver = ChatRequestDeliveryAccountResolver(
             allocator: notificationAllocator,
-            signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager()),
+            signerManager: makeAccountSignManager(),
             fallback: signingFallback
         )
 
@@ -200,7 +200,7 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         let dependencies = try await ChatAcceptanceDeliveryDependencies(
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
-            signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
+            signerManager: makeAccountSignManager(),
             statementService: makeAcceptanceStatementService(),
             notifier: makeAcceptanceNotifier(),
             fallback: signingFallback
@@ -249,7 +249,7 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         let dependencies = try await ChatAcceptanceRenewalDependencies(
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
-            signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
+            signerManager: makeAccountSignManager(),
             statementService: makeAcceptanceStatementService(),
             fallback: signingFallback
         )
@@ -267,7 +267,7 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             store: ChatRequestDeliveryStore(storageFacade: storageFacade),
             signing: ChatRequestRenewalSigning(
                 allocator: notificationAllocator,
-                signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager()),
+                signerManager: makeAccountSignManager(),
                 fallback: signingFallback
             ),
             outgoingService: makeOutgoingChatRequestService(),
@@ -369,7 +369,7 @@ private extension ChatRequestServiceFactory {
         return manager
     }
 
-    func makeAccountSignManager() -> StatementStoreSignerManaging {
+    func makeAccountSignManager() -> ChatSignerManager {
         if let accountSignManager {
             return accountSignManager
         }

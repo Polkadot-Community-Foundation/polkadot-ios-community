@@ -8,7 +8,7 @@ protocol ChatRequestRenewing: Sendable {
 
 struct ChatRequestRenewalSigning {
     let allocator: NotificationStatementAccountAllocating
-    let signers: ChatRequestDeliverySigning
+    let signerManager: ChatRequestSignerManaging
     let fallback: NonPrivateSigningFallbacking
 }
 
@@ -17,7 +17,7 @@ final class ChatRequestRenewer: @unchecked Sendable {
 
     private let store: ChatRequestRenewalStoring
     private let allocator: NotificationStatementAccountAllocating
-    private let signers: ChatRequestDeliverySigning
+    private let signerManager: ChatRequestSignerManaging
     private let fallback: NonPrivateSigningFallbacking
     private let outgoingService: OutgoingChatRequestServicing
     private let diagnostics: ChatRequestDiagnostics
@@ -30,7 +30,7 @@ final class ChatRequestRenewer: @unchecked Sendable {
     ) {
         self.store = store
         allocator = signing.allocator
-        signers = signing.signers
+        signerManager = signing.signerManager
         fallback = signing.fallback
         self.outgoingService = outgoingService
         self.diagnostics = diagnostics
@@ -62,7 +62,7 @@ private extension ChatRequestRenewer {
         guard !stale.isEmpty else { return }
 
         let renewals = try stale.map { candidate in
-            try (candidate, signers.anonymous(requestId: candidate.message.messageId, period: period))
+            try (candidate, anonymousSigner(for: candidate, period: period))
         }
 
         let claimed = try await Set(allocator.initiateAllocations(for: renewals.map(\.1.signer.accountId)))
@@ -138,10 +138,7 @@ private extension ChatRequestRenewer {
     func resendMissing(_ current: [ChatRequestRenewalCandidate]) async {
         for candidate in current {
             do {
-                let anonymous = try signers.anonymous(
-                    requestId: candidate.message.messageId,
-                    period: candidate.period
-                )
+                let anonymous = try anonymousSigner(for: candidate, period: candidate.period)
 
                 guard try await !isStored(candidate, signedBy: anonymous.signer) else { continue }
 
@@ -172,6 +169,16 @@ private extension ChatRequestRenewer {
             for: "\(period)",
             error: nil,
             counters: ["skipped": starved, "period": Int(period)]
+        )
+    }
+
+    func anonymousSigner(
+        for candidate: ChatRequestRenewalCandidate,
+        period: UInt32
+    ) throws -> ChatRequestDeliverySigner {
+        try ChatRequestDeliverySigner(
+            signer: signerManager.makeChatRequestSigner(for: candidate.message.messageId, period: period),
+            period: period
         )
     }
 

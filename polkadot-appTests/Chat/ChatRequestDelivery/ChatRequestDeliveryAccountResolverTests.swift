@@ -7,8 +7,7 @@ import Testing
 struct ChatRequestDeliveryAccountResolverTests {
     private let requestId = "request"
     private let allocator = StubNotificationAllocator()
-    private let signers =
-        ChatRequestDeliverySigners(signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager()))
+    private let signerManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
     private let fallback = FakeIdentitySigningFallback(signer: StubStatementSigner(accountId: Data(
         repeating: 0x0C,
         count: 32
@@ -24,13 +23,13 @@ struct ChatRequestDeliveryAccountResolverTests {
     )
 
     @Test func signsWithPeriodAccountOnceItsSlotIsClaimed() async throws {
-        let expected = try signers.anonymous(requestId: requestId, period: allocator.period)
+        let expected = try signerManager.makeChatRequestSigner(for: requestId, period: allocator.period)
 
         let resolved = try await makeResolver().resolveFirstDelivery(requestId: requestId, session: session)
 
         #expect(resolved.period == allocator.period)
-        #expect(resolved.signer.accountId == expected.signer.accountId)
-        #expect(allocator.initiatedTargets == [expected.signer.accountId])
+        #expect(resolved.signer.accountId == expected.accountId)
+        #expect(allocator.initiatedTargets == [expected.accountId])
     }
 
     @Test func signsWithUsernameWhenNoSlotIsFree() async throws {
@@ -63,13 +62,14 @@ struct ChatRequestDeliveryAccountResolverTests {
     }
 
     @Test func derivesDistinctAccountsPerRequestAndPeriod() throws {
-        let first = try signers.anonymous(requestId: requestId, period: 100).signer.accountId
+        let first = try signerManager.makeChatRequestSigner(for: requestId, period: 100).accountId
 
-        #expect(try signers.anonymous(requestId: requestId, period: 101).signer.accountId != first)
-        #expect(try signers.anonymous(requestId: "other", period: 100).signer.accountId != first)
+        #expect(try signerManager.makeChatRequestSigner(for: requestId, period: 101).accountId != first)
+        #expect(try signerManager.makeChatRequestSigner(for: "other", period: 100).accountId != first)
+        #expect(try signerManager.makeChatAcceptanceSigner(for: requestId, period: 100).accountId != first)
     }
 
     private func makeResolver() -> ChatRequestDeliveryAccountResolver {
-        ChatRequestDeliveryAccountResolver(allocator: allocator, signers: signers, fallback: fallback)
+        ChatRequestDeliveryAccountResolver(allocator: allocator, signerManager: signerManager, fallback: fallback)
     }
 }

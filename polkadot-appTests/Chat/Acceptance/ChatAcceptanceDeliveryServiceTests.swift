@@ -66,7 +66,7 @@ private extension ChatAcceptanceDeliveryServiceTests {
             dependencies: ChatAcceptanceDeliveryDependencies(
                 store: store,
                 allocator: fixture.allocator,
-                signers: fixture.signers,
+                signerManager: fixture.signManager,
                 statementService: fixture.statementService,
                 notifier: notifier,
                 fallback: fixture.fallback

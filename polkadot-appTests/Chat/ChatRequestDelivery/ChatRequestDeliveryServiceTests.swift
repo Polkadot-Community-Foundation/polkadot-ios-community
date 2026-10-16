@@ -28,7 +28,10 @@ struct ChatRequestDeliveryServiceTests {
 
     init() throws {
         let signManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
-        signer = try ChatRequestDeliverySigners(signManager: signManager).anonymous(requestId: "request", period: 7)
+        signer = try ChatRequestDeliverySigner(
+            signer: signManager.makeChatRequestSigner(for: "request", period: 7),
+            period: 7
+        )
         resolver = StubDeliveryAccountResolver(signer: signer)
     }
 

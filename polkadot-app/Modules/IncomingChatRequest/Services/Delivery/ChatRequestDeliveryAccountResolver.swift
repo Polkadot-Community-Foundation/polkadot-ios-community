@@ -1,6 +1,13 @@
 import Foundation
 import Individuality
 import MessageExchangeKit
+import StatementStore
+
+/// The account that signs a chat request statement, and the period it is funded for.
+struct ChatRequestDeliverySigner {
+    let signer: StatementStoreSigning
+    let period: UInt32
+}
 
 protocol ChatRequestDeliveryAccountResolving {
     func maxStatementSize() async throws -> Int
@@ -16,16 +23,16 @@ final class ChatRequestDeliveryAccountResolver {
     static let allocationTimeout: Duration = .seconds(5 * 60)
 
     private let allocator: NotificationStatementAccountAllocating
-    private let signers: ChatRequestDeliverySigning
+    private let signerManager: ChatRequestSignerManaging
     private let fallback: NonPrivateSigningFallbacking
 
     init(
         allocator: NotificationStatementAccountAllocating,
-        signers: ChatRequestDeliverySigning,
+        signerManager: ChatRequestSignerManaging,
         fallback: NonPrivateSigningFallbacking
     ) {
         self.allocator = allocator
-        self.signers = signers
+        self.signerManager = signerManager
         self.fallback = fallback
     }
 }
@@ -40,8 +47,8 @@ extension ChatRequestDeliveryAccountResolver: ChatRequestDeliveryAccountResolvin
         session: MessageExchange.SessionRequest
     ) async throws -> ChatRequestDeliverySigner {
         let period = try await allocator.currentPeriod()
-        let anonymous = try signers.anonymous(requestId: requestId, period: period)
-        let signer = try await fallback.claimedOrIdentity(anonymous.signer, allocator: allocator, session: session)
+        let anonymous = try signerManager.makeChatRequestSigner(for: requestId, period: period)
+        let signer = try await fallback.claimedOrIdentity(anonymous, allocator: allocator, session: session)
 
         return ChatRequestDeliverySigner(signer: signer, period: period)
     }

@@ -1,6 +1,7 @@
 import Foundation
 import FoundationExt
 import Individuality
+import StatementStore
 
 protocol ChatAcceptanceRenewing: Sendable {
     func renew() async
@@ -9,7 +10,7 @@ protocol ChatAcceptanceRenewing: Sendable {
 struct ChatAcceptanceRenewalDependencies {
     let store: ChatAcceptanceStoring
     let allocator: NotificationStatementAccountAllocating
-    let signers: ChatAcceptanceSigning
+    let signerManager: ChatRequestSignerManaging
     let statementService: ChatAcceptanceStatementServicing
     let fallback: NonPrivateSigningFallbacking
 }
@@ -83,17 +84,20 @@ private extension ChatAcceptanceRenewer {
         guard !stale.isEmpty else { return }
 
         let renewals = try stale.map { candidate in
-            try (candidate, dependencies.signers.signer(requestId: candidate.requestId, period: period))
+            try (
+                candidate,
+                dependencies.signerManager.makeChatAcceptanceSigner(for: candidate.requestId, period: period)
+            )
         }
 
         let claimed = try await Set(
-            dependencies.allocator.initiateAllocations(for: renewals.map(\.1.signer.accountId))
+            dependencies.allocator.initiateAllocations(for: renewals.map(\.1.accountId))
         )
 
         await withTaskGroup(of: Void.self) { group in
             for (candidate, signer) in renewals {
-                if claimed.contains(signer.signer.accountId) {
-                    group.addTask { await self.publishOnceAllocated(candidate, from: signer) }
+                if claimed.contains(signer.accountId) {
+                    group.addTask { await self.publishOnceAllocated(candidate, from: signer, period: period) }
                 } else {
                     group.addTask { await self.renewWithIdentity(candidate, into: period) }
                 }
@@ -117,21 +121,25 @@ private extension ChatAcceptanceRenewer {
         }
     }
 
-    func publishOnceAllocated(_ candidate: ChatAcceptanceCandidate, from signer: ChatAcceptanceSigner) async {
+    func publishOnceAllocated(
+        _ candidate: ChatAcceptanceCandidate,
+        from signer: StatementStoreSigning,
+        period: UInt32
+    ) async {
         let messageId = candidate.message.messageId
 
         do {
             try await dependencies.allocator.awaitAllocated(
-                signer.signer.accountId,
+                signer.accountId,
                 timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
             )
-            try await dependencies.statementService.send(candidate, signer: signer.signer)
-            try await dependencies.store.markPublished(candidate, period: signer.period)
+            try await dependencies.statementService.send(candidate, signer: signer)
+            try await dependencies.store.markPublished(candidate, period: period)
             issueDiagnostics.publishFailing.recordRecovery(for: messageId)
         } catch NotificationAllocationError.noFreeSlotInPeriod {
-            await renewWithIdentity(candidate, into: signer.period)
+            await renewWithIdentity(candidate, into: period)
         } catch {
-            logger.error("Chat acceptance \(messageId) renewal into \(signer.period) failed: \(error)")
+            logger.error("Chat acceptance \(messageId) renewal into \(period) failed: \(error)")
             issueDiagnostics.publishFailing.recordFailure(for: messageId, error: error, counters: [:])
         }
     }
@@ -141,10 +149,13 @@ private extension ChatAcceptanceRenewer {
             guard let period = candidate.period else { continue }
 
             do {
-                let oneShot = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
+                let oneShot = try dependencies.signerManager.makeChatAcceptanceSigner(
+                    for: candidate.requestId,
+                    period: period
+                )
                 let statementService = dependencies.statementService
 
-                guard try await !statementService.isStored(candidate, signedBy: oneShot.signer.accountId) else {
+                guard try await !statementService.isStored(candidate, signedBy: oneShot.accountId) else {
                     continue
                 }
 
@@ -156,7 +167,7 @@ private extension ChatAcceptanceRenewer {
 
                     try await statementService.send(candidate, signer: identity)
                 } else {
-                    try await statementService.send(candidate, signer: oneShot.signer)
+                    try await statementService.send(candidate, signer: oneShot)
                 }
             } catch {
                 logger.error("Chat acceptance \(candidate.message.messageId) re-send failed: \(error)")

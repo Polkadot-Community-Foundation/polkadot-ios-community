@@ -10,6 +10,13 @@ protocol ChatPeerStatementSignerManaging: StatementStoreSignerManaging {
     func makeSigner(with peerAccountId: AccountId) throws -> StatementStoreSigning
 }
 
+/// One-shot notification-funded accounts: a fresh account per request (or acceptance) and period,
+/// so nothing on chain links it to us or to another request.
+protocol ChatRequestSignerManaging {
+    func makeChatRequestSigner(for requestId: String, period: UInt32) throws -> StatementStoreSigning
+    func makeChatAcceptanceSigner(for requestId: String, period: UInt32) throws -> StatementStoreSigning
+}
+
 final class ChatSignerManager {
     let entropyManager: RootEntropyManaging
     let tldProvider: DotNsTldProviding
@@ -39,5 +46,15 @@ extension ChatSignerManager: ChatPeerStatementSignerManaging {
         let path = try ChatKeyPaths.statement(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
 
         return try makeSigner(for: path)
+    }
+}
+
+extension ChatSignerManager: ChatRequestSignerManaging {
+    func makeChatRequestSigner(for requestId: String, period: UInt32) throws -> StatementStoreSigning {
+        try makeSigner(for: ChatKeyPaths.request(requestId: requestId, period: period))
+    }
+
+    func makeChatAcceptanceSigner(for requestId: String, period: UInt32) throws -> StatementStoreSigning {
+        try makeSigner(for: ChatKeyPaths.accept(requestId: requestId, period: period))
     }
 }

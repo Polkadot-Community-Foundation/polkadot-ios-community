@@ -8,8 +8,7 @@ struct ChatRequestRenewerTests {
     private let allocator = StubNotificationAllocator()
     private let store = InMemoryChatRequestRenewalStore()
     private let outgoingService = RecordingOutgoingChatRequestService()
-    private let signers =
-        ChatRequestDeliverySigners(signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager()))
+    private let signerManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
     private let fallback = FakeIdentitySigningFallback(signer: StubStatementSigner(accountId: Data(
         repeating: 0x0C,
         count: 32
@@ -108,14 +107,14 @@ struct ChatRequestRenewerTests {
     private func makeRenewer() -> ChatRequestRenewer {
         ChatRequestRenewer(
             store: store,
-            signing: ChatRequestRenewalSigning(allocator: allocator, signers: signers, fallback: fallback),
+            signing: ChatRequestRenewalSigning(allocator: allocator, signerManager: signerManager, fallback: fallback),
             outgoingService: outgoingService,
             diagnostics: .noop
         )
     }
 
     private func account(_ requestId: String, period: UInt32) throws -> AccountId {
-        try signers.anonymous(requestId: requestId, period: period).signer.accountId
+        try signerManager.makeChatRequestSigner(for: requestId, period: period).accountId
     }
 
     private func candidate(_ requestId: String, period: UInt32) -> ChatRequestRenewalCandidate {

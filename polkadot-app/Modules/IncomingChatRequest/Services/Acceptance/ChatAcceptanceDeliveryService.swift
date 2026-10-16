@@ -10,7 +10,7 @@ protocol ChatAcceptanceDelivering: Sendable {
 struct ChatAcceptanceDeliveryDependencies {
     let store: ChatAcceptanceStoring
     let allocator: NotificationStatementAccountAllocating
-    let signers: ChatAcceptanceSigning
+    let signerManager: ChatRequestSignerManaging
     let statementService: ChatAcceptanceStatementServicing
     let notifier: ChatAcceptanceNotifying
     let fallback: NonPrivateSigningFallbacking
@@ -73,9 +73,12 @@ private extension ChatAcceptanceDeliveryService {
         guard let candidate = try await dependencies.store.acceptance(messageId: messageId) else { return }
 
         let period = try await dependencies.allocator.currentPeriod()
-        let oneShot = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
+        let oneShot = try dependencies.signerManager.makeChatAcceptanceSigner(
+            for: candidate.requestId,
+            period: period
+        )
         let signer = try await dependencies.fallback.claimedOrIdentity(
-            oneShot.signer,
+            oneShot,
             allocator: dependencies.allocator,
             session: candidate.session
         )

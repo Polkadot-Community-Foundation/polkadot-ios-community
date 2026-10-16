@@ -71,13 +71,16 @@ struct ChatAcceptanceRenewerTests {
 
     @Test func currentPeriodCopyInStoreIsLeftAlone() async throws {
         let candidate = fixture.makeCandidate(period: fixture.allocator.period)
-        let signer = try fixture.signers.signer(requestId: fixture.requestId, period: fixture.allocator.period)
-        try await fixture.statementService.send(candidate, signer: signer.signer)
+        let signer = try fixture.signManager.makeChatAcceptanceSigner(
+            for: fixture.requestId,
+            period: fixture.allocator.period
+        )
+        try await fixture.statementService.send(candidate, signer: signer)
         let store = InMemoryChatAcceptanceStore(candidates: [candidate])
 
         await makeRenewer(store: store).renew()
 
-        #expect(try fixture.senders() == [signer.signer.accountId])
+        #expect(try fixture.senders() == [signer.accountId])
         #expect(store.published.isEmpty)
     }
 
@@ -98,7 +101,7 @@ private extension ChatAcceptanceRenewerTests {
             dependencies: ChatAcceptanceRenewalDependencies(
                 store: store,
                 allocator: fixture.allocator,
-                signers: fixture.signers,
+                signerManager: fixture.signManager,
                 statementService: fixture.statementService,
                 fallback: fixture.fallback
             ),
