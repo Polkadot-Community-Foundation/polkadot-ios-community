@@ -1,86 +1,32 @@
 name: Release (Dev)
 
-# Archives the polkadot-app iOS client in the DEV configuration and distributes it to the
-# external TestFlight group named by the TESTFLIGHT_GROUP variable. The Dev build is the
-# PUBLIC developer build: it MIRRORS Nightly's testnet contour via its own dedicated flag (it
-# carries -DDEV / -DTESTNET_FEATURE plus the FEATURE_* set named in polkadot-app/Configs/polkadot-app.dev.xcconfig
-# — upstream retired -DW3S — and every network gate is `#elseif NIGHTLY || DEV`, so it reads
-# `chains_v2`, resolving chains by the fixed ids nightly-relay / nightly-ah / nightly-people /
-# nightly-bulletin in KnownChains.swift). It ships under its own bundle id
-# io.pcf.polkadotapp.devnet, with its own App Store Connect record, TestFlight group, App Group
-# and keychain group. Remote Config serves it through the `dev_build_ios` condition, matched on
-# its Firebase app id and the `build_channel=dev` custom signal set by
-# FirebaseApplicationService. Network wiring is delivered at runtime from Firebase Remote Config
-# (chains_v2 / dot_ns_config / ipfs_gateway_url / identity_backend_url) in the Firebase
-# project whose GoogleService-Info plist you supply below.
-#
-# Build numbers are stamped from the CI run number (CURRENT_PROJECT_VERSION) so repeated
-# uploads of the same marketing version are accepted. The first build of each version sent
-# to the external group goes through Beta App Review before testers receive it.
-#
-# WEEKLY TRACK — a Thursday 18:00 UTC schedule ships a build to the same TestFlight group
-# without anyone tagging. Scheduled runs carry no tag, so they mint a dated
-# `ios-dev-weekly-YYYY-MM-DD` pre-release alongside the TestFlight upload; tagged
-# `ios-dev-v*` runs keep publishing under their own tag. Two consequences worth knowing:
-#   - Cron is UTC and does NOT follow DST: 18:00 UTC is 20:00 CEST in summer, 19:00 CET
-#     in winter. Change the hour, not the timezone, if the local slot must hold.
-#   - ⭐ The weekly build MUST NOT bump MARKETING_VERSION. Only CURRENT_PROJECT_VERSION
-#     (the build number) is stamped here, from the CI run number; MARKETING_VERSION stays
-#     wherever polkadot-app.xcodeproj/project.pbxproj has it and is bumped by hand, on
-#     purpose. That is what lets every weekly reuse an already-approved version and reach
-#     testers immediately — the first build of a NEW version goes through Beta App Review
-#     and can lag a day. Do not add a MARKETING_VERSION override to this workflow.
-# GitHub only runs schedules on the DEFAULT BRANCH, and suspends them after 60 days of
-# repository inactivity.
-#
-# Required repository secrets:
-#   APP_STORE_CONNECT_KEY_ID             App Store Connect API key id (.p8 key; needs the
-#                                        App Manager role to manage TestFlight groups)
-#   APP_STORE_CONNECT_ISSUER_ID          API issuer id
-#   APP_STORE_CONNECT_KEY_CONTENT        base64 of the .p8 private key
-#   APPLE_TEAM_ID                        Developer team id (for signing + ExportOptions)
-#   GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64  base64 of the GoogleService-Info.plist of the
-#                                           io.pcf.polkadotapp.devnet Firebase iOS app
-# Optional: SENTRY_DSN/SENTRY_ORG/SENTRY_PROJECT/SENTRY_AUTH_TOKEN, MELD_BASIC_AUTH_TOKEN.
-#
-# W3S_AUTH_KEY is NO LONGER USED. Upstream deleted W3SAuthorizedSigner and the
-# ValueTransferAuthPallet signing protocol it implemented; W3S statements are now signed with
-# the user's own wallet key. The repository secret can be revoked once this lands.
-# Optional repository variable:
-#   TESTFLIGHT_JOIN_URL  Public join link shown in the GitHub release body (falls back to the
-#                        hardcoded link if unset).
-#   TESTFLIGHT_GROUP     External TestFlight group name (default "Polkadot Devnet Testers").
+# Devnet iOS release. A dispatch on `devnet` archives the Dev configuration
+# (io.pcf.polkadotapp.devnet), tags the commit `devnet/<YYYY-MM-DD>.<n>` and hands the build to the
+# external TestFlight group behind `tester-distribution`. A dispatch on any other branch only
+# uploads the signed .ipa as a run artifact.
+# Only the build number is stamped, from the run number. MARKETING_VERSION is bumped by hand,
+# because the first build of a new version waits for Beta App Review.
+# Upstream's distribution, nightly and release workflows are deleted on purpose (they publish
+# unattended or need Parity's credentials); do not restore them.
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['ios-dev-v*']
-  schedule:
-    # Weekly devnet build — Thursday 18:00 UTC (20:00 CEST / 19:00 CET; cron has no DST).
-    - cron: '0 18 * * 4'
 
 permissions:
-  contents: write
+  contents: read
 
-# One release run at a time. Don't cancel an in-progress run: a half-finished TestFlight
-# upload should complete rather than abort, and a manual tag must not lose to a cron.
+# Never cancel: a half-finished TestFlight upload must complete.
 concurrency:
   group: release-dev
   cancel-in-progress: false
 
 jobs:
-  # Builds and signs the .ipa and publishes the GitHub release marker. It deliberately
-  # does NOT hand the build to testers any more — that moved to `distribute` below, which
-  # sits behind a required-reviewer approval.
+  # Builds and signs the .ipa; `distribute` hands it to testers.
   testflight:
     runs-on: macos-26
-    outputs:
-      changelog: ${{ steps.channel.outputs.changelog }}
-      date: ${{ steps.channel.outputs.date }}
+    environment: devnet
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
-      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/ios-dev-v') }}
-      IS_WEEKLY: ${{ github.event_name == 'schedule' }}
     steps:
       - name: Record the signing start
         run: echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
@@ -97,11 +43,7 @@ jobs:
           GS_B64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEVNET_BASE64 }}
         run: echo "$GS_B64" | base64 --decode > polkadot-app/GoogleService-Info.plist
 
-      # Upstream replaced Scripts/inject-keys.sh (CIKeys.generated.swift) with
-      # Runscripts/generate_secrets.sh (Secrets.generated.swift). The in-Xcode "Generate
-      # Secrets" build phase skips when RUN_IN_CI=true, so CI must run it here.
-      # W3S_AUTH_KEY is deliberately NOT passed: upstream deleted W3SAuthorizedSigner and
-      # now signs W3S statements with the user's own wallet key, so the seed has no consumer.
+      # The in-Xcode "Generate Secrets" phase skips when RUN_IN_CI=true, so CI runs it here.
       - name: Generate build-time secrets
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
@@ -146,10 +88,7 @@ jobs:
 
       - name: Archive (Dev)
         env:
-          # The scheme pre-action and the "Generate Secrets" build phase both re-run
-          # Runscripts/generate_secrets.sh, but both no-op while RUN_IN_CI=true, so the
-          # file written by the step above survives. Values still passed for the case
-          # where that guard is ever lifted.
+          # Also passed here in case the RUN_IN_CI guard in generate_secrets.sh is ever lifted.
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           MELD_BASIC_AUTH_TOKEN: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -181,25 +120,6 @@ jobs:
             -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
             -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
-      # Resolve which channel this run is, once, for the TestFlight changelog and the
-      # release tag/title below. A scheduled run carries no tag, so it is dated instead.
-      - name: Resolve release channel
-        id: channel
-        run: |
-          DATE=$(date -u +%Y-%m-%d)
-          if [ "$IS_TAG" = "true" ]; then
-            CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${GITHUB_REF_NAME}."
-          elif [ "$IS_WEEKLY" = "true" ]; then
-            CHANGELOG="Weekly devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}) — ${DATE}."
-          else
-            CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): developer build against the Paseo products devnet."
-          fi
-          {
-            echo "date=$DATE"
-            echo "changelog=$CHANGELOG"
-          } >> "$GITHUB_OUTPUT"
-          echo "channel: tag=$IS_TAG weekly=$IS_WEEKLY"
-
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
@@ -220,30 +140,40 @@ jobs:
           [ -x "$RUNNER_TEMP/ascenv/bin/python" ] || { echo "tooling was never installed; nothing to revoke"; exit 0; }
           "$RUNNER_TEMP/ascenv/bin/python" .github/scripts/asc_signing.py revoke-runner-certs
 
-      # Alternative distribution (instead of TestFlight): build an `ad-hoc` ipa
-      # (ExportOptions method=ad-hoc) and run
-      #   firebase appdistribution:distribute build/polkadot-app.ipa \
-      #     --app "$FIREBASE_APP_ID" --groups "$FIREBASE_GROUPS"
-      # authenticated via a service account with Firebase App Distribution Admin.
-      # The .dev Firebase app id is 1:165923692956:ios:3d940e376173f34bd72859.
+  # ---- Tag — devnet branch only -----------------------------------------------------------
+  # The build creates the tag: every devnet release tags the commit it built, before the
+  # approval gate below, so a rejected hand-off still records what was built.
+  tag:
+    needs: testflight
+    if: github.ref == 'refs/heads/devnet'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag the built commit
+        id: tag
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          LAST=$(git ls-remote --tags origin "refs/tags/devnet/${DATE}.*" \
+            | sed -n "s#.*refs/tags/devnet/${DATE}\.\([0-9]*\)\$#\1#p" | sort -n | tail -1)
+          TAG="devnet/${DATE}.$(( ${LAST:-0} + 1 ))"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$GITHUB_SHA" -m "iOS devnet build ${GITHUB_RUN_NUMBER} (run ${GITHUB_RUN_ID})"
+          git push origin "refs/tags/$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "### Tagged \`$TAG\` at ${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
   # ---- TestFlight distribution — MANUAL APPROVAL GATE --------------------------------
-  # Separate job so it can sit behind the protected `tester-distribution` environment,
-  # which carries a REQUIRED REVIEWER. Every push to the external devnet
-  # TestFlight group now waits for a human to approve it in the Actions UI — the same
-  # shape as an npm publish approval.
-  #
-  # This is the behaviour change: previously `fastlane pilot upload --distribute_external`
-  # ran inline in the build job, so the Thursday 18:00 UTC cron handed a build to external
-  # testers with nobody in the loop. The cron is KEPT — it still builds, signs and cuts the
-  # weekly pre-release marker automatically — but the tester hand-off is now a decision.
-  #
-  # ⚠️ The gate lives in the ENVIRONMENT, not in this file. If `tester-distribution` does
-  # not exist, GitHub auto-creates it UNPROTECTED on first use and this job runs straight
-  # through, restoring the old unattended behaviour. Configure it under
-  # Settings → Environments → required reviewers.
+  # Hands the build to the external devnet TestFlight group after the `tester-distribution` approval.
   distribute:
-    needs: testflight
+    needs: [testflight, tag]
+    if: github.ref == 'refs/heads/devnet'
     runs-on: macos-26
     permissions:
       contents: write   # softprops/action-gh-release (release records) — the gate is the environment
@@ -271,13 +201,12 @@ jobs:
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          # Read from the environment, never interpolated into the script body: the
-          # changelog embeds GITHUB_REF_NAME, and a crafted tag name must not be able to
-          # break out of the quoting.
-          CHANGELOG: ${{ needs.testflight.outputs.changelog }}
           # Read from the environment, never interpolated into the script body.
+          TAG: ${{ needs.tag.outputs.tag }}
           TF_GROUP: ${{ vars.TESTFLIGHT_GROUP || 'Polkadot Devnet Testers' }}
+          FEEDBACK_EMAIL: ${{ vars.BETA_FEEDBACK_EMAIL || 'info@pcf.network' }}
         run: |
+          CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${TAG}."
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
           [ -n "$IPA" ] || { echo "::error::no .ipa in the build artifact"; exit 1; }
           echo "Uploading $IPA"
@@ -293,38 +222,18 @@ jobs:
             --distribute_external true \
             --groups "$TF_GROUP" \
             --beta_app_description "Developer build of the Polkadot app against the Paseo products devnet." \
-            --beta_app_feedback_email "alemart@polkadotcommunity.foundation" \
+            --beta_app_feedback_email "$FEEDBACK_EMAIL" \
             --changelog "$CHANGELOG"
 
-      # ---- GitHub release records — behind the SAME approval as the TestFlight hand-off ----
-      # These carry no binary (TestFlight is the only channel) but they are public,
-      # citable release records; nothing is minted unattended by the Thursday cron.
+      # The GitHub release carries no binary: it records the tag, commit and build number.
       - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/ios-dev-v')
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.tag.outputs.tag }}
+          name: ${{ needs.tag.outputs.tag }}
           prerelease: true
           body: |
             iOS developer build for the products devnet.
-
-            Distribution is TestFlight-only:
-
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
-
-      # ---------------------------------------------------------------- weekly track
-      # Scheduled runs carry no tag, so mint a dated pre-release (behind the same approval). It exists to give the
-      # weekly build a citable landmark (date ↔ commit ↔ build number) — the binary still
-      # only ever reaches testers through TestFlight, so no assets are attached.
-      - name: Create weekly GitHub pre-release
-        if: github.event_name == 'schedule'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ios-dev-weekly-${{ needs.testflight.outputs.date }}
-          name: Weekly devnet build ${{ needs.testflight.outputs.date }} (iOS)
-          prerelease: true
-          body: |
-            Weekly iOS developer build for the products devnet — ${{ needs.testflight.outputs.date }}.
 
             Commit ${{ github.sha }} · build ${{ github.run_number }}
 

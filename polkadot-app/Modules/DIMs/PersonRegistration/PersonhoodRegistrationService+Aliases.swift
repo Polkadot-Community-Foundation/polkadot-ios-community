@@ -9,8 +9,7 @@ import SubstrateOperation
 
 extension PersonhoodRegistrationService {
     func checkAliasesCreation(with remoteState: PersonRegistration.RemoteState) {
-        // Mob rule still uses the padded pallet context: `MOB_CONTEXT` in the runtime's
-        // `pallets/mob-rule` is unchanged by RFC-0004, and Android left its own constant alone.
+        // Mob rule keeps the padded pallet context: `MOB_CONTEXT` is unchanged by RFC-0004.
         checkAliasCreationState(
             remoteState.mobRuleAlias,
             input: .init(
@@ -22,9 +21,7 @@ extension PersonhoodRegistrationService {
             remoteState: remoteState
         )
 
-        // Score and resources moved to product contexts derived from the runtime's network suffix.
-        // Both are resolved up front: without the suffix the contexts cannot be built at all, and
-        // submitting a guessed one would register an alias the chain rejects.
+        // Score and resources use product contexts, which need the runtime's network suffix.
         let scoreContext: Data
         let resourcesContext: Data
 
@@ -67,8 +64,7 @@ private extension PersonhoodRegistrationService {
         let wallet: WalletManaging
         let creationState: PersonRegistration.RemoteState.AliasCreationState
         let progress: PersonRegistration.Progress
-        /// The 32-byte ring-VRF context, already built. Was a padded pallet string before
-        /// RFC-0004; product contexts are hashed bytes with no string form.
+        /// The 32-byte ring-VRF context.
         let context: Data
     }
 

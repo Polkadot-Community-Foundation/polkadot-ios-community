@@ -239,15 +239,8 @@ private extension FirebaseApplicationService {
 }
 
 private extension FirebaseApplicationService {
-    /// Signals sent before the first fetch, so that fetch already resolves against the right
-    /// Remote Config conditions.
-    ///
-    /// The PCF Dev build shares the production bundle id and Firebase app, so it cannot be told
-    /// apart by app id. It is discriminated by `build_channel = dev` alone — deliberately WITHOUT
-    /// upstream's `environment` signal, because the Dev configuration defines neither `UNSTABLE`
-    /// nor `NIGHTLY` and would therefore announce itself as `environment = release` and match the
-    /// production conditions. Every other configuration sends upstream's `environment` signal
-    /// unchanged.
+    /// Sent before the first fetch. The Dev build sends `build_channel = dev` instead of
+    /// `environment`: it defines neither UNSTABLE nor NIGHTLY, so `environment` would say `release`.
     static var customSignals: [String: FirebaseRemoteConfig.CustomSignalValue] {
         #if DEV
             let signal: CustomSignal = .buildChannel

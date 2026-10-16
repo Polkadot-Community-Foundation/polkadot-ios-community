@@ -4,10 +4,8 @@ import XCTest
 
 /// Covers the upgrade path from a build that shipped an older `UserDataModel`.
 ///
-/// 0.10.0 dropped every model version except `UserDataModel41`, while our released builds write
-/// `UserDataModel36`. Core Data cannot infer a mapping without the source model in the bundle, so
-/// `addPersistentStore` fails and — before the fix these tests pin — `performMigration`'s
-/// `fatalError` turned every existing install into a crash loop on launch.
+/// Core Data cannot migrate a store whose model is not in the bundle; `performMigration` must
+/// recreate it instead of calling `fatalError`.
 final class UserStorageMigratorTests: XCTestCase {
     private var directory: URL!
 
@@ -34,7 +32,7 @@ final class UserStorageMigratorTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - The regression
+    // MARK: - Unshipped model
 
     /// A store written by a model that is no longer shipped must be recreated, not trapped on.
     func testRecreatesStoreWrittenByAnUnshippedModel() throws {
@@ -42,8 +40,7 @@ final class UserStorageMigratorTests: XCTestCase {
 
         makeMigrator().performMigration()
 
-        // Reaching here at all is most of the point: the pre-fix implementation called
-        // `fatalError`, which takes the whole test runner down with it.
+        // Reaching here means performMigration did not call `fatalError`.
         let coordinator = try openStoreWithCurrentModel()
 
         XCTAssertEqual(
@@ -110,9 +107,7 @@ final class UserStorageMigratorTests: XCTestCase {
 
     // MARK: - Error classification
 
-    /// Widening this predicate is how the fix turns into data loss: any error that is not
-    /// "the model that wrote this store is gone" must keep hitting `fatalError` instead of
-    /// destroying a store that a retry could have opened.
+    /// Any other error must keep hitting `fatalError` rather than destroy a store a retry could open.
     func testOnlyMissingSourceModelErrorsAreTreatedAsUnmigratable() {
         let unmigratable = [
             NSPersistentStoreIncompatibleVersionHashError,
