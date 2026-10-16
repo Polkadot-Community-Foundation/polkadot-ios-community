@@ -25,6 +25,7 @@ struct TabBarBarView: View {
                     progress: $model.centerProgress,
                     contentHeight: model.centerContentHeight,
                     accessibilityLabel: String(localized: .Products.productTabsAccessibilityScanner),
+                    openAccessibilityLabel: String(localized: .Products.productTabsAccessibilityCloseSearch),
                     onSettled: { model.onCenterPanelOpenChanged?($0) }
                 ) {
                     TabBarScanPanelContent(makeController: model.makeCenterContent)
@@ -80,6 +81,10 @@ private struct TabBarSlotView: View {
         isSelected || isActive
     }
 
+    private var iconColor: Color {
+        isEmphasized ? DSTabBarStyle.Spec.activeIcon : DSTabBarStyle.Spec.inactiveIcon
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 0) {
@@ -87,7 +92,7 @@ private struct TabBarSlotView: View {
                 if let title = item.title {
                     Text(title)
                         .font(Font(UIFont.labelSmallEmphasized))
-                        .foregroundStyle(isEmphasized ? Color.fgPrimary : DSTabBarStyle.Spec.inactiveIcon)
+                        .foregroundStyle(iconColor)
                         .padding(.top, 2)
                 }
             }
@@ -109,10 +114,10 @@ private struct TabBarSlotView: View {
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .foregroundStyle(isEmphasized ? Color.fgPrimary : DSTabBarStyle.Spec.inactiveIcon)
+                .foregroundStyle(iconColor)
                 .frame(width: Self.iconSize, height: Self.iconSize)
         case let .tabsGlyph(count):
-            TabsGlyph(count: count, color: isEmphasized ? .fgPrimary : UIColor(DSTabBarStyle.Spec.inactiveIcon))
+            TabsGlyph(count: count, color: UIColor(iconColor))
                 .frame(width: Self.iconSize, height: Self.iconSize)
         }
     }

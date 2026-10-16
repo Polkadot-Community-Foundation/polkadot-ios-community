@@ -12,28 +12,37 @@ public struct DSTabBarCenterControl<Content: View>: View {
     @Binding private var progress: CGFloat
     private let contentHeight: CGFloat
     private let accessibilityLabel: String
+    private let openAccessibilityLabel: String
     private let onSettled: (Bool) -> Void
     private let content: Content
 
     @State private var dragStart: CGFloat?
     /// Extra height in points above the fully open panel while a drag pulls past it.
     @State private var stretch: CGFloat = 0
+    /// Whether the press feedback is applied. It holds for `pressMinimumHold` after the finger lifts.
+    @State private var isPressed = false
+    @State private var pressStart: ContinuousClock.Instant?
+    /// The pending release. A new press cancels it so it cannot lift that press.
+    @State private var pressRelease: Task<Void, Never>?
     @GestureState private var isDragging = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// `contentHeight` is the height `content` takes when laid out at the panel's open width. `accessibilityLabel`
-    /// names the control for VoiceOver. `onSettled` receives whether the panel ended open after each settle the
-    /// control runs. It is not called while a drag is in flight.
+    /// names the control for VoiceOver. `openAccessibilityLabel` names the control for VoiceOver while the panel is
+    /// open. `onSettled` receives whether the panel ended open after each settle the control runs. It is not called
+    /// while a drag is in flight.
     public init(
         progress: Binding<CGFloat>,
         contentHeight: CGFloat,
         accessibilityLabel: String,
+        openAccessibilityLabel: String,
         onSettled: @escaping (Bool) -> Void,
         @ViewBuilder content: () -> Content
     ) {
         _progress = progress
         self.contentHeight = contentHeight
         self.accessibilityLabel = accessibilityLabel
+        self.openAccessibilityLabel = openAccessibilityLabel
         self.onSettled = onSettled
         self.content = content()
     }
@@ -42,12 +51,18 @@ public struct DSTabBarCenterControl<Content: View>: View {
         GeometryReader { proxy in
             let size = frameSize(availableWidth: proxy.size.width)
             panel(in: size, availableWidth: proxy.size.width)
+                .scaleEffect(isPressed && progress == 0 ? pressScale : 1)
                 .offset(
                     x: (proxy.size.width - size.width) / 2,
                     y: proxy.size.height - size.height - seatInset
                 )
         }
         .onChange(of: isDragging) { _, dragging in
+            if dragging {
+                press()
+            } else {
+                scheduleRelease()
+            }
             // A cancelled drag never reaches `onEnded`, so it settles here to the nearer end.
             guard !dragging, dragStart != nil else {
                 return
@@ -79,11 +94,30 @@ private extension DSTabBarCenterControl {
     /// Side of the square canvas the centre glyph SVG is drawn on.
     var glyphSize: CGFloat { 30 }
 
-    /// Scale of the glyph once the panel is fully open.
-    var openGlyphScale: CGFloat { 0.8 }
+    /// Side of the glyph once the panel is fully open.
+    var openGlyphSize: CGFloat { 22 }
 
-    /// Distance in points the glyph moves down once the panel is fully open.
-    var openGlyphDrop: CGFloat { 4 }
+    /// Scale of the glyph once the panel is fully open, which takes it to `openGlyphSize`.
+    var openGlyphScale: CGFloat { openGlyphSize / glyphSize }
+
+    /// Distance the glyph's centre sits below the panel body's bottom edge once the panel is fully open.
+    /// The glyph starts centred on that edge.
+    var openGlyphDrop: CGFloat { 7.7 }
+
+    /// Side of the touch area once the panel is fully open. It is centred on the glyph.
+    var openTouchSize: CGFloat { 48 }
+
+    /// Scale of the closed control while a finger is down on it.
+    var pressScale: CGFloat { 0.96 }
+
+    /// Duration of the ease-out that presses the closed control in.
+    var pressInDuration: Double { 0.077 }
+
+    /// Duration of the ease-out that releases the press.
+    var pressOutDuration: Double { 0.221 }
+
+    /// Shortest time a press stays down from touch-down, so a quick tap still shows it.
+    var pressMinimumHold: Double { 0.15 }
 
     /// Distance the finger travels to open the panel fully.
     var travel: CGFloat { max(1, expandedHeight - DSTabBarStyle.centerButtonSize) }
@@ -145,15 +179,16 @@ private extension DSTabBarCenterControl {
         .padding(.bottom, lobeRadius)
         .foregroundStyle(Color.fgPrimary)
         .frame(width: size.width, height: size.height, alignment: progress > 0 ? .top : .center)
-        // After the frame, so each lands against the panel rather than against
+        // After the frame, so the grabber lands against the panel rather than against
         // the content, which can be shorter than the panel.
-        .overlay(alignment: .bottom) { glyph }
         .overlay(alignment: .top) { grabber }
         .background(DSTabBarMaterial())
         .overlay(rim)
         .clipShape(shape)
         .shadow(color: Color.shadowSoft, radius: DSTabBarStyle.centerShadowRadius, y: DSTabBarStyle.centerShadowY)
         .contentShape(shape)
+        // Outside the content shape, so the glyph's touch area can hang below the lobe.
+        .overlay(alignment: .bottom) { glyph }
     }
 }
 
@@ -161,19 +196,20 @@ private extension DSTabBarCenterControl {
 
 private extension DSTabBarCenterControl {
     /// Sits in the lobe in both states, since the lobe is the button. The scan frame shrinks
-    /// slightly and drops a little as the panel opens.
+    /// slightly and drops a little as the panel opens. The touch area shrinks to `openTouchSize`
+    /// with it, and moves with it because the offset comes after the content shape.
     var glyph: some View {
         Image(.iconCenterFrame)
             .resizable()
             .frame(width: glyphSize, height: glyphSize)
             .scaleEffect(lerp(1, openGlyphScale))
-            .offset(y: lerp(0, openGlyphDrop))
-            .foregroundStyle(Color.fgSecondary)
+            .foregroundStyle(DSTabBarStyle.Spec.centerGlyph)
             .frame(width: lobeRadius * 2, height: lobeRadius * 2)
-            .contentShape(Circle())
+            .contentShape(Circle().inset(by: lerp(0, (lobeRadius * 2 - openTouchSize) / 2)))
+            .offset(y: lerp(0, openGlyphDrop))
             .gesture(drag)
             .accessibilityElement()
-            .accessibilityLabel(accessibilityLabel)
+            .accessibilityLabel(progress > 0.5 ? openAccessibilityLabel : accessibilityLabel)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { settle(to: progress > 0.5 ? 0 : 1) }
             .accessibilityAction(.escape) {
@@ -282,6 +318,32 @@ private extension DSTabBarCenterControl {
                 return
             }
             onSettled(target == 1)
+        }
+    }
+}
+
+// MARK: - Press
+
+private extension DSTabBarCenterControl {
+    func press() {
+        pressRelease?.cancel()
+        pressStart = ContinuousClock.now
+        withAnimation(.easeOut(duration: pressInDuration)) {
+            isPressed = true
+        }
+    }
+
+    /// Releases once the press has been down for `pressMinimumHold`.
+    func scheduleRelease() {
+        let releaseDeadline = (pressStart ?? .now) + .seconds(pressMinimumHold)
+        pressRelease = Task {
+            try? await Task.sleep(until: releaseDeadline, clock: .continuous)
+            guard !Task.isCancelled else {
+                return
+            }
+            withAnimation(.easeOut(duration: pressOutDuration)) {
+                isPressed = false
+            }
         }
     }
 }

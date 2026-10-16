@@ -10,5 +10,9 @@ public extension DSTabBarStyle {
         public static let selectionTopLine = Color.white.opacity(0.08)
         /// Icon and label colour of the slots that are neither selected nor active.
         public static let inactiveIcon = Color(hex: 0x999999)
+        /// Icon and label colour of the selected or active slot.
+        public static let activeIcon = Color(hex: 0xF4F4F5)
+        /// The scan frame of the centre button.
+        public static let centerGlyph = Color(hex: 0x8C8F98)
     }
 }

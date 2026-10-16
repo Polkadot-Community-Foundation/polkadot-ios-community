@@ -848,6 +848,17 @@
         }
       }
     },
+    "product.tabs.accessibility.closeSearch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close search"
+          }
+        }
+      }
+    },
     "product.tabs.accessibility.openApps": {
       "extractionState": "manual",
       "localizations": {
