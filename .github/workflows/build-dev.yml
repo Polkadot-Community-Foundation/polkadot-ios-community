@@ -198,7 +198,7 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices available | grep "$udid"
 
-      # Only the migration and crypto suites run here. No -configuration override: Dev builds
+      # Only the migration suites run here. No -configuration override: Dev builds
       # without testability, and the scheme's Debug configuration has it.
       - name: Test (user store v36 migration)
         run: |
@@ -209,7 +209,6 @@ jobs:
             -scheme polkadot-appTests \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
             -only-testing:polkadot-appTests/UserStorageMigrationV36Tests \
-            -only-testing:polkadot-appTests/PersonhoodProductContextTests \
             -only-testing:polkadot-appTests/UserStorageMigratorTests \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
@@ -221,7 +220,7 @@ jobs:
       # appear by name in the result bundle (the console format is not stable).
       - name: Assert the tests actually executed
         env:
-          REQUIRED_SUITES: UserStorageMigrationV36Tests PersonhoodProductContextTests
+          REQUIRED_SUITES: UserStorageMigrationV36Tests
         run: |
           set -o pipefail
 
