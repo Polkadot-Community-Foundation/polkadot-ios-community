@@ -26,7 +26,8 @@ struct TabBarBarView: View {
                     contentHeight: model.centerContentHeight,
                     accessibilityLabel: String(localized: .Products.productTabsAccessibilityScanner),
                     openAccessibilityLabel: String(localized: .Products.productTabsAccessibilityCloseSearch),
-                    onSettled: { model.onCenterPanelOpenChanged?($0) }
+                    onSettled: { model.onCenterPanelOpenChanged?($0) },
+                    onCloseRequested: { model.onCenterPanelCloseRequested?() }
                 ) {
                     TabBarScanPanelContent(makeController: model.makeCenterContent)
                 }
@@ -197,6 +198,16 @@ private extension TabBarScanPanelContent {
                 return false
             }
             return true
+        }
+
+        /// A drag that starts on the search field belongs to the field, so the panel stays where it is.
+        func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            !isInTextField(touch.view)
+        }
+
+        private func isInTextField(_ view: UIView?) -> Bool {
+            guard let view else { return false }
+            return sequence(first: view) { $0.superview }.contains { $0 is UITextField }
         }
 
         @objc private func handlePan(_ recognizer: UIPanGestureRecognizer) {

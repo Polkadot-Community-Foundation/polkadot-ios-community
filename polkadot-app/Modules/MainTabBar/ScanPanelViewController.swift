@@ -130,6 +130,10 @@ extension ScanPanelViewController: SearchContactViewProtocol {
 
 extension ScanPanelViewController {
     func setCaptureActive(_ active: Bool) {
+        // A panel reopened mid-close is the same instance, so opening ends the close.
+        if active {
+            isClosing = false
+        }
         scannerController.setCaptureActive(active)
     }
 }

@@ -63,6 +63,9 @@ final class TabBarBarViewModel {
     var makeCenterContent: () -> UIViewController? = { nil }
     /// Fires only when the progress settles at either end, not on every intermediate frame of a drag.
     var onCenterPanelOpenChanged: ((Bool) -> Void)?
+    /// Fires when the centre control would settle closed from open. The chrome closes the panel, so the close
+    /// animates through `centerProgress` like an outside tap.
+    var onCenterPanelCloseRequested: (() -> Void)?
 
     /// Matches the centre control's own settle, so a UIKit-driven move looks like a tap. Snaps under Reduce Motion.
     /// Once the move has logically finished it reports through `onCenterPanelOpenChanged`, as a settle from the

@@ -7,6 +7,8 @@ import SnapKit
 final class TabBarBottomChromeController: UIViewController {
     /// How far the keyboard covers the foot of the open centre panel's button.
     private static let keyboardButtonOverlap: CGFloat = 4
+    /// Room the open centre panel leaves below the top safe area.
+    private static let centerPanelTopGap: CGFloat = 12
 
     private let chromeSurface = TabBarChromeSurfaceView()
     private let centerButtonAnchorGuide = UILayoutGuide()
@@ -209,7 +211,8 @@ final class TabBarBottomChromeController: UIViewController {
         guard let contentHeightForCenterPanel else {
             return
         }
-        let cap = DSTabBarStyle.centerContentHeight(fittingRise: barModel.availablePanelHeight)
+        let rise = max(0, barModel.availablePanelHeight - Self.centerPanelTopGap)
+        let cap = DSTabBarStyle.centerContentHeight(fittingRise: rise)
         let contentHeight: CGFloat =
             switch contentHeightForCenterPanel() {
             case let .fits(declared):
@@ -501,6 +504,9 @@ private extension TabBarBottomChromeController {
         }
         barModel.onCenterPanelOpenChanged = { [weak self] isOpen in
             self?.centerPanelOpenChanged(isOpen)
+        }
+        barModel.onCenterPanelCloseRequested = { [weak self] in
+            self?.setPanel(nil)
         }
         barModel.onShelfContentHeightChanged = { [weak self] in
             self?.applyBarLiveHeight()

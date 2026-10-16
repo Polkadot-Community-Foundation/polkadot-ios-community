@@ -14,6 +14,7 @@ public struct DSTabBarCenterControl<Content: View>: View {
     private let accessibilityLabel: String
     private let openAccessibilityLabel: String
     private let onSettled: (Bool) -> Void
+    private let onCloseRequested: (() -> Void)?
     private let content: Content
 
     @State private var dragStart: CGFloat?
@@ -30,13 +31,15 @@ public struct DSTabBarCenterControl<Content: View>: View {
     /// `contentHeight` is the height `content` takes when laid out at the panel's open width. `accessibilityLabel`
     /// names the control for VoiceOver. `openAccessibilityLabel` names the control for VoiceOver while the panel is
     /// open. `onSettled` receives whether the panel ended open after each settle the control runs. It is not called
-    /// while a drag is in flight.
+    /// while a drag is in flight. `onCloseRequested` is called instead of animating closed when the control
+    /// would settle closed from open; the host closes the panel through `progress`.
     public init(
         progress: Binding<CGFloat>,
         contentHeight: CGFloat,
         accessibilityLabel: String,
         openAccessibilityLabel: String,
         onSettled: @escaping (Bool) -> Void,
+        onCloseRequested: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         _progress = progress
@@ -44,6 +47,7 @@ public struct DSTabBarCenterControl<Content: View>: View {
         self.accessibilityLabel = accessibilityLabel
         self.openAccessibilityLabel = openAccessibilityLabel
         self.onSettled = onSettled
+        self.onCloseRequested = onCloseRequested
         self.content = content()
     }
 
@@ -296,21 +300,23 @@ private extension DSTabBarCenterControl {
     /// Under Reduce Motion the geometry snaps and only the content cross-fades, so the morph
     /// itself never plays. Dragging is never animated either way, so the control still tracks
     /// the finger. `onSettled` runs once the move has logically finished, or at once under Reduce
-    /// Motion, and only if no later move has taken the progress elsewhere.
+    /// Motion, and only if no later move has taken the progress elsewhere. A close from open goes to
+    /// `onCloseRequested` when the host provides it, so the host's own animation moves the progress.
     func settle(to target: CGFloat) {
+        if target == 0, progress > 0 || stretch > 0, let onCloseRequested {
+            withAnimation(reduceMotion ? nil : settleSpring) {
+                stretch = 0
+            }
+            onCloseRequested()
+            return
+        }
         guard !reduceMotion else {
             progress = target
             stretch = 0
             onSettled(target == 1)
             return
         }
-        withAnimation(
-            .spring(
-                response: DSTabBarStyle.centerSpringResponse,
-                dampingFraction: DSTabBarStyle.centerSpringDamping
-            ),
-            completionCriteria: .logicallyComplete
-        ) {
+        withAnimation(settleSpring, completionCriteria: .logicallyComplete) {
             progress = target
             stretch = 0
         } completion: {
@@ -319,6 +325,13 @@ private extension DSTabBarCenterControl {
             }
             onSettled(target == 1)
         }
+    }
+
+    var settleSpring: Animation {
+        .spring(
+            response: DSTabBarStyle.centerSpringResponse,
+            dampingFraction: DSTabBarStyle.centerSpringDamping
+        )
     }
 }
 
