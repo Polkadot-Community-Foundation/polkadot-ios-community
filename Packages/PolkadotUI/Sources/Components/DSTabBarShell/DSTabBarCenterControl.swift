@@ -224,10 +224,10 @@ private extension DSTabBarCenterControl {
     /// so a drag there reaches the content, which moves the panel through `centerPanelDrag`.
     var grabber: some View {
         Capsule()
-            .fill(Color.fgPrimary.opacity(DSTabBarStyle.centerGrabberOpacity))
+            .fill(DSTabBarStyle.Spec.grabber)
             .frame(width: DSTabBarStyle.centerGrabberWidth, height: DSTabBarStyle.centerGrabberThickness)
-            .frame(height: DSTabBarStyle.centerGrabberHeight)
-            .frame(maxWidth: .infinity)
+            .padding(.top, DSTabBarStyle.centerGrabberTopInset)
+            .frame(maxWidth: .infinity, alignment: .top)
             .modifier(CenterRevealModifier(progress: progress, revealStart: revealStart, crossFades: reduceMotion))
             .allowsHitTesting(false)
     }

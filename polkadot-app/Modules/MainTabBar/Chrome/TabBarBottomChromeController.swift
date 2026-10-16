@@ -83,9 +83,9 @@ final class TabBarBottomChromeController: UIViewController {
     /// Builds the centre control's content. Called when the control first shows it, not when the panel commits.
     var makeCenterContent: (() -> UIViewController?)?
 
-    /// Declares the centre content's height for a panel of the given width. The control sizes itself from this
+    /// Declares the centre content's height. The control sizes itself from this
     /// before any content exists, so it cannot be measured from the content.
-    var contentHeightForCenterPanel: ((CGFloat) -> TabBarCenterContentHeight)?
+    var contentHeightForCenterPanel: (() -> TabBarCenterContentHeight)?
 
     /// The published clearance depends on the chrome's own safe area, so the host has to
     /// recompute when that changes.
@@ -203,17 +203,15 @@ final class TabBarBottomChromeController: UIViewController {
         barModel.isBarHidden = hidden
     }
 
-    /// Re-declares the centre content's height at the current bar width. Call it when the content's own
+    /// Re-declares the centre content's height. Call it when the content's own
     /// height changes, so an open panel regrows.
     func refreshCenterContentHeight() {
         guard let contentHeightForCenterPanel else {
             return
         }
-        let rowWidth = DSTabBarStyle.rowWidth(inAvailableWidth: view.bounds.width)
-        let width = DSTabBarStyle.centerPanelWidth(inRowOfWidth: rowWidth)
         let cap = DSTabBarStyle.centerContentHeight(fittingRise: barModel.availablePanelHeight)
         let contentHeight: CGFloat =
-            switch contentHeightForCenterPanel(width) {
+            switch contentHeightForCenterPanel() {
             case let .fits(declared):
                 min(declared, cap)
             case .fill:

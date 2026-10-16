@@ -60,12 +60,12 @@ final class ScanPanelViewController: UIViewController, ViewHolder {
         cancelSearch()
     }
 
-    /// The height this panel declares at `width`. The tab bar chrome reads it whenever it sizes the open panel.
-    func declaredContentHeight(forPanelWidth width: CGFloat) -> TabBarCenterContentHeight {
+    /// The height this panel declares. The tab bar chrome reads it whenever it sizes the open panel.
+    func declaredContentHeight() -> TabBarCenterContentHeight {
         guard !isSearchFocused else {
             return .fill
         }
-        return .fits(ScanPanelViewLayout.declaredHeight(forWidth: width))
+        return .fits(ScanPanelViewLayout.declaredHeight)
     }
 }
 

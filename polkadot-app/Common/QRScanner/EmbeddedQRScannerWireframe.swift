@@ -1,18 +1,8 @@
-import Foundation
-
-/// Embedded scanners open every time the tab bar panel opens, so a modal alert per open
-/// is unacceptable. The message goes on the panel's label instead.
+/// Embedded scanners open every time the tab bar panel opens, so they neither raise an alert
+/// nor show a message; the camera tile stays empty.
 @MainActor
 final class EmbeddedQRScannerWireframe: QRScannerWireframeProtocol {
-    func askOpenSettings(from view: QRScannerViewProtocol?) {
-        view?.present(
-            message: String(localized: .QRScan.errorCameraDenied),
-            animated: true,
-            autoDismiss: false
-        )
-    }
+    func askOpenSettings(from _: QRScannerViewProtocol?) {}
 
-    func didDenyCameraAccess(from view: QRScannerViewProtocol?) {
-        askOpenSettings(from: view)
-    }
+    func didDenyCameraAccess(from _: QRScannerViewProtocol?) {}
 }

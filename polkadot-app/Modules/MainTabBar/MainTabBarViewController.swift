@@ -72,14 +72,14 @@ final class MainTabBarViewController: UIViewController {
         chromeController.statusStripAnchorProvider = { [weak self] in self?.chainStatusAnchorGuide }
         chromeController.makeCenterContent = { [weak self] in self?.makeScanPanel() }
         #if FEATURE_INPUT
-            chromeController.contentHeightForCenterPanel = { [weak self] width in
-                self?.scanPanel?.declaredContentHeight(forPanelWidth: width)
-                    ?? .fits(ScanPanelViewLayout.declaredHeight(forWidth: width))
+            chromeController.contentHeightForCenterPanel = { [weak self] in
+                self?.scanPanel?.declaredContentHeight()
+                    ?? .fits(ScanPanelViewLayout.declaredHeight)
             }
             chromeController.onCenterPanelWillClose = { [weak self] in self?.scanPanel?.prepareForClose() }
         #else
-            chromeController.contentHeightForCenterPanel = { width in
-                .fits(ScanPanelPlainViewLayout.declaredHeight(forWidth: width))
+            chromeController.contentHeightForCenterPanel = {
+                .fits(ScanPanelPlainViewLayout.declaredHeight)
             }
             chromeController.onCenterPanelWillClose = { [weak self] in self?.scanPanel?.setCaptureActive(false) }
         #endif

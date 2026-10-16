@@ -7,19 +7,13 @@ import UIKit
 /// search. `EmbeddedQRScannerViewLayout` is a bare preview now, so the insets and the startup
 /// placeholder live here.
 final class ScanPanelPlainViewLayout: UIView {
-    private static let cameraSideInset = DSSpacings.mediumIncreased
-    private static let contentTopInset = DSTabBarStyle.centerGrabberHeight + DSSpacings.mediumIncreased
-    private static let gapBelowContent = DSSpacings.small
-    private static let searchButtonHeight: CGFloat = 48
-    private static let searchButtonBottomInset = DSSpacings.small
-
     let searchButton = SearchContactFieldButton()
 
     /// Stands in for the camera while `AVCaptureSession` configures and starts, which takes
     /// roughly a second. It sits behind the preview, which fades in over it.
     private let placeholderView: UIView = {
         let view = UIView()
-        view.backgroundColor = .bgSurfaceNested
+        view.backgroundColor = UIColor(DSTabBarStyle.Spec.cameraBacking)
         view.layer.cornerRadius = DSRadii.large
         view.layer.masksToBounds = true
         return view
@@ -36,21 +30,17 @@ final class ScanPanelPlainViewLayout: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// Height the panel declares at `width`, grabber clearance included. The tab bar reads it before the
-    /// panel lays out, so it is computed from the constants the constraints use. The camera is square, as
-    /// `EmbeddedQRScannerViewLayout` pins it.
-    static func declaredHeight(forWidth width: CGFloat) -> CGFloat {
-        let cameraSide = width - 2 * cameraSideInset
-        return contentTopInset + cameraSide + gapBelowContent + searchButtonHeight + searchButtonBottomInset
-    }
+    /// Height the panel declares with search unfocused. The tab bar reads it before the panel lays out.
+    static var declaredHeight: CGFloat { DSTabBarStyle.scanStateHeight }
 
     func setupScannerView(_ scannerView: UIView) {
         insertSubview(placeholderView, at: 0)
         insertSubview(scannerView, at: 1)
 
         scannerView.snp.makeConstraints { make in
-            make.top.equalToSuperview().offset(Self.contentTopInset)
-            make.leading.trailing.equalToSuperview().inset(Self.cameraSideInset)
+            make.top.equalToSuperview().offset(DSTabBarStyle.scanCameraTopInset)
+            make.centerX.equalToSuperview()
+            make.width.equalTo(DSTabBarStyle.scanCameraSide)
         }
 
         placeholderView.snp.makeConstraints { make in
@@ -58,10 +48,10 @@ final class ScanPanelPlainViewLayout: UIView {
         }
 
         searchButton.snp.makeConstraints { make in
-            make.top.equalTo(scannerView.snp.bottom).offset(Self.gapBelowContent)
-            make.leading.trailing.equalToSuperview().inset(Self.cameraSideInset)
-            make.height.equalTo(Self.searchButtonHeight)
-            make.bottom.equalToSuperview().inset(Self.searchButtonBottomInset)
+            make.top.equalTo(scannerView.snp.bottom).offset(DSTabBarStyle.scanFieldTopGap)
+            make.leading.trailing.equalToSuperview().inset(DSSpacings.mediumIncreased)
+            make.height.equalTo(DSTabBarStyle.scanFieldHeight)
+            make.bottom.equalToSuperview().inset(DSTabBarStyle.scanFieldBottomInset)
         }
     }
 }

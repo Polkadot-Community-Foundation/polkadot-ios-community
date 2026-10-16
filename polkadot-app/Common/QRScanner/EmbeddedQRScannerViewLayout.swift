@@ -3,8 +3,8 @@ import UIKit_iOS
 import PolkadotUI
 import DesignSystem
 
-/// Bare camera preview that fills its host's bounds: no dimmed cutout and no frame border, with
-/// the message label drawn straight over the preview. `fillColor` is what draws the dimming in
+/// Bare camera preview that fills its host's bounds: no dimmed cutout and no frame border. The
+/// embedded tile shows no messages. `fillColor` is what draws the dimming in
 /// `CameraFrameView`, so clearing it removes the window entirely. The host view (`ScanPanelViewLayout`)
 /// owns the insets and placeholder.
 final class EmbeddedQRScannerViewLayout: QRScannerViewLayout {
@@ -30,13 +30,6 @@ final class EmbeddedQRScannerViewLayout: QRScannerViewLayout {
         }
 
         qrFrameView.addSubview(previewView)
-
-        messageLabel.textColor = .fgPrimary
-        addSubview(messageLabel)
-        messageLabel.snp.makeConstraints { make in
-            make.leading.trailing.equalTo(qrFrameView).inset(DSSpacings.mediumIncreased)
-            make.bottom.equalTo(qrFrameView).inset(DSSpacings.mediumIncreased)
-        }
     }
 
     override func didAttachPreview() {

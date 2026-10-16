@@ -3,14 +3,13 @@ import UIKit
 internal import SnapKit
 
 public final class ScanPanelViewLayout: UIView {
-    /// Inset the camera keeps on each side of the panel.
-    private static let cameraSideInset = DSSpacings.mediumIncreased
-    /// Clearance above the content for the grabber that floats over the panel.
-    private static let contentTopInset = DSTabBarStyle.centerGrabberHeight + DSSpacings.mediumIncreased
-    private static let gapBelowContent = DSSpacings.small
-    /// The 48pt capsule of the search row plus its 8pt margin on each edge.
-    private static let searchRowHeight: CGFloat = 64
-    private static let searchRowBottomInset = DSSpacings.small
+    /// Margin DSSearchRowView leaves above and below its capsule. Mirrors that view, so the gaps below are
+    /// measured to the capsule rather than to the row.
+    private static let searchRowFieldMargin: CGFloat = 8
+    private static let gapBelowContent = DSTabBarStyle.scanFieldTopGap - searchRowFieldMargin
+    /// The 48pt capsule of the search row plus its margin on each edge.
+    private static let searchRowHeight = DSTabBarStyle.scanFieldHeight + 2 * searchRowFieldMargin
+    private static let searchRowBottomInset = DSTabBarStyle.scanFieldBottomInset - searchRowFieldMargin
 
     public let searchRow = DSSearchRowView()
     public let resultsView = SearchContactResultsView()
@@ -19,7 +18,7 @@ public final class ScanPanelViewLayout: UIView {
     /// roughly a second. It sits behind the preview, which fades in over it.
     private let placeholderView: UIView = {
         let view = UIView()
-        view.backgroundColor = .bgSurfaceNested
+        view.backgroundColor = UIColor(DSTabBarStyle.Spec.cameraBacking)
         view.layer.cornerRadius = DSRadii.large
         view.layer.masksToBounds = true
         return view
@@ -49,7 +48,7 @@ public final class ScanPanelViewLayout: UIView {
         return stack
     }()
 
-    private var fullCameraWidthConstraint: Constraint?
+    private var expandedCameraWidthConstraint: Constraint?
     private var collapsedCameraWidthConstraint: Constraint?
     private var resultsCollapsedConstraint: Constraint?
 
@@ -94,13 +93,8 @@ public final class ScanPanelViewLayout: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// Height the panel declares at `width`, grabber clearance included. The tab bar reads it before the
-    /// panel lays out, so it is computed from the constants the constraints use. The camera is square, as the
-    /// app's embedded scanner layout pins it.
-    public static func declaredHeight(forWidth width: CGFloat) -> CGFloat {
-        let cameraSide = width - 2 * cameraSideInset
-        return contentTopInset + cameraSide + gapBelowContent + searchRowHeight + searchRowBottomInset
-    }
+    /// Height the panel declares with search unfocused. The tab bar reads it before the panel lays out.
+    public static var declaredHeight: CGFloat { DSTabBarStyle.scanStateHeight }
 
     public func setupScannerView(_ scannerView: UIView) {
         contentStack.addArrangedSubview(scannerView)
@@ -111,8 +105,7 @@ public final class ScanPanelViewLayout: UIView {
         }
 
         scannerView.snp.makeConstraints { make in
-            fullCameraWidthConstraint = make.width.equalTo(contentStack)
-                .offset(-Self.cameraSideInset * 2).constraint
+            expandedCameraWidthConstraint = make.width.equalTo(DSTabBarStyle.scanCameraSide).constraint
             collapsedCameraWidthConstraint = make.width.equalTo(0).constraint
         }
 
@@ -120,9 +113,9 @@ public final class ScanPanelViewLayout: UIView {
     }
 
     /// When search is focused, the camera collapses away entirely and a scan button appears
-    /// to the left of the search field. Unfocused, the camera expands to full width and the
+    /// to the left of the search field. Unfocused, the camera expands to its fixed square and the
     /// button hides. The collapse is a constraint, not the stack's animated hide, so the layout
-    /// reaches its final height at once and `declaredHeight(forWidth:)` matches it.
+    /// reaches its final height at once and `declaredHeight` matches it.
     public func setSearchFocused(_ focused: Bool) {
         if focused {
             resultsCollapsedConstraint?.deactivate()
@@ -132,14 +125,14 @@ public final class ScanPanelViewLayout: UIView {
         resultsView.alpha = focused ? 1 : 0
         contentStack.directionalLayoutMargins.top = focused
             ? DSSpacings.tiny
-            : Self.contentTopInset
+            : DSTabBarStyle.scanCameraTopInset
 
         if focused {
-            fullCameraWidthConstraint?.deactivate()
+            expandedCameraWidthConstraint?.deactivate()
             collapsedCameraWidthConstraint?.activate()
         } else {
             collapsedCameraWidthConstraint?.deactivate()
-            fullCameraWidthConstraint?.activate()
+            expandedCameraWidthConstraint?.activate()
         }
 
         scanButton.isHidden = !focused

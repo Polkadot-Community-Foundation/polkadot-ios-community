@@ -163,12 +163,26 @@ public enum DSTabBarStyle {
     /// Opacity of the centre control's rim at its foot, where it has faded out.
     static let centerRimBottomOpacity: Double = 0.042
 
-    /// Clearance the grabber needs at the top of the panel. The grabber floats over the content, so
-    /// the content must inset its own top by this much to keep clear of it.
-    public static let centerGrabberHeight: CGFloat = 26
+    /// Distance the grabber sits below the top of the open panel.
+    static let centerGrabberTopInset: CGFloat = 6
     static let centerGrabberWidth: CGFloat = 36
     static let centerGrabberThickness: CGFloat = 5
-    static let centerGrabberOpacity: Double = 0.35
+
+    /// Distance the camera sits below the top of the open scan panel with search unfocused.
+    public static let scanCameraTopInset: CGFloat = 19
+    /// Side of the square camera in the open scan panel with search unfocused.
+    public static let scanCameraSide: CGFloat = 110
+    /// Gap from the camera's bottom edge to the search field's top edge.
+    public static let scanFieldTopGap: CGFloat = 9
+    /// Height of the search field in the open scan panel.
+    public static let scanFieldHeight: CGFloat = 48
+    /// Gap from the search field's bottom edge to the bottom of the panel body.
+    public static let scanFieldBottomInset: CGFloat = 18
+
+    /// Content height of the open scan panel with search unfocused. The same at every panel width.
+    public static var scanStateHeight: CGFloat {
+        scanCameraTopInset + scanCameraSide + scanFieldTopGap + scanFieldHeight + scanFieldBottomInset
+    }
 
     static let centerShadowRadius: CGFloat = 10
     static let centerShadowY: CGFloat = 4

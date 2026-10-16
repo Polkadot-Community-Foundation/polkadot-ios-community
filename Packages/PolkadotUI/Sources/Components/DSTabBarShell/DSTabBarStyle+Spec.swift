@@ -14,5 +14,9 @@ public extension DSTabBarStyle {
         public static let activeIcon = Color(hex: 0xF4F4F5)
         /// The scan frame of the centre button.
         public static let centerGlyph = Color(hex: 0x8C8F98)
+        /// The grabber along the top of the open centre panel.
+        public static let grabber = Color.white.opacity(0.32)
+        /// The tile behind the camera while it starts.
+        public static let cameraBacking = Color(hex: 0x1A1B1F)
     }
 }
