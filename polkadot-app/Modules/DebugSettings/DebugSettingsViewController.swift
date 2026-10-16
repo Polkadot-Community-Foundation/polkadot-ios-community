@@ -103,10 +103,28 @@ final class DebugSettingsViewController: UIViewController, ViewHolder {
             for: .valueChanged
         )
 
+        rootView.hostPlacedSwitch.addTarget(
+            self,
+            action: #selector(actionToggleHostPlacement),
+            for: .valueChanged
+        )
+
         #if DEBUG
             rootView.openTrUAPIPlaygroundButton.addTarget(
                 self,
                 action: #selector(actionOpenTrUAPIPlayground),
+                for: .touchUpInside
+            )
+
+            rootView.pocketFacePreviewButton.addTarget(
+                self,
+                action: #selector(actionShowPocketFacePreview),
+                for: .touchUpInside
+            )
+
+            rootView.pocketCardsButton.addTarget(
+                self,
+                action: #selector(actionShowPocketCards),
                 for: .touchUpInside
             )
         #endif
@@ -161,8 +179,20 @@ final class DebugSettingsViewController: UIViewController, ViewHolder {
         presenter.toggleTruApiRuntime()
     }
 
+    @objc func actionToggleHostPlacement() {
+        presenter.toggleHostPlacement()
+    }
+
     @objc func actionOpenTrUAPIPlayground() {
         presenter.openTrUAPIPlayground()
+    }
+
+    @objc func actionShowPocketFacePreview() {
+        presenter.showPocketFacePreview()
+    }
+
+    @objc func actionShowPocketCards() {
+        presenter.showPocketCards()
     }
 }
 
@@ -184,6 +214,10 @@ extension DebugSettingsViewController: DebugSettingsViewProtocol {
 
     func didReceive(strategyDebugEnabled: Bool) {
         rootView.strategyDebugSwitch.isOn = strategyDebugEnabled
+    }
+
+    func didReceive(hostPlacementEnabled: Bool) {
+        rootView.hostPlacedSwitch.isOn = hostPlacementEnabled
     }
 
     func didReceive(truApiRuntimeEnabled: Bool) {

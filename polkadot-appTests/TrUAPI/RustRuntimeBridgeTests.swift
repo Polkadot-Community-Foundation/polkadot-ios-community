@@ -14,6 +14,8 @@ import UIKitExt
 
 // MARK: - Helpers
 
+private let testProduct = ProductExecutionConfig(productId: "test.product", executionKind: .app)
+
 private func makeRegistryPool(chainRegistry: ChainRegistryProtocol) -> TrUAPIChainConnectionPool {
     TrUAPIChainConnectionPool(
         engineResolver: { genesisHash in
@@ -75,7 +77,10 @@ private struct StubHostProvider: ProductHostProviding {
 private func makeBridge(
     productId: String = "test.product",
     permissionGuard: MockPermissionGuard = MockPermissionGuard(),
+    osPermissionAsker: MockOSPermissionAsker = MockOSPermissionAsker(),
     notificationScheduler: MockNotificationScheduler = MockNotificationScheduler(),
+    gameReminders: MockGameReminderScheduler? = nil,
+    reminderPermissionAsker: MockReminderPermissionAsker = MockReminderPermissionAsker(),
     chainRegistry: MockChainRegistry = MockChainRegistry(),
     confirmationPresenter: MockConfirmationPresenter = MockConfirmationPresenter(),
     preimageCache: TrUAPIPreimageCache = TrUAPIPreimageCache { _ in nil },
@@ -93,7 +98,10 @@ private func makeBridge(
     return RustProductExecutionBridge(dependencies: .init(
         productId: productId,
         permissionGuard: permissionGuard,
+        osPermissionAsker: osPermissionAsker,
         notificationScheduler: notificationScheduler,
+        gameReminders: gameReminders ?? MockGameReminderScheduler(),
+        reminderPermissionAsker: reminderPermissionAsker,
         navigationRouter: router,
         chainRegistry: chainRegistry,
         chainConnections: pool,
@@ -115,16 +123,16 @@ struct RustRuntimeBridgeTests {
     // MARK: devicePermission
 
     /// `devicePermission(.camera)` routes to
-    /// `permissionGuard.requestPermission(productId:permission:.deviceCapability(.camera))`
+    /// `permissionGuard.requestDevicePermissionDecision(productId:capability:.camera)`
     /// and returns its verdict (async callback — awaited directly).
     @Test func devicePermissionRoutesToGuard() async throws {
         let guard_ = MockPermissionGuard()
         guard_.verdictToReturn = true
         let bridge = makeBridge(productId: "cam.product", permissionGuard: guard_)
 
-        let result = try await bridge.devicePermission(request: .camera)
+        let result = try await bridge.devicePermission(product: testProduct, request: .camera)
 
-        #expect(result)
+        #expect(result == .allowAlways)
         #expect(guard_.requestedProductId == "cam.product")
         #expect(guard_.requestedPermission == .deviceCapability(.camera))
     }
@@ -134,24 +142,118 @@ struct RustRuntimeBridgeTests {
         guard_.verdictToReturn = false
         let bridge = makeBridge(permissionGuard: guard_)
 
-        let result = try await bridge.devicePermission(request: .notifications)
+        let result = try await bridge.devicePermission(product: testProduct, request: .notifications)
 
-        #expect(!result)
+        #expect(result == .deny)
         #expect(guard_.requestedPermission == .deviceCapability(.notifications))
+    }
+
+    @Test func devicePermissionStatusReadsOSWithoutPrompting() async throws {
+        for request in [HostDevicePermissionRequest.camera, .microphone, .notifications] {
+            for status in [OSPermissionStatus.allowed, .denied, .notDetermined] {
+                let osAsker = MockOSPermissionAsker()
+                osAsker.statusToReturn = status
+                let guard_ = MockPermissionGuard()
+                let bridge = makeBridge(permissionGuard: guard_, osPermissionAsker: osAsker)
+                let expected: DevicePermissionStatus =
+                    switch status {
+                    case .allowed: .granted
+                    case .denied: .denied
+                    case .notDetermined: .notDetermined
+                    }
+
+                #expect(try await bridge.devicePermissionStatus(request: request) == expected)
+                #expect(osAsker.checkedCapabilities == [request.deviceCapabilityType])
+                #expect(osAsker.requestedCapabilities.isEmpty)
+                #expect(guard_.requestedPermission == nil)
+            }
+        }
+    }
+
+    @Test(arguments: [
+        (HostDevicePermissionRequest.openUrl, DevicePermissionStatus.notApplicable),
+        (.bluetooth, .notApplicable),
+        (.nfc, .notApplicable),
+        (.location, .notDetermined),
+        (.clipboard, .notApplicable),
+        (.biometrics, .notApplicable),
+    ])
+    func devicePermissionStatusWithoutOSQuery(
+        request: HostDevicePermissionRequest,
+        expected: DevicePermissionStatus
+    ) async throws {
+        let osAsker = MockOSPermissionAsker()
+        let bridge = makeBridge(osPermissionAsker: osAsker)
+
+        #expect(try await bridge.devicePermissionStatus(request: request) == expected)
+        #expect(osAsker.checkedCapabilities.isEmpty)
+        #expect(osAsker.requestedCapabilities.isEmpty)
+    }
+
+    // MARK: gameReminders
+
+    @Test(arguments: [
+        (true, false, true, [MockReminderPermissionAsker.Ask.alarm]),
+        (true, true, true, [.alarm]),
+        (false, true, false, [.alarm, .notifications]),
+    ])
+    func scheduleReminderPrefersAnAlarmOverANotification(
+        alarmAllowed: Bool,
+        notificationsAllowed: Bool,
+        ringsAlarm: Bool,
+        asked: [MockReminderPermissionAsker.Ask]
+    ) async throws {
+        let gameReminders = MockGameReminderScheduler()
+        let asker = MockReminderPermissionAsker()
+        asker.alarmAllowed = alarmAllowed
+        asker.notificationsAllowed = notificationsAllowed
+        let bridge = makeBridge(productId: "game.dot", gameReminders: gameReminders, reminderPermissionAsker: asker)
+
+        try await bridge.scheduleReminder(startsAt: 2_000_000_000_000)
+
+        #expect(asker.asked == asked)
+        #expect(gameReminders.scheduled == [
+            .init(
+                productId: "game.dot",
+                startsAt: Date(timeIntervalSince1970: 2_000_000_000),
+                ringAlarm: ringsAlarm,
+                addCalendarEvent: true
+            )
+        ])
+    }
+
+    @Test func scheduleReminderRejectsWhenTheOSAllowsNeitherAlarmsNorNotifications() async {
+        let gameReminders = MockGameReminderScheduler()
+        let bridge = makeBridge(gameReminders: gameReminders)
+
+        await #expect {
+            try await bridge.scheduleReminder(startsAt: 2_000_000_000_000)
+        } throws: { error in
+            guard case HostRejection.Rejected = error else { return false }
+            return true
+        }
+        #expect(gameReminders.scheduled.isEmpty)
     }
 
     // MARK: remotePermission
 
     /// `remotePermission`: Remote{domains:["a.io"]} maps to
     /// `ProductPermission.networkAccess(domain: "a.io")` batched request.
-    @Test func remotePermissionDomains() async throws {
+    @Test(arguments: [Products.PermissionDecision.allowOnce, .allowAlways, .deny])
+    func remotePermissionDomains(decision: Products.PermissionDecision) async throws {
         let guard_ = MockPermissionGuard()
-        guard_.verdictToReturn = true
+        guard_.decisionToReturn = decision
         let bridge = makeBridge(permissionGuard: guard_)
 
-        let result = try await bridge.remotePermission(request: .remote(domains: ["a.io"]))
+        let result = try await bridge.remotePermission(product: testProduct, request: .remote(domains: ["a.io"]))
 
-        #expect(result)
+        let expected: TrUAPIPermissionDecision =
+            switch decision {
+            case .allowOnce: .allowOnce
+            case .allowAlways: .allowAlways
+            case .deny: .deny
+            }
+        #expect(result == expected)
         #expect(guard_.requestedBatchedPermissions == [.networkAccess(domain: "a.io")])
     }
 
@@ -159,9 +261,9 @@ struct RustRuntimeBridgeTests {
         let guard_ = MockPermissionGuard()
         let bridge = makeBridge(permissionGuard: guard_)
 
-        let result = try await bridge.remotePermission(request: .webRtc)
+        let result = try await bridge.remotePermission(product: testProduct, request: .webRtc)
 
-        #expect(result)
+        #expect(result == .allowAlways)
         #expect(guard_.requestedBatchedPermissions == [.webRtcAccess])
     }
 
@@ -329,6 +431,22 @@ struct RustRuntimeBridgeTests {
         #expect(presenter.receivedReview == review)
     }
 
+    @Test(arguments: [TrUAPIPermissionDecision.allowOnce, .allowAlways, .deny])
+    func confirmPermissionPreservesLifetime(decision: TrUAPIPermissionDecision) async throws {
+        let presenter = MockConfirmationPresenter()
+        presenter.permissionDecisionToReturn = decision
+        let bridge = makeBridge(productId: "caller.dot", confirmationPresenter: presenter)
+        let review = UserConfirmationReview.accountAccess(
+            AccountAccessReview(requestingProductId: "caller.dot", targetProductId: "target.dot")
+        )
+
+        let result = try await bridge.confirmPermission(review: review)
+
+        #expect(result == decision)
+        #expect(presenter.receivedReview == review)
+        #expect(presenter.receivedRequesterName == "caller.dot")
+    }
+
     // MARK: lookupPreimage
 
     @Test func lookupPreimageAwaitsFetchOnColdMiss() async throws {
@@ -417,17 +535,17 @@ struct RustRuntimeBridgeTests {
         #expect(!verdict)
     }
 
-    @Test func productSubtreeConfirmationWithoutPresentationDenies() async {
+    @Test func actionConfirmationWithoutPresentationDenies() async {
         let presenter = TrUAPIConfirmationPresenter(
             routerFacade: ProductRoutersFacade.worker()
         )
 
-        let verdict = await presenter.confirm(
-            review: .productSubtree(ProductSubtreeReview(productId: "test.product")),
-            from: "test.product"
-        )
-
-        #expect(!verdict)
+        for review in [
+            UserConfirmationReview.preimageSubmit(PreimageSubmitReview(size: 1_024)),
+            .productSubtree(ProductSubtreeReview(productId: "test.product"))
+        ] {
+            #expect(await presenter.confirm(review: review, from: "test.product") == false)
+        }
     }
 
     // MARK: currentTheme
@@ -448,14 +566,14 @@ struct RustRuntimeBridgeTests {
         bridge.chainDidClose(connectionId: 1)
     }
 
-    /// Plain Swift errors from storage surface as FFI `HostStorageError.Storage`.
+    /// Plain Swift errors from storage surface as FFI `HostLocalStorageReadError.Unknown`.
     @Test func storageErrorsAreMappedToFfiTypes() {
         let bridge = makeBridge(productStorageFails: true)
 
         #expect {
             try bridge.storage.read(key: "k")
         } throws: { error in
-            guard case HostStorageError.Storage(.unknown) = error else {
+            guard case HostLocalStorageReadError.Unknown = error else {
                 return false
             }
             return true
@@ -471,7 +589,10 @@ struct RustRuntimeBridgeTests {
         let bridge = RustProductExecutionBridge(dependencies: .init(
             productId: "test.dot",
             permissionGuard: MockPermissionGuard(),
+            osPermissionAsker: MockOSPermissionAsker(),
             notificationScheduler: MockNotificationScheduler(),
+            gameReminders: MockGameReminderScheduler(),
+            reminderPermissionAsker: MockReminderPermissionAsker(),
             navigationRouter: MockNavigationRouter(),
             chainRegistry: chainRegistry,
             chainConnections: pool,

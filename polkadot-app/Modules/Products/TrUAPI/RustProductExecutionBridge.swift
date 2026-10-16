@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExt
 import TrUAPIHost
 import Products
 import ChainRegistry
@@ -17,7 +18,10 @@ class RustProductExecutionBridge: HostBridge, @unchecked Sendable {
     struct Dependencies {
         let productId: ProductId
         let permissionGuard: ProductPermissionGuarding
+        let osPermissionAsker: OSPermissionAsking
         let notificationScheduler: ProductNotificationScheduling
+        let gameReminders: ProductGameReminderScheduling?
+        let reminderPermissionAsker: ReminderPermissionAsking
         let navigationRouter: ProductsNavigationRouting
         let chainRegistry: ChainRegistryProtocol
         let chainConnections: TrUAPIChainConnecting
@@ -57,22 +61,49 @@ class RustProductExecutionBridge: HostBridge, @unchecked Sendable {
         } else if let parsed = URL(string: url) {
             try await dependencies.navigationRouter.openExternalURL(parsed)
         } else {
-            throw HostNavigateRejection.Navigate(.unknown(reason: "invalid navigation url"))
+            throw HostNavigateToError.Unknown(reason: "invalid navigation url")
         }
     }
 
-    func devicePermission(request: HostDevicePermissionRequest) async throws -> Bool {
-        try await dependencies.permissionGuard.requestPermission(
+    func devicePermission(
+        product _: ProductExecutionConfig,
+        request: HostDevicePermissionRequest
+    ) async throws -> TrUAPIPermissionDecision {
+        try await dependencies.permissionGuard.requestDevicePermissionDecision(
             productId: dependencies.productId,
-            permission: .deviceCapability(request.deviceCapabilityType)
-        )
+            capability: request.deviceCapabilityType
+        ).hostDecision
     }
 
-    func remotePermission(request: RemotePermission) async throws -> Bool {
-        try await dependencies.permissionGuard.requestPermissionsBatched(
+    func devicePermissionStatus(request: HostDevicePermissionRequest) async throws -> DevicePermissionStatus {
+        switch request {
+        case .camera,
+             .microphone,
+             .notifications:
+            switch await dependencies.osPermissionAsker.checkPermission(for: request.deviceCapabilityType) {
+            case .allowed: .granted
+            case .denied: .denied
+            case .notDetermined: .notDetermined
+            }
+        case .location:
+            .notDetermined
+        case .bluetooth,
+             .nfc,
+             .clipboard,
+             .openUrl,
+             .biometrics:
+            .notApplicable
+        }
+    }
+
+    func remotePermission(
+        product _: ProductExecutionConfig,
+        request: RemotePermission
+    ) async throws -> TrUAPIPermissionDecision {
+        try await dependencies.permissionGuard.requestPermissionsDecision(
             productId: dependencies.productId,
             permissions: request.toDomainRequest().toDomainPermissions()
-        )
+        ).hostDecision
     }
 
     func pushNotification(request: HostPushNotificationRequest) async throws -> UInt32 {
@@ -97,6 +128,10 @@ class RustProductExecutionBridge: HostBridge, @unchecked Sendable {
 
     func confirmUserAction(review: UserConfirmationReview) async throws -> Bool {
         await dependencies.confirmationPresenter.confirm(review: review, from: dependencies.productId)
+    }
+
+    func confirmPermission(review: UserConfirmationReview) async throws -> TrUAPIPermissionDecision {
+        await dependencies.confirmationPresenter.confirmPermission(review: review, from: dependencies.productId)
     }
 
     func chainConnect(genesisHash: Data) throws -> UInt32? {
@@ -168,7 +203,43 @@ extension RustProductExecutionBridge: TrUAPIChainEventHandling {
     }
 }
 
+// MARK: - Game reminders
+
+extension RustProductExecutionBridge: GameHostBridge {
+    func scheduleReminder(startsAt: UInt64) async throws {
+        let asker = dependencies.reminderPermissionAsker
+        let ringAlarm: Bool
+        if await asker.askAlarm() {
+            ringAlarm = true
+        } else if await asker.askNotifications() {
+            ringAlarm = false
+        } else {
+            throw HostRejection.Rejected(reason: "alarms and notifications are both turned off")
+        }
+        await dependencies.gameReminders?.schedule(
+            productId: dependencies.productId,
+            startsAt: Date(timeIntervalSince1970: startsAt.millisecondsToSeconds()),
+            ringAlarm: ringAlarm,
+            addCalendarEvent: true
+        )
+    }
+
+    func cancelReminder() async throws {
+        await dependencies.gameReminders?.cancel(productId: dependencies.productId)
+    }
+}
+
 // MARK: - Mappers
+
+extension Products.PermissionDecision {
+    var hostDecision: TrUAPIPermissionDecision {
+        switch self {
+        case .allowOnce: .allowOnce
+        case .allowAlways: .allowAlways
+        case .deny: .deny
+        }
+    }
+}
 
 extension HostDevicePermissionRequest {
     /// Maps the TrUAPI device permission to the Products domain type.
