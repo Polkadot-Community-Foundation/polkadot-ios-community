@@ -64,21 +64,33 @@ public enum DSTabBarStyle {
         return hypot(point.x - center.x, point.y - center.y) <= notchRadius
     }
 
-    /// Strength of the variable blur. A material property, not a colour.
-    static let blurIntensity: Double = 0.35
+    /// Strength of the bar's variable blur. The public API cannot set the backdrop blur radius or saturation,
+    /// so this is tuned by eye toward the brief's radius.
+    static let barBlurIntensity: Double = 0.35
+    /// Strength of the centre control's variable blur, tuned by eye like `barBlurIntensity`.
+    static let centerBlurIntensity: Double = 0.6
+    /// Strength of the scrim behind the bar while the centre panel is open, tuned by eye like `barBlurIntensity`.
+    static let dimBlurIntensity: Double = 0.3
 
-    /// Opacity of the contrast wash over the blur. Slight enough to read as a wash rather than
-    /// a fill, so the bar stays translucent in every theme.
-    static let tintOpacity: Double = 0.018
+    /// Horizontal radius of the bar's wash ellipse as a fraction of the bar's width. Its vertical radius is the bar
+    /// height.
+    static let barWashRadiusFraction: CGFloat = 0.45
 
-    /// Opacity of the rim at the top of the bar, where it reads as catching the light.
-    static let rimTopOpacity: Double = 0.14
-    /// Opacity of the rim at the foot, where it has all but faded out.
-    static let rimBottomOpacity: Double = 0.035
-
-    static let shadowRadius: CGFloat = 18
+    /// Blur radius of the bar's shadow, tuned toward the brief's 30 pt blur.
+    static let barShadowRadius: CGFloat = 15
+    /// Distance the bar's shadow falls below the bar.
+    static let barShadowY: CGFloat = 14
+    /// How far the shadow's silhouette is pulled in from the bar's outline on every side.
+    static let barShadowSpread: CGFloat = 6
     /// Reach of the shadow mask past the bar, so the blurred shadow is not cut off at the bar edge.
-    static let shadowMaskSpread: CGFloat = shadowRadius * 4 + 40
+    static let shadowMaskSpread: CGFloat = barShadowRadius * 4 + 40
+
+    /// Blur the bar row reaches as the centre panel opens fully. The slot items and selection pill take it.
+    static let openItemBlurRadius: CGFloat = 3
+    /// Opacity the bar row reaches as the centre panel opens fully.
+    static let openItemOpacity: Double = 0.55
+    /// How far the bar row rises as the centre panel opens fully.
+    static let openBarRise: CGFloat = 2
 
     /// Response of the spring that grows and collapses the shelf. Damping sits just under critical,
     /// so the bar settles with at most a slight overshoot. Public because a host driving the shelf
@@ -156,10 +168,10 @@ public enum DSTabBarStyle {
         }
     }
 
-    /// Opacity of the centre control's rim at its top edge.
-    static let centerRimTopOpacity: Double = 0.252
-    /// Opacity of the centre control's rim at its foot, where it has faded out.
-    static let centerRimBottomOpacity: Double = 0.042
+    /// Centre control progress at which its fill and rim start to blend from the closed button to the open panel.
+    static let centerBlendStart: CGFloat = 0.2
+    /// Centre control progress at which the blend from the closed button to the open panel completes.
+    static let centerBlendEnd: CGFloat = 0.7
 
     /// Distance the grabber sits below the top of the open panel.
     static let centerGrabberTopInset: CGFloat = 6
@@ -181,7 +193,4 @@ public enum DSTabBarStyle {
     public static var scanStateHeight: CGFloat {
         scanCameraTopInset + scanCameraSide + scanFieldTopGap + scanFieldHeight + scanFieldBottomInset
     }
-
-    static let centerShadowRadius: CGFloat = 10
-    static let centerShadowY: CGFloat = 4
 }

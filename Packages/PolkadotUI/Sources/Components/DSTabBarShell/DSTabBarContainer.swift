@@ -20,6 +20,7 @@ public struct DSTabBarContainer<
     private let availableHeight: CGFloat
     private let selectedSlot: Int?
     private let isBarHidden: Bool
+    private let openProgress: CGFloat
     private let first: First
     private let second: Second
     private let third: Third
@@ -38,13 +39,15 @@ public struct DSTabBarContainer<
     /// shelf content's measured height, so the caller can size its touch region to the shelf. `selectedSlot`
     /// is the index, 0 to 3 left to right, of the slot the selection pill sits behind. `nil` draws no bar pill,
     /// which is also the case while a shelf view holds the pill through `dsTabBarSelectionPill`.
-    /// `isBarHidden` fades the bar out, shelf included, leaving the centre slot.
+    /// `isBarHidden` fades the bar out, shelf included, leaving the centre slot. `openProgress` is the centre
+    /// control's open progress, 0 closed to 1 open; the bar row blurs, fades and rises with it.
     public init(
         isShelfOpen: Binding<Bool>,
         shelfContentHeight: Binding<CGFloat>,
         availableHeight: CGFloat,
         selectedSlot: Int?,
         isBarHidden: Bool,
+        openProgress: CGFloat,
         @ViewBuilder first: () -> First,
         @ViewBuilder second: () -> Second,
         @ViewBuilder third: () -> Third,
@@ -57,6 +60,7 @@ public struct DSTabBarContainer<
         self.availableHeight = availableHeight
         self.selectedSlot = selectedSlot
         self.isBarHidden = isBarHidden
+        self.openProgress = openProgress
         self.first = first()
         self.second = second()
         self.third = third()
@@ -80,13 +84,17 @@ public struct DSTabBarContainer<
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isTabBar)
             .animation(selectionAnimation, value: selectedSlot)
+            .blur(radius: DSTabBarStyle.openItemBlurRadius * openProgress)
+            .opacity(1 - (1 - DSTabBarStyle.openItemOpacity) * openProgress)
         }
         .environment(\.dsTabBarSelectionNamespace, selectionNamespace)
-        .background(DSTabBarMaterial())
+        .background(DSTabBarBarMaterial())
         .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
         .overlay(border)
-        .shadow(color: Color.shadowSoft, radius: DSTabBarStyle.shadowRadius, y: DSTabBarStyle.shadowRadius / 3)
+        .overlay(notchGlint)
+        .background { shadow }
         .mask { DSTabBarShadowMask().fill(style: FillStyle(eoFill: true)) }
+        .offset(y: -DSTabBarStyle.openBarRise * openProgress)
         .opacity(isBarHidden ? 0 : 1)
         .allowsHitTesting(!isBarHidden)
         .accessibilityHidden(isBarHidden)
@@ -175,25 +183,51 @@ private extension DSTabBarContainer {
         .accessibilityHidden(!isShelfOpen)
     }
 
-    /// Strokes the outline and the edge of the hole. The stroke is clipped back to the bar, which
-    /// keeps only the inner half of every line, so its width is doubled first.
-    ///
-    /// The rim runs on the same axis as the material's wash, so it lightens the bar on dark
-    /// themes and darkens it on light ones, brightest at the top and faded by the foot.
+    /// Strokes the outline of the bar. The stroke is clipped back to the bar, which keeps only the inner half of
+    /// every line, so its width is doubled first. The notch edge is stroked too, and `notchGlint` draws over it.
     var border: some View {
         DSTabBarShape()
-            .stroke(
-                LinearGradient(
-                    colors: [
-                        Color.fgPrimary.opacity(DSTabBarStyle.rimTopOpacity),
-                        Color.fgPrimary.opacity(DSTabBarStyle.rimBottomOpacity)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: DSTabBarStyle.strokeWidth * 2
-            )
+            .stroke(DSTabBarStyle.Spec.barRim, lineWidth: DSTabBarStyle.strokeWidth * 2)
+            .overlay {
+                DSTabBarShape()
+                    .stroke(DSTabBarStyle.Spec.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
+            }
             .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
+    }
+
+    /// The glint along the notch's edge. Its colours run across the cutout's width, which is centred on the bar.
+    var notchGlint: some View {
+        GeometryReader { proxy in
+            let halfShoulder = DSTabBarStyle.notchShoulderWidth / 2 / proxy.size.width
+            DSTabBarCutoutEdge()
+                .stroke(
+                    LinearGradient(
+                        colors: DSTabBarStyle.Spec.notchGlintColors,
+                        startPoint: UnitPoint(x: 0.5 - halfShoulder, y: 0.5),
+                        endPoint: UnitPoint(x: 0.5 + halfShoulder, y: 0.5)
+                    ),
+                    lineWidth: DSTabBarStyle.strokeWidth * 2
+                )
+        }
+        .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
+    }
+
+    /// A black silhouette pulled in from the bar's outline, masked to outside the bar so the translucent glass
+    /// never shows it. The silhouette has no notch, so the shadow runs under the whole bar; `DSTabBarShadowMask`
+    /// removes
+    /// the hole. Only the shadow's falloff past the bar's edge is drawn.
+    /// It fades with the centre panel, which hides the bar's shadow while open.
+    var shadow: some View {
+        RoundedRectangle(cornerRadius: DSTabBarStyle.cornerRadius - DSTabBarStyle.barShadowSpread, style: .continuous)
+            .fill(Color.black)
+            .padding(DSTabBarStyle.barShadowSpread)
+            .shadow(
+                color: DSTabBarStyle.Spec.barShadow,
+                radius: DSTabBarStyle.barShadowRadius,
+                y: DSTabBarStyle.barShadowY
+            )
+            .mask { DSTabBarOutsideMask().fill(style: FillStyle(eoFill: true)) }
+            .opacity(1 - openProgress)
     }
 }
 
@@ -236,6 +270,7 @@ private extension DSTabBarContainer {
                     availableHeight: 320,
                     selectedSlot: selectedSlot,
                     isBarHidden: false,
+                    openProgress: 0,
                     first: { item("house.fill", at: 0) },
                     second: { item("bubble.left.fill", at: 1) },
                     third: { item("safari.fill", at: 2) },

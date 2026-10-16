@@ -14,6 +14,7 @@ final class TabBarBottomChromeController: UIViewController {
     private let centerButtonAnchorGuide = UILayoutGuide()
     private let barModel = TabBarBarViewModel()
     private lazy var barHost = UIHostingController(rootView: TabBarBarView(model: barModel))
+    private lazy var dimHost = UIHostingController(rootView: TabBarDimView(model: barModel))
 
     private var slots: [TabBarSlot] = []
     private var slotMap = TabBarSlotMap(slots: [])
@@ -126,6 +127,7 @@ final class TabBarBottomChromeController: UIViewController {
 
         view.backgroundColor = .clear
 
+        installDimLayer()
         installChromeSurface()
         installBar()
 
@@ -391,6 +393,20 @@ private extension TabBarBottomChromeController {
 // MARK: - Layout
 
 private extension TabBarBottomChromeController {
+    /// Installed before the chrome surface so the dim sits below the bar and the open panels. It spans the whole
+    /// screen, which the bar's host does not, and takes no touches so the chrome's passthrough hit test skips it.
+    func installDimLayer() {
+        addChild(dimHost)
+        view.addSubview(dimHost.view)
+        dimHost.view.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+        dimHost.didMove(toParent: self)
+        dimHost.view.backgroundColor = .clear
+        dimHost.view.isUserInteractionEnabled = false
+        dimHost.safeAreaRegions = []
+    }
+
     func installChromeSurface() {
         chromeSurface.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(chromeSurface)
@@ -584,5 +600,23 @@ extension TabBarBottomChromeController: UIGestureRecognizerDelegate {
         }
         let translation = pan.translation(in: chromeSurface)
         return abs(translation.x) > abs(translation.y)
+    }
+}
+
+// MARK: - Dim
+
+/// Dims the whole screen behind the open centre panel. It reads the same `TabBarBarViewModel.centerProgress` as the
+/// bar, so it follows the morph in the same transaction. The bar's host is too narrow and starts below the top safe
+/// area to carry the dim itself.
+private struct TabBarDimView: View {
+    let model: TabBarBarViewModel
+
+    var body: some View {
+        DSTabBarDimLayer()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(model.centerProgress)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }

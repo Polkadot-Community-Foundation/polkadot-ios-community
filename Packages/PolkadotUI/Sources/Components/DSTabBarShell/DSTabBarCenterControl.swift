@@ -89,6 +89,12 @@ private extension DSTabBarCenterControl {
     /// Progress at which content and the grabber appear.
     var revealStart: CGFloat { 0.45 }
 
+    /// How far the control has moved from the closed button's colours and rim to the open panel's, 0 to 1.
+    var openBlend: CGFloat {
+        let blendRange = DSTabBarStyle.centerBlendEnd - DSTabBarStyle.centerBlendStart
+        return min(1, max(0, (progress - DSTabBarStyle.centerBlendStart) / blendRange))
+    }
+
     /// Movement below which a drag counts as a tap.
     var tapSlop: CGFloat { 4 }
 
@@ -174,10 +180,9 @@ private extension DSTabBarCenterControl {
         // After the frame, so the grabber lands against the panel rather than against
         // the content, which can be shorter than the panel.
         .overlay(alignment: .top) { grabber }
-        .background(DSTabBarMaterial())
+        .background(DSTabBarCenterMaterial(openBlend: openBlend))
         .overlay(rim)
         .clipShape(DSTabBarMorphShape())
-        .shadow(color: Color.shadowSoft, radius: DSTabBarStyle.centerShadowRadius, y: DSTabBarStyle.centerShadowY)
         .contentShape(DSTabBarMorphShape())
         // Outside the content shape, so the glyph's touch area can hang below the lobe.
         .overlay(alignment: .bottom) { glyph }
@@ -386,21 +391,16 @@ private struct CenterRevealModifier: ViewModifier, Animatable {
 // MARK: - Volume
 
 private extension DSTabBarCenterControl {
-    /// Hairline that catches the light along the top edge and fades by the
-    /// bottom, so the control sits above the bar instead of in it. A border
-    /// stroke, so the clip leaves its full width.
+    /// Hairline that catches the light along the edge. The closed button and the open panel each have their own
+    /// gradient, which cross-fade with `openBlend`. A border stroke, so the clip leaves its full width.
     var rim: some View {
         DSTabBarMorphShape()
-            .strokeBorder(
-                LinearGradient(
-                    colors: [
-                        Color.fgPrimary.opacity(DSTabBarStyle.centerRimTopOpacity),
-                        Color.fgPrimary.opacity(DSTabBarStyle.centerRimBottomOpacity)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: DSTabBarStyle.strokeWidth
-            )
+            .strokeBorder(DSTabBarStyle.Spec.centerRestingRim, lineWidth: DSTabBarStyle.strokeWidth)
+            .opacity(1 - openBlend)
+            .overlay {
+                DSTabBarMorphShape()
+                    .strokeBorder(DSTabBarStyle.Spec.barRim, lineWidth: DSTabBarStyle.strokeWidth)
+                    .opacity(openBlend)
+            }
     }
 }

@@ -16,6 +16,7 @@ struct TabBarBarView: View {
             availableHeight: model.availablePanelHeight,
             selectedSlot: model.selectedSlot,
             isBarHidden: model.isBarHidden,
+            openProgress: model.centerProgress,
             first: { slot(at: 0) },
             second: { slot(at: 1) },
             third: { slot(at: 2) },
