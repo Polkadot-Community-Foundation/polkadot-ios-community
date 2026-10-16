@@ -206,7 +206,7 @@ def main():
         try:
             hits = list(scan(path))
         except OSError as error:
-            print(f"{os.path.abspath(path)}: warning: Hardcoded UI string check could not read this file: {error}")
+            print(f"{os.path.abspath(path)}:1: warning: Hardcoded UI string check could not read this file: {error}")
             continue
         for number, code in hits:
             print(f"{os.path.abspath(path)}:{number}: warning: Hardcoded UI string, "
