@@ -25,6 +25,8 @@ protocol ChatAcceptanceStoring {
 
     func markAcknowledged(_ candidate: ChatAcceptanceCandidate) async throws
 
+    func markFailed(_ candidate: ChatAcceptanceCandidate) async throws
+
     /// The requester spoke on the device route after the acceptance, or answered one of our device-route messages.
     func isAcknowledged(_ candidate: ChatAcceptanceCandidate) async throws -> Bool
 }
@@ -89,6 +91,12 @@ extension ChatAcceptanceStore: ChatAcceptanceStoring {
     func markAcknowledged(_ candidate: ChatAcceptanceCandidate) async throws {
         try await databaseService.performWrite { context in
             try Self.updateStatus(of: candidate, to: .outgoing(.delivered), in: context)
+        }
+    }
+
+    func markFailed(_ candidate: ChatAcceptanceCandidate) async throws {
+        try await databaseService.performWrite { context in
+            try Self.updateStatus(of: candidate, to: .outgoing(.failed), in: context)
         }
     }
 

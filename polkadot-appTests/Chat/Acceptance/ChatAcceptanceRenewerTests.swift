@@ -37,15 +37,36 @@ struct ChatAcceptanceRenewerTests {
         #expect(store.published == [fixture.allocator.period])
     }
 
-    @Test func staleAcceptanceWithoutSlotIsNotPublished() async throws {
+    @Test func staleAcceptanceWithoutSlotIsRenewedWithUsername() async throws {
         fixture.allocator.hasFreeSlot = false
         let store =
             InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: fixture.allocator.period - 1)])
 
         await makeRenewer(store: store).renew()
 
+        #expect(try fixture.senders() == [fixture.fallback.signer.accountId])
+        #expect(store.published == [fixture.allocator.period])
+    }
+
+    @Test func staleAcceptanceFailsWhenUsernameIsDeclined() async throws {
+        fixture.allocator.hasFreeSlot = false
+        fixture.fallback.decline()
+        let store =
+            InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: fixture.allocator.period - 1)])
+
+        await makeRenewer(store: store).renew()
+
         #expect(try fixture.senders().isEmpty)
-        #expect(store.published.isEmpty)
+        #expect(store.failedCount == 1)
+    }
+
+    @Test func missingCurrentPeriodCopyIsResentWithUsernameWhenConsented() async throws {
+        fixture.fallback.grantConsent()
+        let store = InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: fixture.allocator.period)])
+
+        await makeRenewer(store: store).renew()
+
+        #expect(try fixture.senders() == [fixture.fallback.signer.accountId])
     }
 
     @Test func currentPeriodCopyInStoreIsLeftAlone() async throws {
@@ -78,7 +99,8 @@ private extension ChatAcceptanceRenewerTests {
                 store: store,
                 allocator: fixture.allocator,
                 signers: fixture.signers,
-                statementService: fixture.statementService
+                statementService: fixture.statementService,
+                fallback: fixture.fallback
             ),
             dateProvider: MockDateProvider(now: fixture.now),
             issueDiagnostics: .recording(unacknowledged: unacknowledged),

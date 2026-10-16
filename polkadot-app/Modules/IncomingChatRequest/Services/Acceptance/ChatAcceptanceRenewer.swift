@@ -11,6 +11,7 @@ struct ChatAcceptanceRenewalDependencies {
     let allocator: NotificationStatementAccountAllocating
     let signers: ChatAcceptanceSigning
     let statementService: ChatAcceptanceStatementServicing
+    let fallback: NonPrivateSigningFallbacking
 }
 
 /// Keeps published acceptances in the store until the requester acknowledges them on the device route:
@@ -90,9 +91,29 @@ private extension ChatAcceptanceRenewer {
         )
 
         await withTaskGroup(of: Void.self) { group in
-            for (candidate, signer) in renewals where claimed.contains(signer.signer.accountId) {
-                group.addTask { await self.publishOnceAllocated(candidate, from: signer) }
+            for (candidate, signer) in renewals {
+                if claimed.contains(signer.signer.accountId) {
+                    group.addTask { await self.publishOnceAllocated(candidate, from: signer) }
+                } else {
+                    group.addTask { await self.renewWithIdentity(candidate, into: period) }
+                }
             }
+        }
+    }
+
+    // Prompts when the contact has no consent yet; declining fails the acceptance.
+    func renewWithIdentity(_ candidate: ChatAcceptanceCandidate, into period: UInt32) async {
+        let messageId = candidate.message.messageId
+
+        do {
+            let identity = try await dependencies.fallback.identitySigner(for: candidate.session)
+            try await dependencies.statementService.send(candidate, signer: identity)
+            try await dependencies.store.markPublished(candidate, period: period)
+        } catch ChatSigningConsentError.declined {
+            logger.debug("Chat acceptance \(messageId) declined to renew with the username")
+            try? await dependencies.store.markFailed(candidate)
+        } catch {
+            logger.error("Chat acceptance \(messageId) renewal with the username failed: \(error)")
         }
     }
 
@@ -107,6 +128,8 @@ private extension ChatAcceptanceRenewer {
             try await dependencies.statementService.send(candidate, signer: signer.signer)
             try await dependencies.store.markPublished(candidate, period: signer.period)
             issueDiagnostics.publishFailing.recordRecovery(for: messageId)
+        } catch NotificationAllocationError.noFreeSlotInPeriod {
+            await renewWithIdentity(candidate, into: signer.period)
         } catch {
             logger.error("Chat acceptance \(messageId) renewal into \(signer.period) failed: \(error)")
             issueDiagnostics.publishFailing.recordFailure(for: messageId, error: error, counters: [:])
@@ -118,14 +141,23 @@ private extension ChatAcceptanceRenewer {
             guard let period = candidate.period else { continue }
 
             do {
-                let signer = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
+                let oneShot = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
+                let statementService = dependencies.statementService
 
-                guard try await !dependencies.statementService.isStored(
-                    candidate,
-                    signedBy: signer.signer.accountId
-                ) else { continue }
+                guard try await !statementService.isStored(candidate, signedBy: oneShot.signer.accountId) else {
+                    continue
+                }
 
-                try await dependencies.statementService.send(candidate, signer: signer.signer)
+                // With consent the period's copy may be the username-signed one.
+                if let identity = try await dependencies.fallback.consentedSigner(for: candidate.session) {
+                    guard try await !statementService.isStored(candidate, signedBy: identity.accountId) else {
+                        continue
+                    }
+
+                    try await statementService.send(candidate, signer: identity)
+                } else {
+                    try await statementService.send(candidate, signer: oneShot.signer)
+                }
             } catch {
                 logger.error("Chat acceptance \(candidate.message.messageId) re-send failed: \(error)")
             }

@@ -13,9 +13,11 @@ struct ChatAcceptanceDeliveryDependencies {
     let signers: ChatAcceptanceSigning
     let statementService: ChatAcceptanceStatementServicing
     let notifier: ChatAcceptanceNotifying
+    let fallback: NonPrivateSigningFallbacking
 }
 
-/// First publication of acceptances from the current period's one-shot account.
+/// First publication of acceptances from the current period's one-shot account, or from the username account
+/// with the user's consent when no slot is free.
 final class ChatAcceptanceDeliveryService: @unchecked Sendable {
     private static let firstRetryDelay: Duration = .seconds(2)
     private static let maxRetryDelay: Duration = .seconds(5 * 60)
@@ -48,6 +50,9 @@ extension ChatAcceptanceDeliveryService: ChatAcceptanceDelivering {
                 try await execution.backgroundExecutor.execute { try await self.deliver(messageId: messageId) }
                 issueDiagnostics.publishFailing.recordRecovery(for: messageId)
                 return
+            } catch ChatSigningConsentError.declined {
+                await markFailedAfterDecline(messageId)
+                return
             } catch {
                 attempt += 1
                 logger.error("Chat acceptance \(messageId) attempt \(attempt) failed: \(error)")
@@ -68,16 +73,27 @@ private extension ChatAcceptanceDeliveryService {
         guard let candidate = try await dependencies.store.acceptance(messageId: messageId) else { return }
 
         let period = try await dependencies.allocator.currentPeriod()
-        let signer = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
-
-        try await dependencies.allocator.allocate(
-            signer.signer.accountId,
-            timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
+        let oneShot = try dependencies.signers.signer(requestId: candidate.requestId, period: period)
+        let signer = try await dependencies.fallback.claimedOrIdentity(
+            oneShot.signer,
+            allocator: dependencies.allocator,
+            session: candidate.session
         )
 
-        try await dependencies.statementService.send(candidate, signer: signer.signer)
+        try await dependencies.statementService.send(candidate, signer: signer)
         try await dependencies.store.markPublished(candidate, period: period)
         await dependencies.notifier.notify(candidate)
+    }
+
+    func markFailedAfterDecline(_ messageId: String) async {
+        logger.debug("Chat acceptance \(messageId) declined to sign with the username")
+
+        do {
+            guard let candidate = try await dependencies.store.acceptance(messageId: messageId) else { return }
+            try await dependencies.store.markFailed(candidate)
+        } catch {
+            logger.error("Chat acceptance \(messageId) not marked failed: \(error)")
+        }
     }
 
     func isAwaitingPublication(_ messageId: String) async -> Bool {

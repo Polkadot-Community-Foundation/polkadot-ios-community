@@ -16,6 +16,7 @@ struct ChatAcceptanceFixture {
     let statementStore = MockStatementStore()
     let allocator = StubNotificationAllocator()
     let signManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
+    let fallback = FakeIdentitySigningFallback(signer: StubStatementSigner(accountId: Data(repeating: 0x0C, count: 32)))
     let statementService: ChatAcceptanceStatementService
 
     init() {
@@ -115,8 +116,12 @@ final class InMemoryChatAcceptanceStore: ChatAcceptanceStoring, @unchecked Senda
     /// Stops awaiting after this many reads; nil keeps `isAwaiting` as is.
     var awaitingReadsLeft: Int?
     var isAcknowledged = false
-    private(set) var published: [UInt32] = []
+    private let publishedPeriods = OSAllocatedUnfairLock<[UInt32]>(initialState: [])
+    private let failures = OSAllocatedUnfairLock(initialState: 0)
     private(set) var acknowledgedCount = 0
+
+    var published: [UInt32] { publishedPeriods.withLock { $0 } }
+    var failedCount: Int { failures.withLock { $0 } }
 
     init(candidates: [ChatAcceptanceCandidate]) {
         self.candidates = candidates
@@ -139,12 +144,17 @@ final class InMemoryChatAcceptanceStore: ChatAcceptanceStoring, @unchecked Senda
     }
 
     func markPublished(_: ChatAcceptanceCandidate, period: UInt32) async throws {
-        published.append(period)
+        publishedPeriods.withLock { $0.append(period) }
         isAwaiting = false
     }
 
     func markAcknowledged(_: ChatAcceptanceCandidate) async throws {
         acknowledgedCount += 1
+    }
+
+    func markFailed(_: ChatAcceptanceCandidate) async throws {
+        failures.withLock { $0 += 1 }
+        isAwaiting = false
     }
 
     func isAcknowledged(_: ChatAcceptanceCandidate) async throws -> Bool {

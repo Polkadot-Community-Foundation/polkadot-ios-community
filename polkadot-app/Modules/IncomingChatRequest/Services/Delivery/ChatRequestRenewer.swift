@@ -1,8 +1,15 @@
 import Foundation
 import Individuality
+import StatementStore
 
 protocol ChatRequestRenewing: Sendable {
     func renew() async
+}
+
+struct ChatRequestRenewalSigning {
+    let allocator: NotificationStatementAccountAllocating
+    let signers: ChatRequestDeliverySigning
+    let fallback: NonPrivateSigningFallbacking
 }
 
 final class ChatRequestRenewer: @unchecked Sendable {
@@ -11,19 +18,20 @@ final class ChatRequestRenewer: @unchecked Sendable {
     private let store: ChatRequestRenewalStoring
     private let allocator: NotificationStatementAccountAllocating
     private let signers: ChatRequestDeliverySigning
+    private let fallback: NonPrivateSigningFallbacking
     private let outgoingService: OutgoingChatRequestServicing
     private let diagnostics: ChatRequestDiagnostics
 
     init(
         store: ChatRequestRenewalStoring,
-        allocator: NotificationStatementAccountAllocating,
-        signers: ChatRequestDeliverySigning,
+        signing: ChatRequestRenewalSigning,
         outgoingService: OutgoingChatRequestServicing,
         diagnostics: ChatRequestDiagnostics
     ) {
         self.store = store
-        self.allocator = allocator
-        self.signers = signers
+        allocator = signing.allocator
+        signers = signing.signers
+        fallback = signing.fallback
         self.outgoingService = outgoingService
         self.diagnostics = diagnostics
     }
@@ -58,12 +66,43 @@ private extension ChatRequestRenewer {
         }
 
         let claimed = try await Set(allocator.initiateAllocations(for: renewals.map(\.1.signer.accountId)))
-        reportIfStarved(renewals.filter { !claimed.contains($0.1.signer.accountId) }.map(\.0), period: period)
 
-        await withTaskGroup(of: Void.self) { group in
-            for (candidate, signer) in renewals where claimed.contains(signer.signer.accountId) {
-                group.addTask { await self.publishOnceAllocated(candidate, from: signer) }
+        let unrenewed = await withTaskGroup(of: ChatRequestRenewalCandidate?.self) { group in
+            for (candidate, signer) in renewals {
+                if claimed.contains(signer.signer.accountId) {
+                    group.addTask {
+                        await self.publishOnceAllocated(candidate, from: signer)
+                        return nil
+                    }
+                } else {
+                    group.addTask { await self.renewWithIdentity(candidate, into: period) ? nil : candidate }
+                }
             }
+
+            return await group.reduce(into: [ChatRequestRenewalCandidate]()) { unrenewed, candidate in
+                if let candidate { unrenewed.append(candidate) }
+            }
+        }
+
+        reportIfStarved(unrenewed, period: period)
+    }
+
+    // Prompts when the contact has no consent yet; declining fails the request.
+    func renewWithIdentity(_ candidate: ChatRequestRenewalCandidate, into period: UInt32) async -> Bool {
+        let requestId = candidate.message.messageId
+
+        do {
+            let identity = try await fallback.identitySigner(for: candidate.session)
+            try await publish(candidate, from: ChatRequestDeliverySigner(signer: identity, period: period))
+            try await store.updateAnonymousPeriod(requestId: requestId, period: period)
+            return true
+        } catch ChatSigningConsentError.declined {
+            diagnostics.logger.debug("Chat request \(requestId) declined to renew with the username")
+            try? await store.markFailed(requestId: requestId)
+            return true
+        } catch {
+            diagnostics.logger.error("Chat request \(requestId) renewal with the username failed: \(error)")
+            return false
         }
     }
 
@@ -75,6 +114,9 @@ private extension ChatRequestRenewer {
                 signer.signer.accountId,
                 timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
             )
+        } catch NotificationAllocationError.noFreeSlotInPeriod {
+            _ = await renewWithIdentity(candidate, into: signer.period)
+            return
         } catch {
             diagnostics.logger.error("Chat request \(requestId) slot for \(signer.period) not claimed: \(error)")
             return
@@ -96,16 +138,24 @@ private extension ChatRequestRenewer {
     func resendMissing(_ current: [ChatRequestRenewalCandidate]) async {
         for candidate in current {
             do {
-                let signer = try signers.anonymous(requestId: candidate.message.messageId, period: candidate.period)
-                let isStored = try await outgoingService.isStored(
-                    to: candidate.session.peer,
-                    ownKeyId: candidate.session.own,
-                    signedBy: signer.signer.accountId
+                let anonymous = try signers.anonymous(
+                    requestId: candidate.message.messageId,
+                    period: candidate.period
                 )
 
-                guard !isStored else { continue }
+                guard try await !isStored(candidate, signedBy: anonymous.signer) else { continue }
 
-                try await publish(candidate, from: signer)
+                // With consent the period's copy may be the username-signed one.
+                if let identity = try await fallback.consentedSigner(for: candidate.session) {
+                    guard try await !isStored(candidate, signedBy: identity) else { continue }
+
+                    try await publish(
+                        candidate,
+                        from: ChatRequestDeliverySigner(signer: identity, period: candidate.period)
+                    )
+                } else {
+                    try await publish(candidate, from: anonymous)
+                }
             } catch {
                 diagnostics.logger.error("Chat request \(candidate.message.messageId) re-send failed: \(error)")
             }
@@ -122,6 +172,17 @@ private extension ChatRequestRenewer {
             for: "\(period)",
             error: nil,
             counters: ["skipped": starved, "period": Int(period)]
+        )
+    }
+
+    func isStored(
+        _ candidate: ChatRequestRenewalCandidate,
+        signedBy signer: StatementStoreSigning
+    ) async throws -> Bool {
+        try await outgoingService.isStored(
+            to: candidate.session.peer,
+            ownKeyId: candidate.session.own,
+            signedBy: signer.accountId
         )
     }
 

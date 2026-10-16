@@ -11,9 +11,12 @@ protocol NonPrivateSigningFallbacking: Sendable {
     /// The identity signer for a contact once the user consented, asking first if needed.
     /// - Throws: `ChatSigningConsentError.declined` after the contact's pending messages were marked failed.
     func identitySigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning
+
+    /// The identity signer when the user already consented for the contact; never asks.
+    func consentedSigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning?
 }
 
-final class ChatIdentitySigningFallback: @unchecked Sendable {
+final class NonPrivateSigningFallback: @unchecked Sendable {
     private let consentStore: ChatSigningConsentStoring
     private let prompter: ChatSigningConsentPrompting
     private let pendingMessages: ChatPendingMessagesServicing
@@ -36,7 +39,7 @@ final class ChatIdentitySigningFallback: @unchecked Sendable {
     }
 }
 
-extension ChatIdentitySigningFallback: NonPrivateSigningFallbacking {
+extension NonPrivateSigningFallback: NonPrivateSigningFallbacking {
     func identitySigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning {
         if try await !consentStore.hasConsent(for: contactAccountId) {
             try await askConsent(for: contactAccountId)
@@ -44,9 +47,15 @@ extension ChatIdentitySigningFallback: NonPrivateSigningFallbacking {
 
         return try signManager.makeSigner(for: ownSignKeyId)
     }
+
+    func consentedSigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning? {
+        guard try await consentStore.hasConsent(for: contactAccountId) else { return nil }
+
+        return try signManager.makeSigner(for: ownSignKeyId)
+    }
 }
 
-private extension ChatIdentitySigningFallback {
+private extension NonPrivateSigningFallback {
     func askConsent(for contactAccountId: AccountId) async throws {
         // Batches queued before "Not now" must not prompt again; the user's next message does.
         if declinedContacts.withLock({ $0.contains(contactAccountId) }) {
@@ -71,9 +80,9 @@ private extension ChatIdentitySigningFallback {
     }
 }
 
-extension ChatIdentitySigningFallback {
-    static func makeDefault() -> ChatIdentitySigningFallback {
-        ChatIdentitySigningFallback(
+extension NonPrivateSigningFallback {
+    static func makeDefault() -> NonPrivateSigningFallback {
+        NonPrivateSigningFallback(
             consentStore: ChatSigningConsentStore(),
             prompter: ChatSigningConsentPrompter(presenter: ChatSigningConsentAlertPresenter()),
             pendingMessages: ChatPendingMessagesService(),

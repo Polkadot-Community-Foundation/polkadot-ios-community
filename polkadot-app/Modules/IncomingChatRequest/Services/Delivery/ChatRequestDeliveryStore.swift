@@ -26,6 +26,8 @@ protocol ChatRequestRenewalStoring {
     func renewalCandidates() async throws -> [ChatRequestRenewalCandidate]
 
     func updateAnonymousPeriod(requestId: String, period: UInt32) async throws
+
+    func markFailed(requestId: String) async throws
 }
 
 final class ChatRequestDeliveryStore {

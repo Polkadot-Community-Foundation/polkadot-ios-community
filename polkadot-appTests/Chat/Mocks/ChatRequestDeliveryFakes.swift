@@ -11,7 +11,9 @@ final class RecordingOutgoingChatRequestService: OutgoingChatRequestServicing, @
     var failures: [Error] = []
     var encodedSize = 1_000
     var storedSigners: Set<AccountId> = []
-    private(set) var sentSigners: [AccountId] = []
+    private let sent = OSAllocatedUnfairLock<[AccountId]>(initialState: [])
+
+    var sentSigners: [AccountId] { sent.withLock { $0 } }
 
     func send(
         message _: Chat.RequestMessage,
@@ -20,7 +22,7 @@ final class RecordingOutgoingChatRequestService: OutgoingChatRequestServicing, @
         signer: StatementStoreSigning
     ) async throws {
         if !failures.isEmpty { throw failures.removeFirst() }
-        sentSigners.append(signer.accountId)
+        sent.withLock { $0.append(signer.accountId) }
     }
 
     func encodedSize(
@@ -41,21 +43,34 @@ final class RecordingOutgoingChatRequestService: OutgoingChatRequestServicing, @
 }
 
 final class InMemoryChatRequestRenewalStore: ChatRequestRenewalStoring, @unchecked Sendable {
+    private struct Writes {
+        var periodUpdates: [(requestId: String, period: UInt32)] = []
+        var failed: [String] = []
+    }
+
     var candidates: [ChatRequestRenewalCandidate] = []
-    private(set) var periodUpdates: [(requestId: String, period: UInt32)] = []
+    private let writes = OSAllocatedUnfairLock(uncheckedState: Writes())
+
+    var periodUpdates: [(requestId: String, period: UInt32)] { writes.withLock { $0.periodUpdates } }
+    var failed: [String] { writes.withLock { $0.failed } }
 
     func renewalCandidates() async throws -> [ChatRequestRenewalCandidate] {
         candidates
     }
 
     func updateAnonymousPeriod(requestId: String, period: UInt32) async throws {
-        periodUpdates.append((requestId, period))
+        writes.withLock { $0.periodUpdates.append((requestId, period)) }
+    }
+
+    func markFailed(requestId: String) async throws {
+        writes.withLock { $0.failed.append(requestId) }
     }
 }
 
 final class StubDeliveryAccountResolver: ChatRequestDeliveryAccountResolving, @unchecked Sendable {
     let signer: ChatRequestDeliverySigner
     var statementSize = 10 * 1_024
+    var error: Error?
     private(set) var resolvedCount = 0
 
     init(signer: ChatRequestDeliverySigner) {
@@ -66,8 +81,12 @@ final class StubDeliveryAccountResolver: ChatRequestDeliveryAccountResolving, @u
         statementSize
     }
 
-    func resolveFirstDelivery(requestId _: String) async throws -> ChatRequestDeliverySigner {
+    func resolveFirstDelivery(
+        requestId _: String,
+        session _: MessageExchange.SessionRequest
+    ) async throws -> ChatRequestDeliverySigner {
         resolvedCount += 1
+        if let error { throw error }
         return signer
     }
 }

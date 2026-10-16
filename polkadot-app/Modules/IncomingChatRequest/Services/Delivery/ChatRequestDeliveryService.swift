@@ -49,6 +49,9 @@ extension ChatRequestDeliveryService: ChatRequestDelivering {
                 diagnostics.issues.deliveryStalled.recordRecovery(for: message.messageId)
                 diagnostics.logger.debug("Chat request \(message.messageId) finished after \(attempt + 1) attempt(s)")
                 return
+            } catch ChatSigningConsentError.declined {
+                await markFailedAfterDecline(message.messageId)
+                return
             } catch {
                 attempt += 1
                 let retryIn = Self.retryDelay(forAttempt: attempt)
@@ -80,10 +83,20 @@ private extension ChatRequestDeliveryService {
             return
         }
 
-        let signer = try await resolver.resolveFirstDelivery(requestId: message.messageId)
+        let signer = try await resolver.resolveFirstDelivery(requestId: message.messageId, session: session)
 
         try await outgoingService.send(message: message, to: session.peer, ownKeyId: session.own, signer: signer.signer)
         try await store.markDelivered(requestId: message.messageId, anonymousPeriod: signer.period)
+    }
+
+    func markFailedAfterDecline(_ requestId: String) async {
+        diagnostics.logger.debug("Chat request \(requestId) declined to sign with the username")
+
+        do {
+            try await store.markFailed(requestId: requestId)
+        } catch {
+            diagnostics.logger.error("Chat request \(requestId) not marked failed: \(error)")
+        }
     }
 
     func isAwaitingDelivery(_ requestId: String) async -> Bool {

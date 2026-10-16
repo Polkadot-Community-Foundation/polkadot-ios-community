@@ -239,7 +239,7 @@ extension ServiceCoordinator {
         }
 
         let statementStoreMonitor = StatementStoreActivityMonitor()
-        let identitySigningFallback = ChatIdentitySigningFallback.makeDefault()
+        let identitySigningFallback = NonPrivateSigningFallback.makeDefault()
         let chatCoordinatorFactory = MessageExchangeCoordinatorFactory(
             bulletInManager: allowanceManagerFacade.bulletInManager,
             statementAccountFunding: allowanceManagerFacade.sssManager,
@@ -334,7 +334,10 @@ extension ServiceCoordinator {
             return nil
         }
 
-        let chatRequestCoordinator = createChatRequestCoordinator(notificationAllocator: notificationAllocator)
+        let chatRequestCoordinator = createChatRequestCoordinator(
+            notificationAllocator: notificationAllocator,
+            signingFallback: identitySigningFallback
+        )
         let audioSessionManager = AudioSessionManager()
 
         let paymentsSupport = PaymentsSupport(coinageService: coinageServices.coinageService)
@@ -496,7 +499,8 @@ private extension ServiceCoordinator {
 
 private extension ServiceCoordinator {
     static func createChatRequestCoordinator(
-        notificationAllocator: NotificationStatementAccountAllocating
+        notificationAllocator: NotificationStatementAccountAllocating,
+        signingFallback: NonPrivateSigningFallbacking
     ) -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
@@ -522,6 +526,7 @@ private extension ServiceCoordinator {
                     logger: Logger.shared
                 ),
                 notificationAllocator: notificationAllocator,
+                signingFallback: signingFallback,
                 backgroundExecutor: backgroundExecutor,
                 issueReporter: IssueReportingFacade.shared
             ),

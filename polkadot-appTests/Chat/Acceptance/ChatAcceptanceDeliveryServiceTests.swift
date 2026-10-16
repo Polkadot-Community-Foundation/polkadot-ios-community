@@ -28,16 +28,26 @@ struct ChatAcceptanceDeliveryServiceTests {
         #expect(try fixture.senders().isEmpty)
     }
 
-    @Test func keepsRetryingWithoutSlotAndPublishesNothing() async throws {
+    @Test func publishesWithUsernameWhenNoSlotIsFree() async throws {
         fixture.allocator.hasFreeSlot = false
         let store = InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: nil)])
-        store.awaitingReadsLeft = 3
 
         await makeService(store: store).deliverUntilDone(messageId: "acceptance")
 
-        #expect(store.awaitingReadsLeft == -1)
+        #expect(try fixture.senders() == [fixture.fallback.signer.accountId])
+        #expect(store.published == [fixture.allocator.period])
+        #expect(notifier.notifiedMessageIds == ["acceptance"])
+    }
+
+    @Test func marksAcceptanceFailedOnceUsernameIsDeclined() async throws {
+        fixture.allocator.hasFreeSlot = false
+        fixture.fallback.decline()
+        let store = InMemoryChatAcceptanceStore(candidates: [fixture.makeCandidate(period: nil)])
+
+        await makeService(store: store).deliverUntilDone(messageId: "acceptance")
+
         #expect(try fixture.senders().isEmpty)
-        #expect(store.published.isEmpty)
+        #expect(store.failedCount == 1)
         #expect(notifier.notifiedMessageIds.isEmpty)
     }
 
@@ -58,7 +68,8 @@ private extension ChatAcceptanceDeliveryServiceTests {
                 allocator: fixture.allocator,
                 signers: fixture.signers,
                 statementService: fixture.statementService,
-                notifier: notifier
+                notifier: notifier,
+                fallback: fixture.fallback
             ),
             execution: ChatRequestDeliveryExecution(
                 backgroundExecutor: InlineBackgroundExecutor(),

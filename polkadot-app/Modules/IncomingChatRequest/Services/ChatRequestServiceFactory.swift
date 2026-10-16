@@ -48,6 +48,7 @@ actor ChatRequestServiceFactory {
     let logger: LoggerProtocol
     let remoteContactResolver: RemoteContactResolving
     let notificationAllocator: NotificationStatementAccountAllocating
+    let signingFallback: NonPrivateSigningFallbacking
     let backgroundExecutor: BackgroundExecuting
     let issueReporter: IssueReporting
 
@@ -59,6 +60,7 @@ actor ChatRequestServiceFactory {
     init(
         remoteContactResolver: RemoteContactResolving,
         notificationAllocator: NotificationStatementAccountAllocating,
+        signingFallback: NonPrivateSigningFallbacking,
         backgroundExecutor: BackgroundExecuting,
         issueReporter: IssueReporting,
         chatChainId: ChainModel.Id = AppConfig.Chains.chatChain,
@@ -71,6 +73,7 @@ actor ChatRequestServiceFactory {
     ) {
         self.remoteContactResolver = remoteContactResolver
         self.notificationAllocator = notificationAllocator
+        self.signingFallback = signingFallback
         self.backgroundExecutor = backgroundExecutor
         self.issueReporter = issueReporter
         self.chatChainId = chatChainId
@@ -178,7 +181,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeChatRequestDeliveryService() async throws -> ChatRequestDelivering {
         let resolver = ChatRequestDeliveryAccountResolver(
             allocator: notificationAllocator,
-            signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager())
+            signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager()),
+            fallback: signingFallback
         )
 
         return try await ChatRequestDeliveryService(
@@ -198,7 +202,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             allocator: notificationAllocator,
             signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
             statementService: makeAcceptanceStatementService(),
-            notifier: makeAcceptanceNotifier()
+            notifier: makeAcceptanceNotifier(),
+            fallback: signingFallback
         )
 
         let deliveryService = ChatAcceptanceDeliveryService(
@@ -245,7 +250,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             store: ChatAcceptanceStore(storageFacade: storageFacade),
             allocator: notificationAllocator,
             signers: ChatAcceptanceSigners(signManager: makeAccountSignManager()),
-            statementService: makeAcceptanceStatementService()
+            statementService: makeAcceptanceStatementService(),
+            fallback: signingFallback
         )
 
         return ChatAcceptanceRenewer(
@@ -259,8 +265,11 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
     func makeChatRequestRenewer() async throws -> ChatRequestRenewing {
         try await ChatRequestRenewer(
             store: ChatRequestDeliveryStore(storageFacade: storageFacade),
-            allocator: notificationAllocator,
-            signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager()),
+            signing: ChatRequestRenewalSigning(
+                allocator: notificationAllocator,
+                signers: ChatRequestDeliverySigners(signManager: makeAccountSignManager()),
+                fallback: signingFallback
+            ),
             outgoingService: makeOutgoingChatRequestService(),
             diagnostics: makeDiagnostics()
         )

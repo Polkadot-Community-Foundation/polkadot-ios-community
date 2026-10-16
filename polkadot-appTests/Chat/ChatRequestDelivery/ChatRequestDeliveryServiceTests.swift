@@ -67,6 +67,16 @@ struct ChatRequestDeliveryServiceTests {
         #expect(store.delivered.isEmpty)
     }
 
+    @Test func marksRequestFailedOnceUsernameIsDeclined() async {
+        resolver.error = ChatSigningConsentError.declined
+
+        await makeService().deliverUntilDone(message, session: session)
+
+        #expect(store.failed == ["request"])
+        #expect(resolver.resolvedCount == 1)
+        #expect(outgoingService.sentSigners.isEmpty)
+    }
+
     @Test func marksOversizedRequestFailedWithoutClaimingSlot() async {
         outgoingService.encodedSize = resolver.statementSize + 1
 

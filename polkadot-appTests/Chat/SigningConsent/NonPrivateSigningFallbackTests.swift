@@ -4,7 +4,7 @@ import SubstrateSdk
 import Testing
 @testable import polkadot_app
 
-struct ChatIdentitySigningFallbackTests {
+struct NonPrivateSigningFallbackTests {
     private let facade = UserDataStorageTestFacade()
     private let peer = Data(repeating: 0x0A, count: 32)
     private let ownSignKeyId = "//wallet//main"
@@ -68,7 +68,7 @@ struct ChatIdentitySigningFallbackTests {
     }
 }
 
-private extension ChatIdentitySigningFallbackTests {
+private extension NonPrivateSigningFallbackTests {
     func consentStore() -> ChatSigningConsentStore {
         ChatSigningConsentStore(storageFacade: facade, dateProvider: MockDateProvider())
     }
@@ -77,8 +77,8 @@ private extension ChatIdentitySigningFallbackTests {
         try signManager.makeSigner(for: ownSignKeyId).accountId
     }
 
-    func makeFallback() -> ChatIdentitySigningFallback {
-        ChatIdentitySigningFallback(
+    func makeFallback() -> NonPrivateSigningFallback {
+        NonPrivateSigningFallback(
             consentStore: consentStore(),
             prompter: prompter,
             pendingMessages: pendingMessages,
