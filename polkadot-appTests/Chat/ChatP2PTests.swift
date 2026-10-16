@@ -105,6 +105,7 @@ private extension ChatP2PTests {
             maxStatementSize: 1_024
         ).makeService(
             statementStoreConnection: statementStore,
+            statementSignerResolver: IdentitySignerResolver(signManager: signManager),
             delegate: participant
         )
 

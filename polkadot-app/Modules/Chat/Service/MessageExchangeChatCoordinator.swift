@@ -19,6 +19,7 @@ final class MessageExchangeChatCoordinator {
     private let pushService: ChatPushServicing
     private let serviceFactory: MessageExchageServiceMaking
     private let messageCompacterFactory: (any ChatMessageCompactorMaking)?
+    private let signerResolver: PeerSessionSignerResolving
     private let chainRegistry: ChainRegistryProtocol
     private let chatChainId: ChainModel.Id
     let workQueue: DispatchQueue
@@ -46,6 +47,7 @@ final class MessageExchangeChatCoordinator {
         pushMessageCoder: ChatPushMessageCoding,
         notificationPayloadBuilder: ChatNotificationPayloadBuilding,
         messageCompacterFactory: (any ChatMessageCompactorMaking)?,
+        signerResolver: PeerSessionSignerResolving,
         chatChainId: ChainModel.Id = AppConfig.Chains.chatChain,
         chainRegistry: ChainRegistryProtocol = ChainRegistryFacade.sharedRegistry,
         tokenProvider: JWTTokenProviding,
@@ -105,6 +107,7 @@ final class MessageExchangeChatCoordinator {
         )
 
         self.messageCompacterFactory = messageCompacterFactory
+        self.signerResolver = signerResolver
         self.chatChainId = chatChainId
         self.workQueue = workQueue
         self.chatContactDataProviderFactory = chatContactDataProviderFactory
@@ -172,6 +175,7 @@ private extension MessageExchangeChatCoordinator {
 
             exchangeService = try serviceFactory.makeService(
                 statementStoreConnection: statementStoreMonitor.observing(statementStoreConnection),
+                statementSignerResolver: signerResolver,
                 delegate: AnyPeerSessionDelegate(self),
                 compactorFactory: compactorFactory
             )

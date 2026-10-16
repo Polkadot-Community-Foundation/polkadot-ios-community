@@ -87,13 +87,6 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
                 deviceEncryptionKeyFactory: MultideviceComponentFactory.makeDeviceEncryptionKeyFactory(
                     deviceEncryptionKeyManager: deviceKeyManager
                 ),
-                submissionGate: ChatAccountFunding(
-                    funding: statementAccountFunding,
-                    statementSignerResolver: ChatStatementSignerResolver(signManager: signerManager),
-                    identityFallback: identitySigningFallback,
-                    dateProvider: NowDateProvider(),
-                    issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
-                ),
                 maxStatementSize: Constants.maxChatStatementSize,
                 operationQueue: operationQueue,
                 logger: logger
@@ -102,6 +95,13 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
             pushMessageCoder: ChatPushMessageCoder(encryptionManager: encryptionManager),
             notificationPayloadBuilder: ChatNotificationPayloadBuilder(logger: logger),
             messageCompacterFactory: compactorFactory,
+            signerResolver: ChatAccountFunding(
+                funding: statementAccountFunding,
+                signerManager: signerManager,
+                identityFallback: identitySigningFallback,
+                dateProvider: NowDateProvider(),
+                issueDiagnostics: .make(reporter: IssueReportingFacade.shared)
+            ),
             tokenProvider: tokenProvider,
             chatContactDataProviderFactory: ChatContactDataProviderFactory(
                 repositoryFactory: ChatContactRepositoryFactory(storageFacade: storageFacade),
@@ -118,6 +118,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
         try SSOTruAPICoordinator(
             ownKeyId: Chat.Contact.Own.sso(),
             serviceFactory: makeSSOServiceFactory(),
+            signerResolver: IdentitySignerResolver(signManager: ChatSignerManager(entropyManager: entropyManager)),
             runtimeProvider: runtimeProvider
         )
     }
@@ -129,6 +130,7 @@ extension MessageExchangeCoordinatorFactory: MessageExchangeCoordinatorMaking {
         try MessageExchangeSignInHostCoordinator(
             ownKeyId: Chat.Contact.Own.sso(),
             serviceFactory: makeSSOServiceFactory(),
+            signerResolver: IdentitySignerResolver(signManager: ChatSignerManager(entropyManager: entropyManager)),
             accountManager: accountManager,
             sponsorFactory: sponsorFactory,
             routers: ProductRoutersFacade.sso()

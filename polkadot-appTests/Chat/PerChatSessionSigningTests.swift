@@ -102,12 +102,15 @@ private struct Participant {
                 X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
             },
             deviceEncryptionKeyFactory: X25519ChaChaPolyEncryptorFactory(privateKey: deviceEncryptionKey),
-            submissionGate: StubSubmissionGate(signer: StatementStoreKeypairSigner(
-                keypair: signsWithIdentity ? identityKeypair : statementKeypair
-            )),
             maxStatementSize: 4_096
         )
-        .makeService(statementStoreConnection: store, delegate: AnyPeerSessionDelegate(delegate))
+        .makeService(
+            statementStoreConnection: store,
+            statementSignerResolver: StubSignerResolver(signer: StatementStoreKeypairSigner(
+                keypair: signsWithIdentity ? identityKeypair : statementKeypair
+            )),
+            delegate: AnyPeerSessionDelegate(delegate)
+        )
     }
 
     func request(for peer: Participant, knowingDevices: Bool) -> MessageExchange.SessionRequest {
@@ -138,7 +141,7 @@ private struct Participant {
     }
 }
 
-private struct StubSubmissionGate: PeerSessionSubmissionGating, @unchecked Sendable {
+private struct StubSignerResolver: PeerSessionSignerResolving, @unchecked Sendable {
     let signer: StatementStoreSigning
 
     func signer(for _: MessageExchange.SessionRequest) async throws -> StatementStoreSigning {

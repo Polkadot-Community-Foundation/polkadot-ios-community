@@ -21,7 +21,7 @@ final class ChatAccountFunding: @unchecked Sendable {
     private static let maxBackoffDoublings = 8
 
     private let funding: StatementAccountFunding
-    private let statementSignerResolver: ChatStatementSignerResolving
+    private let signerManager: ChatPeerStatementSignerManaging
     private let identityFallback: NonPrivateSigningFallbacking
     private let dateProvider: DateProviding
     private let clock: any Clock<Duration>
@@ -30,14 +30,14 @@ final class ChatAccountFunding: @unchecked Sendable {
 
     init(
         funding: StatementAccountFunding,
-        statementSignerResolver: ChatStatementSignerResolving,
+        signerManager: ChatPeerStatementSignerManaging,
         identityFallback: NonPrivateSigningFallbacking,
         dateProvider: DateProviding,
         issueDiagnostics: ChatAccountFundingIssueDiagnostics,
         clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.funding = funding
-        self.statementSignerResolver = statementSignerResolver
+        self.signerManager = signerManager
         self.identityFallback = identityFallback
         self.dateProvider = dateProvider
         self.issueDiagnostics = issueDiagnostics
@@ -45,9 +45,9 @@ final class ChatAccountFunding: @unchecked Sendable {
     }
 }
 
-extension ChatAccountFunding: PeerSessionSubmissionGating {
+extension ChatAccountFunding: PeerSessionSignerResolving {
     func signer(for request: MessageExchange.SessionRequest) async throws -> StatementStoreSigning {
-        let signer = try statementSignerResolver.statementSigner(for: request.peer.accountId)
+        let signer = try signerManager.makeSigner(with: request.peer.accountId)
 
         do {
             try await awaitFunded(accountId: signer.accountId)

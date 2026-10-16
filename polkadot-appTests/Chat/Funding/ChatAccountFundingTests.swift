@@ -13,9 +13,9 @@ struct ChatAccountFundingTests {
     private let funding = FakeStatementAccountFunding()
     private let dateProvider = MockDateProvider()
     private let peerAccountId = Data(repeating: 0x0A, count: 32)
-    private let resolver = ChatStatementSignerResolver(
-        peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
-        signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager())
+    private let signerManager = ChatSignerManager(
+        entropyManager: FixedRootEntropyManager(),
+        tldProvider: StubDotNsTldProvider(tld: "dot")
     )
     private let fallback = FakeIdentitySigningFallback(
         signer: StubStatementSigner(accountId: Data(repeating: 0x0C, count: 32))
@@ -23,7 +23,7 @@ struct ChatAccountFundingTests {
 
     @Test func signsWithFundedPerChatAccountOfThePeer() async throws {
         try await funding.recordOnFund(period: currentPeriod())
-        let expected = try resolver.statementSigner(for: peerAccountId).accountId
+        let expected = try signerManager.makeSigner(with: peerAccountId).accountId
 
         let signer = try await makeGate().signer(for: sessionRequest())
 
@@ -57,7 +57,7 @@ struct ChatAccountFundingTests {
 
         let signer = try await makeGate(clock: ImmediateClock()).signer(for: sessionRequest())
 
-        #expect(try signer.accountId == resolver.statementSigner(for: peerAccountId).accountId)
+        #expect(try signer.accountId == signerManager.makeSigner(with: peerAccountId).accountId)
         #expect(funding.calls.count == 3)
         #expect(fallback.contacts.isEmpty)
     }
@@ -139,7 +139,7 @@ private extension ChatAccountFundingTests {
     func makeGate(clock: any Clock<Duration> = ContinuousClock()) -> ChatAccountFunding {
         ChatAccountFunding(
             funding: funding,
-            statementSignerResolver: resolver,
+            signerManager: signerManager,
             identityFallback: fallback,
             dateProvider: dateProvider,
             issueDiagnostics: .make(reporter: NoopIssueReporter()),

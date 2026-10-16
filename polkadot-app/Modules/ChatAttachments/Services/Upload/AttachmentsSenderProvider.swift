@@ -1,25 +1,27 @@
 import Foundation
 import KeyDerivation
+import Products
 
 protocol AttachmentsSenderProviding {
     func getWallet() async throws -> WalletManaging
 }
 
 final class AttachmentsSenderProvider {
-    let peerAccounts: ChatPeerAccountsProviding
+    let tldProvider: DotNsTldProviding
     let entropyManager: RootEntropyManaging
 
     init(
-        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts(),
-        entropyManager: RootEntropyManaging = RootEntropyManager.shared
+        entropyManager: RootEntropyManaging = RootEntropyManager.shared,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
     ) {
-        self.peerAccounts = peerAccounts
         self.entropyManager = entropyManager
+        self.tldProvider = tldProvider
     }
 }
 
 extension AttachmentsSenderProvider: AttachmentsSenderProviding {
     func getWallet() async throws -> WalletManaging {
-        try DynamicDerivedWallet(derivationPath: peerAccounts.uploadKeyId(), entropyManager: entropyManager)
+        let path = try ChatKeyPaths.hop(tld: tldProvider.currentTldOrError())
+        return DynamicDerivedWallet(derivationPath: path, entropyManager: entropyManager)
     }
 }

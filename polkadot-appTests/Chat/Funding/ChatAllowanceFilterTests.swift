@@ -8,14 +8,14 @@ struct ChatAllowanceFilterTests {
     private let establishedPeer = Data(repeating: 0x0A, count: 32)
     private let pendingPeer = Data(repeating: 0x0B, count: 32)
     private let blockedPeer = Data(repeating: 0x0E, count: 32)
-    private let resolver = ChatStatementSignerResolver(
-        peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
-        signManager: ChatSignerManager(entropyManager: FixedRootEntropyManager())
+    private let signerManager = ChatSignerManager(
+        entropyManager: FixedRootEntropyManager(),
+        tldProvider: StubDotNsTldProvider(tld: "dot")
     )
 
     @Test func releasesChatRecordsWithoutEstablishedChat() async throws {
-        let established = try record(for: resolver.statementSigner(for: establishedPeer).accountId, domain: .chat)
-        let pending = try record(for: resolver.statementSigner(for: pendingPeer).accountId, domain: .chat)
+        let established = try record(for: signerManager.makeSigner(with: establishedPeer).accountId, domain: .chat)
+        let pending = try record(for: signerManager.makeSigner(with: pendingPeer).accountId, domain: .chat)
         let orphan = record(for: Data(repeating: 0x0C, count: 32), domain: .chat)
         try await fixture.insertContact(establishedPeer)
         try await fixture.insertContact(pendingPeer, hasPendingRequest: true)
@@ -26,8 +26,8 @@ struct ChatAllowanceFilterTests {
     }
 
     @Test func releasesChatRecordsOfBlockedContacts() async throws {
-        let established = try record(for: resolver.statementSigner(for: establishedPeer).accountId, domain: .chat)
-        let blocked = try record(for: resolver.statementSigner(for: blockedPeer).accountId, domain: .chat)
+        let established = try record(for: signerManager.makeSigner(with: establishedPeer).accountId, domain: .chat)
+        let blocked = try record(for: signerManager.makeSigner(with: blockedPeer).accountId, domain: .chat)
         try await fixture.insertContact(establishedPeer)
         try await fixture.insertContact(blockedPeer, isBlocked: true)
 
@@ -51,7 +51,7 @@ private extension ChatAllowanceFilterTests {
     func makeFilter() -> ChatAllowanceFilter {
         ChatAllowanceFilter(
             contactsStorageService: ContactsLocalStorageService(storageFacade: fixture.facade, logger: MockLogger()),
-            statementSignerResolver: resolver
+            signerManager: signerManager
         )
     }
 

@@ -11,32 +11,29 @@ final class ChatMessageCompactorFactory: @unchecked Sendable {
     let hopNodeProvider: HOPNodeProviding
     let hopLoaderFactory: HOPFileLoaderMaking
     let allowanceManager: AllowanceManaging
-    let peerAccounts: ChatPeerAccountsProviding
+    let signerProvider: AttachmentsSenderProviding
     let logger: LoggerProtocol
 
     init(
         chainRegistry: ChainRegistryProtocol = ChainRegistryFacade.sharedRegistry,
         allowanceManager: AllowanceManaging,
-        peerAccounts: ChatPeerAccountsProviding = ChatPeerAccounts(),
+        signerProvider: AttachmentsSenderProviding = AttachmentsSenderProvider(),
         logger: LoggerProtocol = Logger.shared
     ) {
         hopNodeProvider = HOPNodeProvider(chainRegistry: chainRegistry)
         hopLoaderFactory = HOPFileLoaderFactory(logger: logger)
         self.allowanceManager = allowanceManager
-        self.peerAccounts = peerAccounts
+        self.signerProvider = signerProvider
         self.logger = logger
     }
 }
 
 extension ChatMessageCompactorFactory: ChatMessageCompactorMaking {
-    // Uploads are signed by the shared HOP account, never by the identity account.
     func createCompactor() throws -> AnyMessageCompactor<Chat.OpaqueMessage>? {
-        let proofWallet = try DynamicDerivedWallet(derivationPath: peerAccounts.uploadKeyId())
-
         let compactor = ChatMessageCompactor(
             nodeProvider: hopNodeProvider,
             loaderFactory: hopLoaderFactory,
-            proofWallet: proofWallet,
+            signerProvider: signerProvider,
             allowanceManager: allowanceManager,
             logger: logger
         )

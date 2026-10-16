@@ -24,6 +24,7 @@ protocol DeviceSyncMessageTransporting: Sendable {
 /// messages for the device sync data channel.
 final class DeviceSyncMessageTransport: @unchecked Sendable {
     private let serviceFactory: MessageExchangeServiceFactory
+    private let signerResolver: PeerSessionSignerResolving
     private let connection: StatementStoreConnecting
     private let peer: MessageExchange.Peer
     private let ownSignKeyId: String
@@ -46,6 +47,7 @@ final class DeviceSyncMessageTransport: @unchecked Sendable {
         self.ownSignKeyId = ownSignKeyId
         self.ownEncryptionKeyId = ownEncryptionKeyId
         self.peerLogger = peerLogger
+        signerResolver = IdentitySignerResolver(signManager: signerManager)
 
         peer = MessageExchange.Peer(
             accountId: peerStatementAccountId,
@@ -97,6 +99,7 @@ extension DeviceSyncMessageTransport: DeviceSyncMessageTransporting {
     func open(delegate: AnyPeerSessionDelegate<Data>) async throws {
         let service = try serviceFactory.makeService(
             statementStoreConnection: connection,
+            statementSignerResolver: signerResolver,
             delegate: delegate
         )
 

@@ -7,8 +7,10 @@ import NovaCrypto
 import KeyDerivation
 
 protocol MessageExchageServiceMaking {
+    /// `statementSignerResolver` picks the account that signs the sessions' statements.
     func makeService<M: MessageExchange.CodableMessage>(
         statementStoreConnection: StatementStoreConnecting,
+        statementSignerResolver: PeerSessionSignerResolving,
         delegate: AnyPeerSessionDelegate<M>,
         compactorFactory: AnyMessageCompactorFactory<M>?
     ) throws -> AnyMessageExchangeService<M>
@@ -17,10 +19,12 @@ protocol MessageExchageServiceMaking {
 extension MessageExchageServiceMaking {
     func makeService<M: MessageExchange.CodableMessage>(
         statementStoreConnection: StatementStoreConnecting,
+        statementSignerResolver: PeerSessionSignerResolving,
         delegate: AnyPeerSessionDelegate<M>
     ) throws -> AnyMessageExchangeService<M> {
         try makeService(
             statementStoreConnection: statementStoreConnection,
+            statementSignerResolver: statementSignerResolver,
             delegate: delegate,
             compactorFactory: nil
         )
@@ -31,7 +35,6 @@ final class MessageExchangeServiceFactory {
     let signManager: StatementStoreSignerManaging
     let encryptionManager: MessageExchangeEncryptionManaging
     let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
-    let submissionGate: PeerSessionSubmissionGating?
     let messageExchangeModeProvider: MessageExchangeModeProviding
     let workQueue: DispatchQueue
     let operationQueue: OperationQueue
@@ -43,7 +46,6 @@ final class MessageExchangeServiceFactory {
         signManager: StatementStoreSignerManaging,
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
-        submissionGate: PeerSessionSubmissionGating? = nil,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -52,7 +54,6 @@ final class MessageExchangeServiceFactory {
         self.signManager = signManager
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
-        self.submissionGate = submissionGate
         self.messageExchangeModeProvider = messageExchangeModeProvider
         self.workQueue = workQueue
         self.operationQueue = operationQueue
@@ -64,7 +65,6 @@ final class MessageExchangeServiceFactory {
         messageExchangeModeProvider: MessageExchangeModeProviding,
         entropyManager: RootEntropyManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
-        submissionGate: PeerSessionSubmissionGating? = nil,
         maxStatementSize: Int,
         workQueue: DispatchQueue = DispatchQueue(label: "message.exchange.work.queue"),
         operationQueue: OperationQueue = OperationManagerFacade.sharedDefaultQueue,
@@ -75,7 +75,6 @@ final class MessageExchangeServiceFactory {
             signManager: ChatSignerManager(entropyManager: entropyManager),
             encryptionManager: ChatEncryptionManager(entropyManager: entropyManager),
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
-            submissionGate: submissionGate,
             maxStatementSize: maxStatementSize,
             workQueue: workQueue,
             operationQueue: operationQueue,
@@ -87,8 +86,9 @@ final class MessageExchangeServiceFactory {
 extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
     func makeService<M: MessageExchange.CodableMessage>(
         statementStoreConnection: StatementStoreConnecting,
+        statementSignerResolver: PeerSessionSignerResolving,
         delegate: AnyPeerSessionDelegate<M>,
-        compactorFactory: AnyMessageCompactorFactory<M>? = nil
+        compactorFactory: AnyMessageCompactorFactory<M>?
     ) throws -> AnyMessageExchangeService<M> {
         let subscriptionFactory = StatementSubscriptionFactory(
             statementStoreFetcher: statementStoreConnection,
@@ -100,7 +100,8 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
         let sessionFactory = PeerSessionFactory<M>(
             delegate: delegate,
             workQueue: workQueue,
-            submitter: statementStoreConnection,
+            statementSignerResolver: statementSignerResolver,
+            statementStoreConnection: statementStoreConnection,
             encryptionManager: encryptionManager,
             deviceEncryptionKeyFactory: deviceEncryptionKeyFactory,
             messageExchangeModeProvider: messageExchangeModeProvider,
@@ -111,7 +112,6 @@ extension MessageExchangeServiceFactory: MessageExchageServiceMaking {
             subscriptionFactory: subscriptionFactory,
             maxStatementSize: maxStatementSize,
             compactorFactory: compactorFactory,
-            submissionGate: submissionGate,
             operationQueue: operationQueue,
             logger: logger
         )

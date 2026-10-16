@@ -3,16 +3,27 @@ import StatementStore
 import Keystore_iOS
 import NovaCrypto
 import KeyDerivation
+import Products
+import SubstrateSdk
+
+protocol ChatPeerStatementSignerManaging: StatementStoreSignerManaging {
+    func makeSigner(with peerAccountId: AccountId) throws -> StatementStoreSigning
+}
 
 final class ChatSignerManager {
     let entropyManager: RootEntropyManaging
+    let tldProvider: DotNsTldProviding
 
-    init(entropyManager: RootEntropyManaging = RootEntropyManager.shared) {
+    init(
+        entropyManager: RootEntropyManaging = RootEntropyManager.shared,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
+    ) {
         self.entropyManager = entropyManager
+        self.tldProvider = tldProvider
     }
 }
 
-extension ChatSignerManager: StatementStoreSignerManaging {
+extension ChatSignerManager: ChatPeerStatementSignerManaging {
     func makeSigner(for signerKeyId: String) throws -> StatementStoreSigning {
         let keypairFactory = WalletMnemonicKeypairFactory(derivationPath: signerKeyId, entropyManager: entropyManager)
 
@@ -22,5 +33,11 @@ extension ChatSignerManager: StatementStoreSignerManaging {
         let privateKey = try SNPrivateKey(rawData: keypair.privateKey().rawData())
 
         return StatementStoreKeypairSigner(keypair: SNKeypair(privateKey: privateKey, publicKey: publicKey))
+    }
+
+    func makeSigner(with peerAccountId: AccountId) throws -> StatementStoreSigning {
+        let path = try ChatKeyPaths.statement(tld: tldProvider.currentTldOrError(), peerAccountId: peerAccountId)
+
+        return try makeSigner(for: path)
     }
 }

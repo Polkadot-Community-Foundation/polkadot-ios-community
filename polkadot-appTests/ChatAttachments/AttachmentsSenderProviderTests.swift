@@ -15,8 +15,8 @@ struct AttachmentsSenderProviderTests {
 private extension AttachmentsSenderProviderTests {
     func makeProvider() -> AttachmentsSenderProvider {
         AttachmentsSenderProvider(
-            peerAccounts: ChatPeerAccounts(tldProvider: StubDotNsTldProvider(tld: "dot")),
-            entropyManager: entropyManager
+            entropyManager: entropyManager,
+            tldProvider: StubDotNsTldProvider(tld: "dot")
         )
     }
 

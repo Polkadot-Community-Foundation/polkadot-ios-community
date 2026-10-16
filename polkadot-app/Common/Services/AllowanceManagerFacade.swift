@@ -1,6 +1,8 @@
 import Foundation
 import Individuality
 import ChainRegistry
+import KeyDerivation
+import Products
 
 struct AllowanceManagerFacade {
     let bulletInManager: AllowanceManaging
@@ -33,10 +35,17 @@ extension AllowanceManagerFacade {
         )
     }
 
-    private static func makeCleanupService(sssManager: AllowanceManaging) -> AllowanceCleanupServicing {
+    private static func makeCleanupService(
+        sssManager: AllowanceManaging,
+        entropyManager: RootEntropyManaging = RootEntropyManager.shared,
+        tldProvider: DotNsTldProviding = DotNsTldProviderFacade.shared
+    ) -> AllowanceCleanupServicing {
         let chatFilter = ChatAllowanceFilter(
             contactsStorageService: ContactsLocalStorageService(),
-            statementSignerResolver: ChatStatementSignerResolver()
+            signerManager: ChatSignerManager(
+                entropyManager: entropyManager,
+                tldProvider: tldProvider
+            )
         )
 
         return AllowanceCleanupService(

@@ -13,7 +13,8 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
 
     private weak var delegate: AnyPeerSessionDelegate<M>?
     private let workQueue: DispatchQueue
-    private let submitter: StatementStoreSubmitting
+    private let statementSignerResolver: PeerSessionSignerResolving
+    private let statementStoreConnection: StatementStoreConnecting
     private let signerManager: StatementStoreSignerManaging
     private let encryptionManager: MessageExchangeEncryptionManaging
     private let deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?
@@ -24,14 +25,14 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
     private let subscriptionFactory: StatementSubscriptionFactoryProtocol
     private let maxStatementSize: Int
     private let compactorFactory: AnyMessageCompactorFactory<M>?
-    private let submissionGate: PeerSessionSubmissionGating?
     private let operationQueue: OperationQueue
     private let logger: SDKLoggerProtocol?
 
     public init(
         delegate: AnyPeerSessionDelegate<M>,
         workQueue: DispatchQueue,
-        submitter: StatementStoreSubmitting,
+        statementSignerResolver: PeerSessionSignerResolving,
+        statementStoreConnection: StatementStoreConnecting,
         encryptionManager: MessageExchangeEncryptionManaging,
         deviceEncryptionKeyFactory: MessageExchangeEncryptionMaking?,
         messageExchangeModeProvider: MessageExchangeModeProviding,
@@ -42,13 +43,13 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         subscriptionFactory: StatementSubscriptionFactoryProtocol,
         maxStatementSize: Int,
         compactorFactory: AnyMessageCompactorFactory<M>? = nil,
-        submissionGate: PeerSessionSubmissionGating? = nil,
         operationQueue: OperationQueue,
         logger: SDKLoggerProtocol?
     ) {
         self.delegate = delegate
         self.workQueue = workQueue
-        self.submitter = submitter
+        self.statementSignerResolver = statementSignerResolver
+        self.statementStoreConnection = statementStoreConnection
         self.encryptionManager = encryptionManager
         self.deviceEncryptionKeyFactory = deviceEncryptionKeyFactory
         self.messageExchangeModeProvider = messageExchangeModeProvider
@@ -59,7 +60,6 @@ public final class PeerSessionFactory<M: MessageExchange.CodableMessage> {
         self.subscriptionFactory = subscriptionFactory
         self.maxStatementSize = maxStatementSize
         self.compactorFactory = compactorFactory
-        self.submissionGate = submissionGate
         self.operationQueue = operationQueue
         self.logger = logger
     }
@@ -79,11 +79,6 @@ extension PeerSessionFactory: PeerSessionMaking {
 
         do {
             let identitySigner = try signerManager.makeSigner(for: request.own.signKeyId)
-            let sessionSubmitter = makeSubmitter(
-                for: request,
-                mode: messageExchangeMode,
-                identitySigner: identitySigner
-            )
 
             let identityEncryptionKeyFactory = try encryptionManager
                 .makeEncryptorFactory(ownEncryptionKeyId: request.own.encryptionKeyId)
@@ -137,9 +132,15 @@ extension PeerSessionFactory: PeerSessionMaking {
 
             let sizeValidator = OutgoingRequestSizeValidator(maxStatementSize: maxStatementSize)
 
+            let statementSubmitter = ResolvingStatementSubmitter(
+                connection: statementStoreConnection,
+                signerResolver: statementSignerResolver,
+                request: request
+            )
+
             let outgoingChannel = try makeOutgoingChannel(
                 routeContexts: routeContexts,
-                submitter: sessionSubmitter,
+                submitter: statementSubmitter,
                 priorityProvider: priorityProvider,
                 requestQueue: AnyOutgoingRequestQueue(OutgoingRequestQueue(
                     statementDataCoder: statementDataCoder,
@@ -177,7 +178,7 @@ extension PeerSessionFactory: PeerSessionMaking {
 
             let incomingChannel = try makeIncomingChannel(
                 routeContexts: routeContexts,
-                submitter: sessionSubmitter,
+                submitter: statementSubmitter,
                 priorityProvider: priorityProvider,
                 statementDataCoder: statementDataCoder
             )
@@ -248,19 +249,6 @@ private extension PeerSessionFactory {
     struct RouteConfiguration<Message: MessageExchange.CodableMessage> {
         let supportedRoutes: [PeerSessionRoute]
         let effectiveRouteSelector: PeerSessionRouteSelector<Message>
-    }
-
-    // Device-route statements are signed by whatever the gate picks; everything else by the identity account.
-    func makeSubmitter(
-        for request: MessageExchange.SessionRequest,
-        mode: MessageExchangeMode,
-        identitySigner: StatementStoreSigning
-    ) -> PeerSessionStatementSubmitting {
-        guard mode == .multidevice, let submissionGate else {
-            return SigningStatementSubmitter(signer: identitySigner, base: submitter)
-        }
-
-        return GatedStatementSubmitter(base: submitter, request: request, gate: submissionGate)
     }
 
     func makeRouteConfiguration(messageExchangeMode: MessageExchangeMode) -> RouteConfiguration<Message> {

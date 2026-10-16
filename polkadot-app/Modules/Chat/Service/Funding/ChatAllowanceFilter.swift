@@ -6,14 +6,14 @@ import SubstrateSdk
 /// every other established chat keeps renewing.
 final class ChatAllowanceFilter {
     private let contactsStorageService: ContactsLocalStorageServicing
-    private let statementSignerResolver: ChatStatementSignerResolving
+    private let signerManager: ChatPeerStatementSignerManaging
 
     init(
         contactsStorageService: ContactsLocalStorageServicing,
-        statementSignerResolver: ChatStatementSignerResolving
+        signerManager: ChatPeerStatementSignerManaging
     ) {
         self.contactsStorageService = contactsStorageService
-        self.statementSignerResolver = statementSignerResolver
+        self.signerManager = signerManager
     }
 }
 
@@ -25,7 +25,7 @@ extension ChatAllowanceFilter: AllowanceReleaseFiltering {
 
         let contacts = try await contactsStorageService.getEstablishedContacts().asyncExecute()
         let neededAccounts = try Set(contacts.filter { !$0.isBlocked }.map { contact in
-            try statementSignerResolver.statementSigner(for: contact.accountId).accountId
+            try signerManager.makeSigner(with: contact.accountId).accountId
         })
 
         return chatRecords.filter { !neededAccounts.contains($0.accountId) }
