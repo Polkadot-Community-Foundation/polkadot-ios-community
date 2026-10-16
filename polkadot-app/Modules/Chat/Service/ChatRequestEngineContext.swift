@@ -77,7 +77,7 @@ actor ChatRequestEngineContext {
     }
 
     func acceptIncomingRequest(for chatId: Chat.Id) async throws {
-        let (contact, request) = try await fetchIncomingChatContact(for: chatId)
+        let request = try await fetchIncomingChatContact(for: chatId)
         let acceptorDevice = try chatRequestStoreService.buildLocalAcceptorDevice()
         try await chatRequestStoreService.acceptIncomingRequest(
             .existing(requestId: request.requestId, acceptorDevice: acceptorDevice)
@@ -85,13 +85,13 @@ actor ChatRequestEngineContext {
     }
 
     func declineIncomingRequest(for chatId: Chat.Id) async throws {
-        let (_, request) = try await fetchIncomingChatContact(for: chatId)
+        let request = try await fetchIncomingChatContact(for: chatId)
         try await chatRequestStoreService.declineIncomingRequest(request.requestId)
     }
 }
 
 private extension ChatRequestEngineContext {
-    func fetchIncomingChatContact(for chatId: Chat.Id) async throws -> (Chat.Contact, Chat.Request) {
+    func fetchIncomingChatContact(for chatId: Chat.Id) async throws -> Chat.Request {
         let chat = try await chatRepository
             .fetchOperation(
                 by: { chatId.rawRepresentation },
@@ -108,6 +108,6 @@ private extension ChatRequestEngineContext {
             throw ChatRequestEngineContextError.noIncomingRequest
         }
 
-        return (contact, request)
+        return request
     }
 }
