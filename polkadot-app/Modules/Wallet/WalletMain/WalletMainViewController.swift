@@ -56,14 +56,6 @@ final class WalletMainViewController: UIHostingController<WalletView>, RootScree
         rootView.viewModel.onCollapse = { [weak self] in
             self?.collapseExpandedSection()
         }
-
-        rootView.viewModel.onCollectibles = { [weak self] in
-            self?.showCollectiblesOverlay()
-        }
-
-        rootView.viewModel.onViewCollectibles = { [weak presenter] in
-            presenter?.showCollectibles()
-        }
     }
 
     private func setShareButton() {
@@ -97,10 +89,6 @@ final class WalletMainViewController: UIHostingController<WalletView>, RootScree
 }
 
 extension WalletMainViewController: WalletMainViewProtocol {
-    func didReceive(isCollectiblesAvailable: Bool) {
-        rootView.viewModel.isCollectiblesAvailable = isCollectiblesAvailable
-    }
-
     @objc
     func didTapShare() {
         identityDetailsScene.share()
@@ -118,7 +106,7 @@ extension WalletMainViewController: WalletMainViewProtocol {
         rootView.viewModel.expandedSection = .assetDetails
         setOverlayCloseButton()
         resetRightButton()
-        setTitleCenter(String(localized: .walletMainBalanceCard(PaymentAssetBranding.shared.current.symbol)))
+        setTitleCenter(PaymentAssetBranding.shared.current.symbol)
     }
 
     private func showIdentityDetailsOverlay() {
@@ -126,13 +114,6 @@ extension WalletMainViewController: WalletMainViewProtocol {
         setOverlayCloseButton()
         setShareButton()
         setTitleCenter(String(localized: .walletMainIdCard))
-    }
-
-    private func showCollectiblesOverlay() {
-        rootView.viewModel.expandedSection = .collectiblesDetails
-        setOverlayCloseButton()
-        resetRightButton()
-        setTitleCenter(nil)
     }
 
     func setMainTitle() {
@@ -149,8 +130,11 @@ extension WalletMainViewController: WalletMainViewProtocol {
             navigationItem.title = title
             return
         }
-        titleLabel.text = title
         titleLabel.typography = .titleLarge
+        titleLabel.attributedText = title.map {
+            CashLogo.styled($0, symbol: PaymentAssetBranding.shared.current.symbol, font: UIFont.app(.titleLarge))
+        }
+        titleLabel.accessibilityLabel = title
         titleLabel.sizeToFit()
         navigationItem.titleView = titleLabel
     }

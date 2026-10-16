@@ -2,8 +2,11 @@ import Foundation
 import TrUAPIHost
 import Products
 import ChainRegistry
+import Foundation_iOS
+import FoundationExt
 import SubstrateSdk
 import BulletinChain
+import DesignSystem
 
 /// Shared dependencies for opening one product execution off the process-wide
 /// ``TrUAPIHostRuntime``. Embedded by both the SPA and chat rust runtime
@@ -15,6 +18,7 @@ struct RustRuntimeEnvironment {
     let notificationScheduler: ProductNotificationScheduling
     let ipfsFetcher: IpfsFetching
     let hostProvider: ProductHostProviding
+    let themeManager: ThemeManagerProtocol
     let logger: LoggerProtocol
 
     /// The rust pieces a runtime needs: the opened execution and its chain
@@ -48,9 +52,7 @@ struct RustRuntimeEnvironment {
         try makeExecution(productId: productId, routers: routers, kind: .app)
     }
 
-    /// Open a chat execution for `productId`. Mirrors ``makeSPAExecution``.
-    /// TODO(chat PR): open with ``RustChatExecutionBridge`` and pass it as
-    /// `chat:` to wire the native chat surface once the integration lands.
+    /// Open a chat execution for `productId`. Mirrors ``makeSPAExecution``
     func makeChatExecution(productId: ProductId, routers: ProductRoutersFacadeProtocol) throws -> ExecutionModel {
         try makeExecution(productId: productId, routers: routers, kind: .worker)
     }
@@ -62,12 +64,10 @@ private extension RustRuntimeEnvironment {
         routers: ProductRoutersFacadeProtocol,
         kind: ProductExecutionKind
     ) throws -> ExecutionModel {
-        let chainConnections = TrUAPIChainConnectionPool(
-            engineResolver: { [chainRegistry] genesisHash in
-                chainRegistry.getChainByGenesis(for: genesisHash.toHex()).flatMap { chain in
-                    chainRegistry.getConnection(for: chain.chainId)
-                }
-            },
+        let chainConnections = TrUAPIV2SpecConnectionPool(
+            chainRegistry: chainRegistry,
+            applicationHandler: ApplicationHandler(),
+            dateProvider: NowDateProvider(),
             logger: logger
         )
 
@@ -115,6 +115,7 @@ private extension RustRuntimeEnvironment {
                 }
             },
             hostProvider: hostProvider,
+            themeManager: themeManager,
             logger: logger
         )
     }
