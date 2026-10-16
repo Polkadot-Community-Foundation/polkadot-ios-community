@@ -51,14 +51,11 @@ public enum DSTabBarStyle {
     /// Radius of the hole cut from the bar: the centre control plus the ring gap around it.
     static var notchRadius: CGFloat { centerButtonSize / 2 + notchRingGap }
     /// Hole centre, measured down from the top of the bar row.
-    static let notchCenterY: CGFloat = 21.8
+    static let notchCenterY: CGFloat = 22
     /// How far the hole reaches above the bar row, into the shelf.
     static var notchOverhang: CGFloat { notchRadius - notchCenterY }
-    /// Radius of the rounding where the hole meets the bar's top edge. It shrinks with how far the hole
-    /// reaches above that edge, so the outline does not jump as the shelf grows past the hole.
-    static let notchFilletRadius: CGFloat = 4
-    /// Gap the two inner slots leave around the notch.
-    static let notchShoulderWidth: CGFloat = 73.6
+    /// Gap the two inner slots leave around the notch. It is the cutout's width at the bar's top edge.
+    static let notchShoulderWidth: CGFloat = 74
 
     /// Whether a point in the bar row's coordinate space falls on the centre button, which the
     /// fold gesture must not claim.
@@ -100,9 +97,11 @@ public enum DSTabBarStyle {
 
     /// Diameter of the centre control at rest. It sits in the hole with a ring gap.
     static let centerButtonSize: CGFloat = 64
-    static let centerPanelCornerRadius: CGFloat = 24
-    /// Concave blend where the lobe meets the panel's bottom edge.
-    static let centerPanelFillet: CGFloat = 18
+    static let centerPanelCornerRadius: CGFloat = 32
+    /// Depth of the lobe hanging below the panel's body. It holds the centre glyph.
+    static let centerLobeDepth: CGFloat = 31
+    /// Half the lobe's width once the panel is 88 pt wide. Narrower panels scale it down with their width.
+    static let centerLobeHalfWidth: CGFloat = 44
     /// How far a drag can stretch the open panel past its full height before the resistance holds it.
     static let centerStretchLimit: CGFloat = 32
     /// How quickly the stretch builds. A larger value stretches the panel further for the same pull.
@@ -117,9 +116,8 @@ public enum DSTabBarStyle {
     /// floats over the content, so the caller provides its clearance inside `contentHeight`.
     /// The body's corner arcs need vertical room of their own, so the panel never drops below them.
     public static func centerPanelHeight(contentHeight: CGFloat) -> CGFloat {
-        let lobeRadius = centerButtonSize / 2
-        let minimumHeight = centerPanelCornerRadius * 2 + lobeRadius
-        return max(minimumHeight, contentHeight + lobeRadius)
+        let minimumHeight = centerPanelCornerRadius * 2 + centerLobeDepth
+        return max(minimumHeight, contentHeight + centerLobeDepth)
     }
 
     /// Foot of the centre button, measured down from the top of the bar row. The open panel's lobe keeps it.

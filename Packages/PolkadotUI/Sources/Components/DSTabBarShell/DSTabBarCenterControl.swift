@@ -79,9 +79,6 @@ public struct DSTabBarCenterControl<Content: View>: View {
 // MARK: - Geometry
 
 private extension DSTabBarCenterControl {
-    /// The lobe is the button itself, so it keeps its size through the morph.
-    var lobeRadius: CGFloat { DSTabBarStyle.centerButtonSize / 2 }
-
     /// Bottom edge of the resting notch, which the morph keeps fixed.
     var bottomFromRowTop: CGFloat { DSTabBarStyle.notchCenterY + DSTabBarStyle.notchRadius }
 
@@ -105,8 +102,13 @@ private extension DSTabBarCenterControl {
     var openGlyphScale: CGFloat { openGlyphSize / glyphSize }
 
     /// Distance the glyph's centre sits below the panel body's bottom edge once the panel is fully open.
-    /// The glyph starts centred on that edge.
-    var openGlyphDrop: CGFloat { 7.7 }
+    var openGlyphCenterBelowBody: CGFloat { 8 }
+
+    /// Drop that carries the glyph from its resting centre to `openGlyphCenterBelowBody` below the body. The resting
+    /// centre is half a button above the panel's bottom edge, and the body's edge is a lobe depth above that bottom.
+    var openGlyphDrop: CGFloat {
+        openGlyphCenterBelowBody + DSTabBarStyle.centerButtonSize / 2 - DSTabBarStyle.centerLobeDepth
+    }
 
     /// Side of the touch area once the panel is fully open. It is centred on the glyph.
     var openTouchSize: CGFloat { 48 }
@@ -148,20 +150,6 @@ private extension DSTabBarCenterControl {
             height: lerp(DSTabBarStyle.centerButtonSize, expandedHeight) + stretch
         )
     }
-
-    var shape: DSTabBarMorphShape {
-        DSTabBarMorphShape(
-            topRadius: lerp(lobeRadius, DSTabBarStyle.centerPanelCornerRadius),
-            // Collapsed, the lobe spans the whole width and leaves no bottom
-            // corners for a radius to apply to.
-            bottomRadius: lerp(0, DSTabBarStyle.centerPanelCornerRadius),
-            lobeRadius: lobeRadius,
-            // Constant, not interpolated: the join keeps one size throughout.
-            // The path's own width cap eases it in while the panel is still
-            // narrow, and takes it to zero at the circle.
-            filletRadius: DSTabBarStyle.centerPanelFillet
-        )
-    }
 }
 
 // MARK: - Body
@@ -180,7 +168,7 @@ private extension DSTabBarCenterControl {
                     )
             }
         }
-        .padding(.bottom, lobeRadius)
+        .padding(.bottom, DSTabBarStyle.centerLobeDepth)
         .foregroundStyle(Color.fgPrimary)
         .frame(width: size.width, height: size.height, alignment: progress > 0 ? .top : .center)
         // After the frame, so the grabber lands against the panel rather than against
@@ -188,9 +176,9 @@ private extension DSTabBarCenterControl {
         .overlay(alignment: .top) { grabber }
         .background(DSTabBarMaterial())
         .overlay(rim)
-        .clipShape(shape)
+        .clipShape(DSTabBarMorphShape())
         .shadow(color: Color.shadowSoft, radius: DSTabBarStyle.centerShadowRadius, y: DSTabBarStyle.centerShadowY)
-        .contentShape(shape)
+        .contentShape(DSTabBarMorphShape())
         // Outside the content shape, so the glyph's touch area can hang below the lobe.
         .overlay(alignment: .bottom) { glyph }
     }
@@ -203,13 +191,19 @@ private extension DSTabBarCenterControl {
     /// slightly and drops a little as the panel opens. The touch area shrinks to `openTouchSize`
     /// with it, and moves with it because the offset comes after the content shape.
     var glyph: some View {
-        Image(.iconCenterFrame)
-            .resizable()
+        DSTabBarScanFrameShape()
+            .stroke(
+                DSTabBarStyle.Spec.centerGlyph,
+                style: StrokeStyle(
+                    lineWidth: DSTabBarScanFrameShape.strokeWidth * glyphSize / DSTabBarScanFrameShape.gridSide,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
             .frame(width: glyphSize, height: glyphSize)
             .scaleEffect(lerp(1, openGlyphScale))
-            .foregroundStyle(DSTabBarStyle.Spec.centerGlyph)
-            .frame(width: lobeRadius * 2, height: lobeRadius * 2)
-            .contentShape(Circle().inset(by: lerp(0, (lobeRadius * 2 - openTouchSize) / 2)))
+            .frame(width: DSTabBarStyle.centerButtonSize, height: DSTabBarStyle.centerButtonSize)
+            .contentShape(Circle().inset(by: lerp(0, (DSTabBarStyle.centerButtonSize - openTouchSize) / 2)))
             .offset(y: lerp(0, openGlyphDrop))
             .gesture(drag)
             .accessibilityElement()
@@ -396,7 +390,7 @@ private extension DSTabBarCenterControl {
     /// bottom, so the control sits above the bar instead of in it. A border
     /// stroke, so the clip leaves its full width.
     var rim: some View {
-        shape
+        DSTabBarMorphShape()
             .strokeBorder(
                 LinearGradient(
                     colors: [

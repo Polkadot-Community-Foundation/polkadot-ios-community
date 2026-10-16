@@ -1,37 +1,19 @@
 import SwiftUI
 
-/// Rectangular body with a semicircular lobe hanging below its bottom edge.
+/// Rounded rectangular body with a lobe hanging below the middle of its bottom edge. The lobe holds the centre glyph.
 ///
-/// Drawn as a single outline rather than a rect unioned with a circle, so it fills and clips as
-/// one subpath. At `width == height`, `topRadius == lobeRadius == width / 2` and a zero bottom
-/// radius, the outline is a circle, so the resting button and the open panel are the same shape
-/// at different sizes.
+/// Drawn as a single outline rather than a rect unioned with a shape, so it fills and clips as one subpath. The
+/// outline comes from the rect alone, so the resting button and the open panel are this shape at different sizes.
+/// Below the brief's 88 pt card width the outline eases toward a circle, so the 64 pt resting button is an exact
+/// circle and the centre control's frame animation carries the outline through the blend without jumps.
 struct DSTabBarMorphShape: InsettableShape {
-    /// Corners of the body's top edge.
-    var topRadius: CGFloat
-    /// Corners where the body's bottom edge meets its sides.
-    var bottomRadius: CGFloat
-    /// The lobe below the body. Keeps the button's size through the morph.
-    var lobeRadius: CGFloat
-    /// Concave blend where the lobe meets the body's bottom edge.
-    var filletRadius: CGFloat
+    /// Width of the brief's card outline. From here up the outline is the brief's card.
+    private static let cardWidth = DSTabBarStyle.centerLobeHalfWidth * 2
+    /// Width of the resting centre button. At or below it the outline is a circle.
+    private static let restingWidth = DSTabBarStyle.centerButtonSize
+
     /// How far `inset(by:)` has pulled the outline in, so a border stroke stays inside the shape.
     var insetAmount: CGFloat = 0
-
-    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
-        get {
-            AnimatablePair(
-                AnimatablePair(topRadius, bottomRadius),
-                AnimatablePair(lobeRadius, filletRadius)
-            )
-        }
-        set {
-            topRadius = newValue.first.first
-            bottomRadius = newValue.first.second
-            lobeRadius = newValue.second.first
-            filletRadius = newValue.second.second
-        }
-    }
 
     func inset(by amount: CGFloat) -> DSTabBarMorphShape {
         var shape = self
@@ -41,38 +23,41 @@ struct DSTabBarMorphShape: InsettableShape {
 
     func path(in rect: CGRect) -> Path {
         let rect = rect.insetBy(dx: insetAmount, dy: insetAmount)
-        let topRadius = max(0, topRadius - insetAmount)
-        let bottomRadius = max(0, bottomRadius - insetAmount)
-        let lobeRadius = max(0, lobeRadius - insetAmount)
-        let filletRadius = filletRadius + insetAmount
+        let roundness = min(1, max(0, (Self.cardWidth - rect.width) / (Self.cardWidth - Self.restingWidth)))
+        let bodyHeight = rect.height - lerp(DSTabBarStyle.centerLobeDepth, rect.width / 2, roundness)
+        guard rect.width > 0, bodyHeight > 0 else { return Path() }
+
+        let cornerRadius = min(
+            DSTabBarStyle.centerPanelCornerRadius,
+            rect.width / 2,
+            lerp(bodyHeight / 2, bodyHeight, roundness)
+        )
+        let lobeScale = min(1, rect.width / Self.cardWidth)
+        let lobeHalfWidth = lerp(DSTabBarStyle.centerLobeHalfWidth * lobeScale, rect.width / 2, roundness)
+        // The lobe takes the middle of the bottom edge, so the bottom corners only have the width either side of it.
+        let bottomCornerRadius = max(0, min(cornerRadius, rect.width / 2 - lobeHalfWidth))
+
+        let bottom = rect.minY + bodyHeight
+        let left = rect.minX
+        let right = rect.maxX
+        let centreX = rect.midX
 
         var path = Path()
-
-        guard rect.width > 0, rect.height > 0 else { return path }
-
-        let lobe = max(0, min(lobeRadius, rect.width / 2, rect.height / 2))
-        let bodyBottom = rect.maxY - lobe
-        let bodyHeight = bodyBottom - rect.minY
-        // The lobe eats the middle of the bottom edge, so the bottom corners
-        // only have the width left either side of it.
-        let bottom = max(0, min(bottomRadius, rect.width / 2 - lobe, bodyHeight))
-        let top = max(0, min(topRadius, rect.width / 2, bodyHeight - bottom))
-
-        path.addTopAndRightSide(in: rect, top: top, bottom: bottom, bodyBottom: bodyBottom)
-
-        // The blend is a skirt: the bottom edge leaves the straight run curving
-        // downward and meets the lobe tangentially. Its centre sits f below the
-        // edge and lobe + f from the lobe's centre, so the join is wider than
-        // the lobe and must still clear the bottom corners.
-        let span = rect.width / 2 - bottom
-        let widthLimit = lobe > 0 ? (span * span - lobe * lobe) / (2 * lobe) : 0
-        let fillet = max(0, min(filletRadius, widthLimit, lobe))
-        path.addLobe(in: rect, lobe: lobe, fillet: fillet, bodyBottom: bodyBottom)
-
-        path.addLine(to: CGPoint(x: rect.minX + bottom, y: bodyBottom))
+        path.addTopCorners(of: rect, cornerRadius: cornerRadius)
+        path.addLine(to: CGPoint(x: right, y: bottom - bottomCornerRadius))
         path.addArc(
-            center: CGPoint(x: rect.minX + bottom, y: bodyBottom - bottom),
-            radius: bottom,
+            center: CGPoint(x: right - bottomCornerRadius, y: bottom - bottomCornerRadius),
+            radius: bottomCornerRadius,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: centreX + lobeHalfWidth, y: bottom))
+        path.addLobe(centre: CGPoint(x: centreX, y: bottom), width: rect.width, roundness: roundness)
+        path.addLine(to: CGPoint(x: left + bottomCornerRadius, y: bottom))
+        path.addArc(
+            center: CGPoint(x: left + bottomCornerRadius, y: bottom - bottomCornerRadius),
+            radius: bottomCornerRadius,
             startAngle: .degrees(90),
             endAngle: .degrees(180),
             clockwise: false
@@ -82,75 +67,99 @@ struct DSTabBarMorphShape: InsettableShape {
     }
 }
 
+/// One cubic segment of the lobe. Its start is the previous segment's end.
+private struct LobeCurve {
+    let control1: CGPoint
+    let control2: CGPoint
+    let end: CGPoint
+}
+
+private func lerp(_ from: CGFloat, _ to: CGFloat, _ amount: CGFloat) -> CGFloat {
+    from + (to - from) * amount
+}
+
+private func blend(_ from: CGPoint, _ to: CGPoint, _ amount: CGFloat) -> CGPoint {
+    CGPoint(x: lerp(from.x, to.x, amount), y: lerp(from.y, to.y, amount))
+}
+
+/// The brief's four lobe cubics from the body's right end to its left end. Its x offsets scale with the panel width.
+private func briefLobeCurves(centre: CGPoint, scale: CGFloat) -> [LobeCurve] {
+    func point(_ offsetX: CGFloat, _ offsetY: CGFloat) -> CGPoint {
+        CGPoint(x: centre.x + offsetX * scale, y: centre.y + offsetY)
+    }
+    let depth = DSTabBarStyle.centerLobeDepth
+    return [
+        LobeCurve(control1: point(37, 0), control2: point(32, 5), end: point(30, 11)),
+        LobeCurve(control1: point(26, 23), control2: point(13, depth), end: point(0, depth)),
+        LobeCurve(control1: point(-13, depth), control2: point(-26, 23), end: point(-30, 11)),
+        LobeCurve(
+            control1: point(-32, 5),
+            control2: point(-37, 0),
+            end: point(-DSTabBarStyle.centerLobeHalfWidth, 0)
+        ),
+    ]
+}
+
+/// The lower half of a circle as four arcs split where the brief's shoulders sit, so each brief cubic pairs with
+/// the arc covering the same stretch of the outline.
+private func circleLobeCurves(centre: CGPoint, radius: CGFloat) -> [LobeCurve] {
+    let shoulder: CGFloat = atan2(11, 30)
+    return [
+        arcCurve(centre: centre, radius: radius, from: 0, to: shoulder),
+        arcCurve(centre: centre, radius: radius, from: shoulder, to: .pi / 2),
+        arcCurve(centre: centre, radius: radius, from: .pi / 2, to: .pi - shoulder),
+        arcCurve(centre: centre, radius: radius, from: .pi - shoulder, to: .pi),
+    ]
+}
+
+/// Cubic approximation of an arc from `start` to `end` radians, increasing clockwise on screen.
+private func arcCurve(centre: CGPoint, radius: CGFloat, from start: CGFloat, to end: CGFloat) -> LobeCurve {
+    func point(_ angle: CGFloat) -> CGPoint {
+        CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
+    }
+    let handle = 4 / 3 * tan((end - start) / 4) * radius
+    return LobeCurve(
+        control1: CGPoint(x: point(start).x - handle * sin(start), y: point(start).y + handle * cos(start)),
+        control2: CGPoint(x: point(end).x + handle * sin(end), y: point(end).y - handle * cos(end)),
+        end: point(end)
+    )
+}
+
 private extension Path {
-    /// Runs clockwise from the left side's top corner, down the right side, and ends where the
-    /// bottom-right corner meets the bottom edge.
-    mutating func addTopAndRightSide(in rect: CGRect, top: CGFloat, bottom: CGFloat, bodyBottom: CGFloat) {
-        move(to: CGPoint(x: rect.minX, y: rect.minY + top))
+    /// Draws the top edge from the body's left side over both top corners to its right side. The corners are
+    /// circular arcs of `cornerRadius`.
+    mutating func addTopCorners(of rect: CGRect, cornerRadius: CGFloat) {
+        let top = rect.minY
+        move(to: CGPoint(x: rect.minX, y: top + cornerRadius))
         addArc(
-            center: CGPoint(x: rect.minX + top, y: rect.minY + top),
-            radius: top,
+            center: CGPoint(x: rect.minX + cornerRadius, y: top + cornerRadius),
+            radius: cornerRadius,
             startAngle: .degrees(180),
             endAngle: .degrees(270),
             clockwise: false
         )
-        addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY))
+        addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: top))
         addArc(
-            center: CGPoint(x: rect.maxX - top, y: rect.minY + top),
-            radius: top,
+            center: CGPoint(x: rect.maxX - cornerRadius, y: top + cornerRadius),
+            radius: cornerRadius,
             startAngle: .degrees(270),
             endAngle: .degrees(0),
             clockwise: false
         )
-        addLine(to: CGPoint(x: rect.maxX, y: bodyBottom - bottom))
-        addArc(
-            center: CGPoint(x: rect.maxX - bottom, y: bodyBottom - bottom),
-            radius: bottom,
-            startAngle: .degrees(0),
-            endAngle: .degrees(90),
-            clockwise: false
-        )
     }
 
-    /// Draws the lobe from the body's right edge round to its left, joined by the fillet. A zero
-    /// fillet gives a plain half circle.
-    mutating func addLobe(in rect: CGRect, lobe: CGFloat, fillet: CGFloat, bodyBottom: CGFloat) {
-        guard fillet > 0, lobe > 0 else {
-            addLine(to: CGPoint(x: rect.midX + lobe, y: bodyBottom))
-            addArc(
-                center: CGPoint(x: rect.midX, y: bodyBottom),
-                radius: lobe,
-                startAngle: .degrees(0),
-                endAngle: .degrees(180),
-                clockwise: false
+    /// Draws the lobe from the body's right end, round its bottom, to the body's left end. Each brief cubic is
+    /// blended toward its circle arc by `roundness`, so a 64 pt button is a circle and a 88 pt panel is the brief.
+    mutating func addLobe(centre: CGPoint, width: CGFloat, roundness: CGFloat) {
+        let scale = min(1, width / (DSTabBarStyle.centerLobeHalfWidth * 2))
+        let briefCurves = briefLobeCurves(centre: centre, scale: scale)
+        let circleCurves = circleLobeCurves(centre: centre, radius: width / 2)
+        for (brief, circle) in zip(briefCurves, circleCurves) {
+            addCurve(
+                to: blend(brief.end, circle.end, roundness),
+                control1: blend(brief.control1, circle.control1, roundness),
+                control2: blend(brief.control2, circle.control2, roundness)
             )
-            return
         }
-
-        let reach = sqrt(lobe * lobe + 2 * lobe * fillet)
-        let gamma = Angle.radians(atan2(fillet, reach))
-
-        addLine(to: CGPoint(x: rect.midX + reach, y: bodyBottom))
-        addArc(
-            center: CGPoint(x: rect.midX + reach, y: bodyBottom + fillet),
-            radius: fillet,
-            startAngle: .degrees(270),
-            endAngle: .degrees(180) + gamma,
-            clockwise: true
-        )
-        addArc(
-            center: CGPoint(x: rect.midX, y: bodyBottom),
-            radius: lobe,
-            startAngle: gamma,
-            endAngle: .degrees(180) - gamma,
-            clockwise: false
-        )
-        addArc(
-            center: CGPoint(x: rect.midX - reach, y: bodyBottom + fillet),
-            radius: fillet,
-            startAngle: .zero - gamma,
-            endAngle: .degrees(270),
-            clockwise: true
-        )
     }
 }
