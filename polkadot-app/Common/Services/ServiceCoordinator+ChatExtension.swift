@@ -1,4 +1,5 @@
 import Foundation
+import DesignSystem
 import Products
 import KeyDerivation
 import SubstrateSdk
@@ -8,15 +9,9 @@ import Operation_iOS
 import ChainRegistry
 
 extension ServiceCoordinator {
-    // swiftlint:disable:next function_parameter_count
     static func createChatExtensionsRegistry(
         accountManager: ProductsAccountManaging,
         truapiRuntimeProvider: TrUAPIHostRuntimeProviding,
-        syncStore: DetermineStateSyncStore,
-        personDataStore: DetermineStatePersonDataStore,
-        syncService: DetermineStateSyncServicing,
-        personhoodRegistrationService: PersonhoodRegistrationServicing,
-        audioSessionManager: AudioSessionManaging,
         spaFlowState: SPAFlowState
     ) -> (registry: ChatExtensionsRegistering, workerFacade: ProductWorkerFacade) {
         let productRepositoryFactory = ProductRepositoryFactory()
@@ -47,7 +42,8 @@ extension ServiceCoordinator {
             chainRegistry: ChainRegistryFacade.sharedRegistry,
             hostProvider: spaFlowState.hostProvider,
             runtimeProvider: truapiRuntimeProvider,
-            workerManager: workerFacade.manager
+            workerManager: workerFacade.manager,
+            themeManager: MainActor.assumeIsolated { ThemeManager.shared }
         )
 
         let productBotProvider = ProductBotProvider(
@@ -59,12 +55,7 @@ extension ServiceCoordinator {
 
         let registry = MainActor.assumeIsolated {
             ChatExtensionsRegistry.createDefault(
-                syncStateStore: syncStore,
-                personDataStore: personDataStore,
-                syncService: syncService,
-                personhoodRegistrationService: personhoodRegistrationService,
-                productBotProvider: productBotProvider,
-                audioSessionManager: audioSessionManager
+                productBotProvider: productBotProvider
             )
         }
 
