@@ -533,6 +533,15 @@
       }
     },
     {
+      "identity" : "trinity-user-agents",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/paritytech/trinity-user-agents",
+      "state" : {
+        "revision" : "24f6fa71c724ea8324fa54ad670e4c5eb8d5736e",
+        "version" : "0.25.0"
+      }
+    },
+    {
       "identity" : "tweetnacl-swiftwrap",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/bitmark-inc/tweetnacl-swiftwrap",
