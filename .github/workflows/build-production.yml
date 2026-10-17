@@ -343,7 +343,7 @@ jobs:
     env:
       RUN_IN_CI: 'true'
       TESTFLIGHT_GROUP: Release Internal
-      # The version testers see. Upstream's own MARKETING_VERSION is used when this is unset.
+      # The version testers see.
       MARKETING_VERSION: ${{ vars.PRODUCTION_MARKETING_VERSION }}
     steps:
       - name: Require the signing configuration
@@ -352,9 +352,10 @@ jobs:
           IOS_SIGNING_SERVICE_ACCOUNT: ${{ vars.IOS_SIGNING_SERVICE_ACCOUNT }}
           IOS_SIGNING_SECRET: ${{ vars.IOS_SIGNING_SECRET }}
           PRODUCTION_BUNDLE_ID: ${{ vars.PRODUCTION_BUNDLE_ID }}
+          PRODUCTION_MARKETING_VERSION: ${{ vars.PRODUCTION_MARKETING_VERSION }}
         run: |
           missing=''
-          for name in GCP_WORKLOAD_IDENTITY_PROVIDER IOS_SIGNING_SERVICE_ACCOUNT IOS_SIGNING_SECRET PRODUCTION_BUNDLE_ID; do
+          for name in GCP_WORKLOAD_IDENTITY_PROVIDER IOS_SIGNING_SERVICE_ACCOUNT IOS_SIGNING_SECRET PRODUCTION_BUNDLE_ID PRODUCTION_MARKETING_VERSION; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -598,7 +599,7 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            ${MARKETING_VERSION:+MARKETING_VERSION="$MARKETING_VERSION"} \
+            MARKETING_VERSION="$MARKETING_VERSION" \
             archive 2>&1 | tail -n 200
 
       - name: Export signed .ipa
@@ -635,7 +636,7 @@ jobs:
           [ -n "$EXPECTED_BUNDLE_ID" ] || { echo "::error::PRODUCTION_BUNDLE_ID is not set in production-distribution"; exit 1; }
           [ "$id" = "$EXPECTED_BUNDLE_ID" ] || { echo "::error::signed bundle id '$id' != PRODUCTION_BUNDLE_ID '$EXPECTED_BUNDLE_ID'"; exit 1; }
           [ "$num" = "$BUILD_NUMBER" ] || { echo "::error::CFBundleVersion $num != $BUILD_NUMBER"; exit 1; }
-          if [ -n "${MARKETING_VERSION:-}" ] && [ "$ver" != "$MARKETING_VERSION" ]; then
+          if [ "$ver" != "$MARKETING_VERSION" ]; then
             echo "::error::CFBundleShortVersionString $ver != PRODUCTION_MARKETING_VERSION $MARKETING_VERSION"
             exit 1
           fi
