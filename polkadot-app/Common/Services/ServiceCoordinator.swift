@@ -39,6 +39,7 @@ protocol ServiceCoordinatorProtocol: DashboardServicesCoordinating {
     var networkStatusService: NetworkStatusProviding { get }
     var chainStatusProvider: ChainStatusProviding { get }
     var truapiRuntimeProvider: TrUAPIHostRuntimeProviding { get }
+    var durabilityRenewal: StatementDurabilityRenewing { get }
 }
 
 final class ServiceCoordinator {
@@ -67,6 +68,7 @@ final class ServiceCoordinator {
     let accountManager: ProductsAccountManaging
     let allowanceManagerFacade: AllowanceManagerFacade
     let allowanceRenewalService: AllowanceRenewalService
+    let durabilityRenewal: StatementDurabilityRenewing
     let turnService: TURNCredentialsProviding
     let deviceSyncService: DeviceSyncServicing
     let networkStatusService: NetworkStatusProviding
@@ -110,6 +112,7 @@ final class ServiceCoordinator {
         accountManager: ProductsAccountManaging,
         allowanceManagerFacade: AllowanceManagerFacade,
         allowanceRenewalService: AllowanceRenewalService,
+        durabilityRenewal: StatementDurabilityRenewing,
         paymentsSupport: PaymentsSupport,
         turnService: TURNCredentialsProviding,
         deviceSyncService: DeviceSyncServicing,
@@ -142,6 +145,7 @@ final class ServiceCoordinator {
         self.accountManager = accountManager
         self.allowanceManagerFacade = allowanceManagerFacade
         self.allowanceRenewalService = allowanceRenewalService
+        self.durabilityRenewal = durabilityRenewal
         self.deviceSyncService = deviceSyncService
         self.networkStatusService = networkStatusService
         self.chainStatusProvider = chainStatusProvider
@@ -271,9 +275,18 @@ extension ServiceCoordinator {
             return nil
         }
 
-        let chatRequestCoordinator = createChatRequestCoordinator(
+        let chatRequestServiceFactory = createChatRequestServiceFactory(
             notificationAllocator: notificationAllocator,
             signingFallback: identitySigningFallback
+        )
+        let durabilityRenewal = StatementDurabilityRenewalService(
+            allowances: allowanceManagerFacade,
+            renewers: chatRequestServiceFactory,
+            logger: logger
+        )
+        let chatRequestCoordinator = createChatRequestCoordinator(
+            serviceFactory: chatRequestServiceFactory,
+            durabilityRenewal: durabilityRenewal
         )
         let audioSessionManager = AudioSessionManager()
 
@@ -317,9 +330,8 @@ extension ServiceCoordinator {
 
         let messageExpansionService = createCompactedMessageExpansionService(logger: logger)
         let allowanceRenewalService = AllowanceRenewalService(
-            managerFacade: allowanceManagerFacade,
-            appStateStreamFactory: ApplicationStateStreamFactory(),
-            logger: logger
+            durabilityRenewal: durabilityRenewal,
+            appStateStreamFactory: ApplicationStateStreamFactory()
         )
 
         let networkStatusService = NetworkStatusService(
@@ -384,6 +396,7 @@ extension ServiceCoordinator {
             accountManager: accountManager,
             allowanceManagerFacade: allowanceManagerFacade,
             allowanceRenewalService: allowanceRenewalService,
+            durabilityRenewal: durabilityRenewal,
             paymentsSupport: paymentsSupport,
             turnService: turnService,
             deviceSyncService: deviceSyncService,
@@ -435,14 +448,32 @@ private extension ServiceCoordinator {
 }
 
 private extension ServiceCoordinator {
-    static func createChatRequestCoordinator(
+    /// One instance for the coordinator and the renewal service, so renewal shares the cached delivery pipelines.
+    static func createChatRequestServiceFactory(
         notificationAllocator: NotificationStatementAccountAllocating,
         signingFallback: NonPrivateSigningFallbacking
+    ) -> ChatRequestServiceFactory {
+        ChatRequestServiceFactory(
+            remoteContactResolver: CompoundRemoteContactResolver(
+                resolvers: [
+                    remoteAccountOperation(chatChainId: AppConfig.Chains.usernameChain)
+                ],
+                logger: Logger.shared
+            ),
+            notificationAllocator: notificationAllocator,
+            signingFallback: signingFallback,
+            backgroundExecutor: ConnectionRetainingExecutor(provider: ChainRegistryFacade.sharedRegistry),
+            issueReporter: IssueReportingFacade.shared
+        )
+    }
+
+    static func createChatRequestCoordinator(
+        serviceFactory: ChatRequestServiceFactory,
+        durabilityRenewal: StatementDurabilityRenewing
     ) -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
         let logger = Logger.shared
-        let backgroundExecutor = ConnectionRetainingExecutor(provider: ChainRegistryFacade.sharedRegistry)
 
         return ChatRequestCoordinatorService(
             contactsProviderFactory: ChatContactDataProviderFactory(
@@ -455,20 +486,12 @@ private extension ServiceCoordinator {
                 operationQueue: operationQueue,
                 logger: logger
             ),
-            serviceFactory: ChatRequestServiceFactory(
-                remoteContactResolver: CompoundRemoteContactResolver(
-                    resolvers: [
-                        remoteAccountOperation(chatChainId: AppConfig.Chains.usernameChain)
-                    ],
-                    logger: Logger.shared
-                ),
-                notificationAllocator: notificationAllocator,
-                signingFallback: signingFallback,
-                backgroundExecutor: backgroundExecutor,
-                issueReporter: IssueReportingFacade.shared
+            serviceFactory: serviceFactory,
+            renewalLoop: ChatRequestRenewalLoop(
+                durabilityRenewal: durabilityRenewal,
+                backgroundExecutor: ConnectionRetainingExecutor(provider: ChainRegistryFacade.sharedRegistry)
             ),
-            backgroundExecutor: backgroundExecutor,
-            logger: Logger.shared
+            logger: logger
         )
     }
 

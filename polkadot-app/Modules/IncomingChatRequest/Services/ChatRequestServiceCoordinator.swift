@@ -1,5 +1,4 @@
 import Foundation
-import BackgroundExecution
 import CommonService
 import MessageExchangeKit
 import SDKLogger
@@ -12,10 +11,8 @@ final class ChatRequestCoordinatorService {
     let contactsProviderFactory: ChatContactDataProviderMaking
     let messageProviderFactory: ChatMessageDataProviderMaking
     let serviceFactory: ChatRequestServiceMaking
-    let backgroundExecutor: BackgroundExecuting
+    let renewalLoop: ChatRequestRenewalLoop
     let logger: SDKLoggerProtocol
-
-    private static let renewalInterval: Duration = .seconds(60 * 60)
 
     private var coordinationTask: Task<Void, Never>?
 
@@ -23,13 +20,13 @@ final class ChatRequestCoordinatorService {
         contactsProviderFactory: ChatContactDataProviderMaking,
         messageProviderFactory: ChatMessageDataProviderMaking,
         serviceFactory: ChatRequestServiceMaking,
-        backgroundExecutor: BackgroundExecuting,
+        renewalLoop: ChatRequestRenewalLoop,
         logger: SDKLoggerProtocol
     ) {
         self.contactsProviderFactory = contactsProviderFactory
         self.messageProviderFactory = messageProviderFactory
         self.serviceFactory = serviceFactory
-        self.backgroundExecutor = backgroundExecutor
+        self.renewalLoop = renewalLoop
         self.logger = logger
     }
 }
@@ -50,19 +47,13 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                 let deliveryService = try await serviceFactory.makeChatRequestDeliveryService()
                 let incomingContext = try await serviceFactory.makeIncomingChatRequestContext()
                 let outgoingContext = try await serviceFactory.makeOutgoingChatRequestContext()
-                let renewer = try await serviceFactory.makeChatRequestRenewer()
                 let acceptanceDeliveryService = try await serviceFactory.makeChatAcceptanceDeliveryService()
                 let outgoingAcceptanceContext = await serviceFactory.makeOutgoingChatAcceptanceContext()
-                let acceptanceRenewer = try await serviceFactory.makeChatAcceptanceRenewer()
                 let incomingAcceptanceService = try await serviceFactory.makeIncomingChatAcceptanceService()
                 let incomingAcceptanceContext = await serviceFactory.makeIncomingChatAcceptanceContext()
 
-                let renewalTask = Task { [backgroundExecutor] in
-                    await Self.runRenewal(
-                        renewer,
-                        acceptanceRenewer: acceptanceRenewer,
-                        backgroundExecutor: backgroundExecutor
-                    )
+                let renewalTask = Task { [renewalLoop] in
+                    await renewalLoop.run()
                 }
                 defer { renewalTask.cancel() }
 
@@ -133,21 +124,6 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
 }
 
 private extension ChatRequestCoordinatorService {
-    // The renewer stays executor-free so a background task can drive it under its own expiration.
-    static func runRenewal(
-        _ renewer: OutgoingStatementRenewing,
-        acceptanceRenewer: OutgoingStatementRenewing,
-        backgroundExecutor: BackgroundExecuting
-    ) async {
-        while !Task.isCancelled {
-            try? await backgroundExecutor.execute {
-                await renewer.renew()
-                await acceptanceRenewer.renew()
-            }
-            try? await Task.sleep(for: renewalInterval)
-        }
-    }
-
     func setupDiscoveryTask(
         using discoveryService: ChatDiscoveryServicing,
         ownKeyId: Chat.Contact.Own,

@@ -1,23 +1,20 @@
 import Foundation
 import CommonService
 import FoundationExt
-import Individuality
 
+/// Renews on launch and on every return to the foreground, through the shared statement durability run.
 final class AllowanceRenewalService {
-    private let managerFacade: AllowanceManagerFacade
+    private let durabilityRenewal: StatementDurabilityRenewing
     private let appStateStreamFactory: ApplicationStateStreamFactory
-    private let logger: LoggerProtocol
 
     private var observerTask: Task<Void, Never>?
 
     init(
-        managerFacade: AllowanceManagerFacade,
-        appStateStreamFactory: ApplicationStateStreamFactory,
-        logger: LoggerProtocol
+        durabilityRenewal: StatementDurabilityRenewing,
+        appStateStreamFactory: ApplicationStateStreamFactory
     ) {
-        self.managerFacade = managerFacade
+        self.durabilityRenewal = durabilityRenewal
         self.appStateStreamFactory = appStateStreamFactory
-        self.logger = logger
     }
 
     deinit {
@@ -29,13 +26,13 @@ extension AllowanceRenewalService: ApplicationServiceProtocol {
     func setup() {
         observerTask?.cancel()
         observerTask = Task { [weak self] in
-            await self?.renewAllowanceSlots()
+            _ = await self?.durabilityRenewal.renewAll()
 
             let foregroundStream = self?.appStateStreamFactory.stream(for: .willEnterForeground)
             guard let foregroundStream else { return }
             for await _ in foregroundStream {
                 guard !Task.isCancelled else { return }
-                await self?.renewAllowanceSlots()
+                _ = await self?.durabilityRenewal.renewAll()
             }
         }
     }
@@ -43,23 +40,5 @@ extension AllowanceRenewalService: ApplicationServiceProtocol {
     func throttle() {
         observerTask?.cancel()
         observerTask = nil
-    }
-}
-
-private extension AllowanceRenewalService {
-    func renewAllowanceSlots() async {
-        await managerFacade.cleanupService.cleanup()
-
-        await withDiscardingTaskGroup { group in
-            for manager in managerFacade.allManagers {
-                group.addTask { [logger] in
-                    do {
-                        try await manager.renew()
-                    } catch {
-                        logger.error("Allowance slot renewal failed: \(error)")
-                    }
-                }
-            }
-        }
     }
 }

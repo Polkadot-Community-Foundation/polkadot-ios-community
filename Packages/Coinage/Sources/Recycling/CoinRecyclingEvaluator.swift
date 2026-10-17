@@ -66,6 +66,27 @@ public actor CoinRecyclingEvaluator {
     public nonisolated func stop() {
         Task { [weak self] in await self?.cancelTasks() }
     }
+
+    /// One complete evaluation of the current wallet, recycling what it gates, awaited end to end — for a background
+    /// task that must not finish before recycling was triggered. Safe next to the 5 s loop: recycling a coin that is
+    /// no longer free is skipped.
+    public func evaluateNow() async -> RecyclingPassOutcome {
+        do {
+            let input = try await currentInput()
+            let complete = try await evaluate(input: input, now: Date(), mode: .complete)
+            verdictsSubject.send(complete)
+
+            let recycled = await recycleGated(complete, coins: input.assets.coins)
+            return .completed(
+                evaluatedCoins: input.assets.coins.count,
+                gated: recycled.gated,
+                submitted: recycled.submitted
+            )
+        } catch {
+            logger?.error("Recycling pass failed: \(error)")
+            return .failed
+        }
+    }
 }
 
 private extension CoinRecyclingEvaluator {
@@ -77,6 +98,30 @@ private extension CoinRecyclingEvaluator {
     struct Input {
         let assets: Assets
         let strategy: RecyclingStrategyType
+    }
+
+    struct RecycleResult {
+        let gated: Int
+        let submitted: Int
+    }
+
+    enum SnapshotError: Error {
+        case streamEnded
+    }
+
+    func currentInput() async throws -> Input {
+        let coins = try await firstValue(of: databaseFactory.makeTrackedCoinSnapshotStream())
+        let vouchers = try await firstValue(of: databaseFactory.makeTrackedVoucherSnapshotStream())
+        let strategy = try await firstValue(of: settings.strategyStream())
+
+        return Input(assets: Assets(coins: coins, vouchers: vouchers), strategy: strategy)
+    }
+
+    func firstValue<Element>(of sequence: AnyAsyncSequence<Element>) async throws -> Element {
+        for try await element in sequence {
+            return element
+        }
+        throw SnapshotError.streamEnded
     }
 
     func run() {
@@ -127,7 +172,7 @@ private extension CoinRecyclingEvaluator {
         do {
             let complete = try await evaluate(input: input, now: now, mode: .complete)
             verdictsSubject.send(complete)
-            await recycleGated(complete, coins: input.assets.coins)
+            _ = await recycleGated(complete, coins: input.assets.coins)
         } catch {
             logger?.error("Recycling evaluation failed: \(error)")
         }
@@ -169,16 +214,18 @@ private extension CoinRecyclingEvaluator {
         )
     }
 
-    func recycleGated(_ verdicts: RecyclingVerdicts, coins: [TrackedCoin]) async {
+    func recycleGated(_ verdicts: RecyclingVerdicts, coins: [TrackedCoin]) async -> RecycleResult {
         let gated = Set(verdicts.filter(\.value.triggersRecycling).keys)
-        guard !gated.isEmpty else { return }
+        guard !gated.isEmpty else { return RecycleResult(gated: 0, submitted: 0) }
 
         // `recycleCoins` skips coins whose ledger state is not free, so the 5s cadence is idempotent.
         let coinsToRecycle = coins.filter { gated.contains($0.coin.derivationIndex) }.map(\.coin)
         do {
-            try await recyclingService.recycleCoins(coinsToRecycle, groupId: nil)
+            let submitted = try await recyclingService.recycleCoins(coinsToRecycle, groupId: nil)
+            return RecycleResult(gated: coinsToRecycle.count, submitted: submitted)
         } catch {
             logger?.error("Recycle trigger failed: \(error)")
+            return RecycleResult(gated: coinsToRecycle.count, submitted: 0)
         }
     }
 }

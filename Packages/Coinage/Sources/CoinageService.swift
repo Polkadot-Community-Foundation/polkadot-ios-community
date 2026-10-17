@@ -112,6 +112,10 @@ public protocol CoinageServicing: Actor {
     /// - Returns: Total planks recovered (transferred + restored).
     /// - Throws: Errors from coin enumeration, key derivation, or transfer execution.
     func recoverSpentCoinsOnChain() async throws -> BigUInt
+
+    /// Runs one awaited recycling pass over the current wallet, for a background task that must not complete
+    /// before recycling was triggered. Returns `.notReady` until `setup(with:)` has finished.
+    func runRecyclingPass() async -> RecyclingPassOutcome
 }
 
 /// Facade that coordinates transfer execution and balance queries across services.
@@ -456,6 +460,12 @@ extension CoinageService: CoinageServicing {
             spentCoins: spentCoins,
             context: context
         )
+    }
+
+    public func runRecyclingPass() async -> RecyclingPassOutcome {
+        guard let recyclingEvaluator else { return .notReady }
+
+        return await recyclingEvaluator.evaluateNow()
     }
 }
 
