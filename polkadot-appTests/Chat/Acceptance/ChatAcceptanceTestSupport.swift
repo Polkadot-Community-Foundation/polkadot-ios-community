@@ -1,58 +1,25 @@
-import CryptoKit
 import Foundation
 import IssueMonitoring
-import MessageExchangeKit
 import os
-import StatementStore
 import SubstrateSdk
 @testable import polkadot_app
 
-/// Real derivation and identity-route statements over an in-memory statement store.
+/// An acceptance toward a fixed peer, as the outgoing pipeline sees it.
 struct ChatAcceptanceFixture {
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     let requestId = "request"
     let identityKeyId = "//wallet//main"
     let peerAccountId = Data(repeating: 9, count: 32)
-    let statementStore = MockStatementStore()
-    let allocator = StubNotificationAllocator()
-    let signManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
-    let fallback = FakeIdentitySigningFallback(signer: StubStatementSigner(accountId: Data(repeating: 0x0C, count: 32)))
-    let statementService: ChatAcceptanceStatementService
 
-    init() {
-        let identityEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
-
-        statementService = ChatAcceptanceStatementService(
-            requestFactory: IdentityRouteRequestFactory(
-                encryptionManager: ClosureEncryptionManager { _ in
-                    X25519ChaChaPolyEncryptorFactory(privateKey: identityEncryptionKey)
-                },
-                signerManager: signManager
-            ),
-            connection: statementStore
-        )
-    }
-
-    func acceptAccountId(period: UInt32) throws -> AccountId {
-        try signManager.makeChatAcceptanceSigner(for: requestId, period: period).accountId
-    }
-
-    func identityAccountId() throws -> AccountId {
-        try signManager.makeSigner(for: identityKeyId).accountId
-    }
-
-    func senders() throws -> [AccountId] {
-        try statementStore.senderAccountIds()
-    }
-
-    func makeCandidate(period: UInt32?, sentAt: Date? = nil) -> ChatAcceptanceCandidate {
-        let message = Chat.LocalMessage(
-            messageId: "acceptance",
+    func makeMessage(id: String = "acceptance", status: Chat.LocalMessage.Status = .outgoing(.new)) -> Chat
+        .LocalMessage {
+        Chat.LocalMessage(
+            messageId: id,
             chatId: .person(peerAccountId),
             origin: .user,
             creationSource: .localDevice,
-            status: .outgoing(period == nil ? .new : .sent),
-            timestamp: (sentAt ?? now).toChatTimestamp(),
+            status: status,
+            timestamp: now.toChatTimestamp(),
             content: .multiChatAccepted(.init(
                 requestId: requestId,
                 device: Chat.PeerDevice(
@@ -64,24 +31,10 @@ struct ChatAcceptanceFixture {
             compactionId: nil,
             relatedMessages: []
         )
+    }
 
-        let session = MessageExchange.SessionRequest(
-            own: MessageExchange.Own(signKeyId: identityKeyId, encryptionKeyId: "", pin: nil),
-            peer: MessageExchange.Peer(
-                accountId: peerAccountId,
-                publicKey: Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation,
-                pin: nil,
-                devices: []
-            )
-        )
-
-        return ChatAcceptanceCandidate(
-            message: message,
-            requestId: requestId,
-            contact: makeContact(),
-            session: session,
-            period: period
-        )
+    func makeInput(id: String = "acceptance") -> OutgoingChatAcceptanceInput {
+        OutgoingChatAcceptanceInput(message: makeMessage(id: id), requestId: requestId, contact: makeContact())
     }
 
     func makeContact() -> Chat.Contact {
@@ -106,58 +59,6 @@ struct ChatAcceptanceFixture {
     }
 }
 
-final class InMemoryChatAcceptanceStore: ChatAcceptanceStoring, @unchecked Sendable {
-    private let candidates: [ChatAcceptanceCandidate]
-    var isAwaiting = true
-    /// Stops awaiting after this many reads; nil keeps `isAwaiting` as is.
-    var awaitingReadsLeft: Int?
-    var isAcknowledged = false
-    private let publishedPeriods = OSAllocatedUnfairLock<[UInt32]>(initialState: [])
-    private let failures = OSAllocatedUnfairLock(initialState: 0)
-    private(set) var acknowledgedCount = 0
-
-    var published: [UInt32] { publishedPeriods.withLock { $0 } }
-    var failedCount: Int { failures.withLock { $0 } }
-
-    init(candidates: [ChatAcceptanceCandidate]) {
-        self.candidates = candidates
-    }
-
-    func acceptance(messageId: String) async throws -> ChatAcceptanceCandidate? {
-        candidates.first { $0.message.messageId == messageId }
-    }
-
-    func isAwaitingPublication(messageId _: String) async throws -> Bool {
-        if let left = awaitingReadsLeft {
-            awaitingReadsLeft = left - 1
-            return left > 0
-        }
-        return isAwaiting
-    }
-
-    func sentAcceptances() async throws -> [ChatAcceptanceCandidate] {
-        candidates
-    }
-
-    func markPublished(_: ChatAcceptanceCandidate, period: UInt32) async throws {
-        publishedPeriods.withLock { $0.append(period) }
-        isAwaiting = false
-    }
-
-    func markAcknowledged(_: ChatAcceptanceCandidate) async throws {
-        acknowledgedCount += 1
-    }
-
-    func markFailed(_: ChatAcceptanceCandidate) async throws {
-        failures.withLock { $0 += 1 }
-        isAwaiting = false
-    }
-
-    func isAcknowledged(_: ChatAcceptanceCandidate) async throws -> Bool {
-        isAcknowledged
-    }
-}
-
 final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
     private let failures = OSAllocatedUnfairLock(initialState: 0)
 
@@ -168,20 +69,4 @@ final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
     }
 
     func recordRecovery(for _: String) {}
-}
-
-extension ChatAcceptanceIssueDiagnostics {
-    static func recording(unacknowledged: IssueDiagnostic = NoopIssueDiagnostic()) -> Self {
-        Self(publishFailing: NoopIssueDiagnostic(), unacknowledged: unacknowledged)
-    }
-}
-
-final class RecordingAcceptanceNotifier: ChatAcceptanceNotifying, @unchecked Sendable {
-    private let notified = OSAllocatedUnfairLock<[String]>(initialState: [])
-
-    var notifiedMessageIds: [String] { notified.withLock { $0 } }
-
-    func notify(_ candidate: ChatAcceptanceCandidate) async {
-        notified.withLock { $0.append(candidate.message.messageId) }
-    }
 }

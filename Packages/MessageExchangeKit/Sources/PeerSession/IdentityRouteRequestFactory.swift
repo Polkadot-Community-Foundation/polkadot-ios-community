@@ -3,17 +3,6 @@ import SDKLogger
 import StatementStore
 
 public protocol IdentityRouteRequestMaking {
-    /// A request statement on the identity route of `request`, signed by `signer` and published outside a session.
-    func makeRequestStatement(
-        for request: MessageExchange.SessionRequest,
-        requestId: String,
-        message: some MessageExchange.CodableMessage,
-        signer: StatementStoreSigning
-    ) throws -> StatementSubmitParametersBuilding
-
-    /// The topic such request statements are published under, for looking them up in the store.
-    func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data
-
     /// The topic the peer publishes its identity-route requests under.
     func peerRequestTopic(for request: MessageExchange.SessionRequest) throws -> Data
 
@@ -28,53 +17,22 @@ public final class IdentityRouteRequestFactory {
     private let encryptionManager: MessageExchangeEncryptionManaging
     private let signerManager: StatementStoreSignerManaging
     private let sessionIdFactory: PeerSessionIdFactoryProtocol
-    private let channelFactory: StatementChannelMaking
-    private let priorityFactory: StatementPriorityMaking
     private let logger: SDKLoggerProtocol?
 
     public init(
         encryptionManager: MessageExchangeEncryptionManaging,
         signerManager: StatementStoreSignerManaging,
         sessionIdFactory: PeerSessionIdFactoryProtocol = PeerSessionIdFactory(),
-        channelFactory: StatementChannelMaking = ChatStatementChannelFactory(),
-        priorityFactory: StatementPriorityMaking = StatementPriorityFactory(),
         logger: SDKLoggerProtocol? = nil
     ) {
         self.encryptionManager = encryptionManager
         self.signerManager = signerManager
         self.sessionIdFactory = sessionIdFactory
-        self.channelFactory = channelFactory
-        self.priorityFactory = priorityFactory
         self.logger = logger
     }
 }
 
 extension IdentityRouteRequestFactory: IdentityRouteRequestMaking {
-    public func makeRequestStatement(
-        for request: MessageExchange.SessionRequest,
-        requestId: String,
-        message: some MessageExchange.CodableMessage,
-        signer: StatementStoreSigning
-    ) throws -> StatementSubmitParametersBuilding {
-        let encryptor = try makeEncryptor(for: request)
-        let sessionId = try makeSessionId(for: request, encryptor: encryptor)
-
-        let payload = try StatementDataCoder(encryptor: encryptor, logger: logger).encodeToScaleEncodedPayload(
-            StatementData.request(MessageExchange.Request(requestId: requestId, messages: [message])),
-            route: .identity
-        )
-
-        return try StatementSubmitParametersBuilder(signer: signer, logger: logger)
-            .addTopic1(sessionId.own)
-            .addChannel(channelFactory.createRequestChannel(for: sessionId))
-            .addExpiry(priorityFactory.makeTimestampPriority())
-            .addScaleEncodedPayload(payload)
-    }
-
-    public func requestTopic(for request: MessageExchange.SessionRequest) throws -> Data {
-        try makeSessionId(for: request, encryptor: makeEncryptor(for: request)).own.fixedStatementFieldData()
-    }
-
     public func peerRequestTopic(for request: MessageExchange.SessionRequest) throws -> Data {
         try makeSessionId(for: request, encryptor: makeEncryptor(for: request)).peer.fixedStatementFieldData()
     }

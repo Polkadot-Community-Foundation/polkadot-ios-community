@@ -44,19 +44,28 @@ struct ChatAcceptanceListenerTests {
 
 private extension ChatAcceptanceListenerTests {
     func publishAcceptance(requestId: String) async throws {
-        let message = Chat.OpaqueMessage(remoteMessage: Chat.RemoteMessage(
+        let message = Chat.LocalMessage(
             messageId: UUID().uuidString,
+            chatId: .person(requester.identityAccountId),
+            origin: .user,
+            creationSource: .localDevice,
+            status: .outgoing(.new),
             timestamp: Date().toChatTimestamp(),
-            versioned: .v1(.init(content: .multiChatAccepted(.init(requestId: requestId, device: device))))
-        ))
-        let oneShot = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
-
-        let statement = try acceptor.requestFactory().makeRequestStatement(
-            for: acceptor.request(toward: requester),
-            requestId: UUID().uuidString,
-            message: message,
-            signer: StatementStoreKeypairSigner(keypair: oneShot)
+            content: .multiChatAccepted(.init(requestId: requestId, device: device)),
+            reactions: [],
+            compactionId: nil,
+            relatedMessages: []
         )
+        let oneShot = try SNKeyFactory().createKeypair(fromSeed: Data.randomOrError(of: 32))
+        let input = OutgoingChatAcceptanceInput(
+            message: message,
+            requestId: requestId,
+            contact: acceptor.contact(of: requester)
+        )
+
+        let statement = try acceptor.statementBuilder()
+            .makeUnsignedStatement(for: input)
+            .signed(by: StatementStoreKeypairSigner(keypair: oneShot))
 
         try await store.submitStatement(with: statement)
     }
@@ -80,6 +89,38 @@ private struct ListenerParticipant {
             signerManager: ClosureSignerManager { [identityKeypair] _ in
                 StatementStoreKeypairSigner(keypair: identityKeypair)
             }
+        )
+    }
+
+    func statementBuilder() -> ChatAcceptanceStatementBuilder {
+        ChatAcceptanceStatementBuilder(
+            encryptionManager: ClosureEncryptionManager { [encryptionKey] _ in
+                X25519ChaChaPolyEncryptorFactory(privateKey: encryptionKey)
+            },
+            signerManager: ClosureSignerManager { [identityKeypair] _ in
+                StatementStoreKeypairSigner(keypair: identityKeypair)
+            }
+        )
+    }
+
+    func contact(of peer: ListenerParticipant) -> Chat.Contact {
+        Chat.Contact(
+            accountId: peer.identityAccountId,
+            username: "peer",
+            publicKey: peer.encryptionKey.publicKey.rawRepresentation,
+            pin: nil,
+            pushId: nil,
+            pushToken: nil,
+            voipPushToken: nil,
+            peerPlatform: nil,
+            lastOwnToken: nil,
+            voipLastOwnToken: nil,
+            chatRequest: nil,
+            ownKeyId: .init(signKeyId: "identity", encryptionKeyId: ""),
+            imageData: nil,
+            isBlocked: false,
+            devices: [],
+            pendingDevicesFanOut: false
         )
     }
 

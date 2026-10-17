@@ -47,6 +47,16 @@ public final class UnsignedStatement {
     public func signed(by signer: StatementStoreSigning) -> StatementSubmitParametersBuilding {
         SignedStatementParametersBuilder(statement: self, signer: signer)
     }
+
+    /// Encoded size once signed with an sr25519 proof, to check it against the store's limit before signing.
+    public func signedSize() throws -> Int {
+        let placeholderProof = StatementProof.sr25519(
+            signature: Data(count: StatementProof.signatureSize),
+            signer: Data(count: StatementProof.signerSize)
+        )
+
+        return try ([StatementField.proof(placeholderProof)] + fields()).encodeForStore().count
+    }
 }
 
 extension UnsignedStatement {

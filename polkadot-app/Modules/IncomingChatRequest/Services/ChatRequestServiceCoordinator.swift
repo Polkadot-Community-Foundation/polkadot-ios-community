@@ -51,17 +51,14 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                 let incomingContext = try await serviceFactory.makeIncomingChatRequestContext()
                 let outgoingContext = try await serviceFactory.makeOutgoingChatRequestContext()
                 let renewer = try await serviceFactory.makeChatRequestRenewer()
-                let acceptancePublisher = try await serviceFactory.makeChatAcceptancePublisher(
-                    messageProviderFactory: messageProviderFactory
-                )
+                let acceptanceDeliveryService = try await serviceFactory.makeChatAcceptanceDeliveryService()
+                let outgoingAcceptanceContext = await serviceFactory.makeOutgoingChatAcceptanceContext()
                 let acceptanceRenewer = try await serviceFactory.makeChatAcceptanceRenewer()
                 let outgoingServices = try await OutgoingRequestServices(
                     deliveryService: deliveryService,
                     acceptanceListener: serviceFactory.makeChatAcceptanceListener(),
                     acceptContext: serviceFactory.makeAcceptContext()
                 )
-
-                acceptancePublisher.setup()
 
                 let renewalTask = Task { [backgroundExecutor] in
                     await Self.runRenewal(
@@ -70,10 +67,7 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                         backgroundExecutor: backgroundExecutor
                     )
                 }
-                defer {
-                    renewalTask.cancel()
-                    acceptancePublisher.throttle()
-                }
+                defer { renewalTask.cancel() }
 
                 let allContactsStream = contactsProviderFactory.subscribeAllContacts()
 
@@ -105,10 +99,20 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
                             context: outgoingContext
                         )
 
+                        await outgoingAcceptanceContext.update(contacts: contacts) {
+                            setupOutgoingAcceptancesTask(
+                                deliveryService: acceptanceDeliveryService,
+                                context: outgoingAcceptanceContext
+                            )
+                        }
+
                         logger.debug("Handled contacts: \(contacts.count)")
                     }
                 } onCancel: {
-                    Task { await outgoingContext.cancelAll() }
+                    Task {
+                        await outgoingContext.cancelAll()
+                        await outgoingAcceptanceContext.cancelAll()
+                    }
                 }
             } catch {
                 logger.error("Contacts subscription failed: \(error)")
@@ -128,7 +132,7 @@ private extension ChatRequestCoordinatorService {
     // The renewer stays executor-free so a background task can drive it under its own expiration.
     static func runRenewal(
         _ renewer: OutgoingStatementRenewing,
-        acceptanceRenewer: ChatAcceptanceRenewing,
+        acceptanceRenewer: OutgoingStatementRenewing,
         backgroundExecutor: BackgroundExecuting
     ) async {
         while !Task.isCancelled {
@@ -268,6 +272,29 @@ private extension ChatRequestCoordinatorService {
             }
 
             logger.debug("Outgoing requests stream ended")
+        }
+    }
+}
+
+private extension ChatRequestCoordinatorService {
+    func setupOutgoingAcceptancesTask(
+        deliveryService: any OutgoingStatementDelivering<OutgoingChatAcceptanceInput>,
+        context: OutgoingChatAcceptanceCoordinationContext
+    ) -> Task<Void, Never> {
+        Task {
+            let acceptancesStream = messageProviderFactory.subscribeMessages(with: .newLocalDeviceChatAcceptances())
+
+            do {
+                for try await acceptanceMessages in acceptancesStream {
+                    await context.process(acceptanceMessages: acceptanceMessages) { input in
+                        await deliveryService.deliverUntilPublished(input)
+                    }
+                }
+            } catch {
+                logger.error("Outgoing acceptances processing failed: \(error)")
+            }
+
+            logger.debug("Outgoing acceptances stream ended")
         }
     }
 }

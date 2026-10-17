@@ -1,13 +1,10 @@
 import Foundation
 import Operation_iOS
-
-protocol ChatAcceptanceNotifying {
-    /// Pushes the acceptance to the requester once; a failed push never fails the delivery.
-    func notify(_ candidate: ChatAcceptanceCandidate) async
-}
+import StatementDelivery
 
 /// The acceptance is published outside the outbox, so it also sends the push the outbox would have sent.
-final class ChatAcceptanceNotifier {
+/// A failed push never fails the delivery.
+final class ChatAcceptanceNotifier: @unchecked Sendable {
     private let apnsClientService: APNSClientServicing
     private let notifiedMessageIdRepository: AnyDataProviderRepository<Chat.NotifiedMessageId>
     private let logger: LoggerProtocol
@@ -23,11 +20,11 @@ final class ChatAcceptanceNotifier {
     }
 }
 
-extension ChatAcceptanceNotifier: ChatAcceptanceNotifying {
-    func notify(_ candidate: ChatAcceptanceCandidate) async {
-        let messageId = candidate.message.messageId
+extension ChatAcceptanceNotifier: OutgoingStatementPostDelivering {
+    func didPublishFirstTime(_ input: OutgoingChatAcceptanceInput) async {
+        let messageId = input.message.messageId
 
-        guard let remoteMessage = candidate.message.toRemote() else { return }
+        guard let remoteMessage = input.message.toRemote() else { return }
 
         do {
             let alreadyNotified = try await notifiedMessageIdRepository
@@ -37,7 +34,7 @@ extension ChatAcceptanceNotifier: ChatAcceptanceNotifying {
             guard !alreadyNotified else { return }
 
             _ = try await apnsClientService
-                .notifyAboutNewMessageWrapper(remoteMessage, contact: candidate.contact)
+                .notifyAboutNewMessageWrapper(remoteMessage, contact: input.contact)
                 .asyncExecute()
 
             try await notifiedMessageIdRepository

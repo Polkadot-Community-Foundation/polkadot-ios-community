@@ -11,9 +11,6 @@ protocol NonPrivateSigningFallbacking: Sendable {
     /// The identity signer for a contact once the user consented, asking first if needed.
     /// - Throws: `ChatSigningConsentError.declined` after the contact's pending messages were marked failed.
     func identitySigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning
-
-    /// The identity signer when the user already consented for the contact; never asks.
-    func consentedSigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning?
 }
 
 final class NonPrivateSigningFallback: @unchecked Sendable {
@@ -44,12 +41,6 @@ extension NonPrivateSigningFallback: NonPrivateSigningFallbacking {
         if try await !consentStore.hasConsent(for: contactAccountId) {
             try await askConsent(for: contactAccountId)
         }
-
-        return try signManager.makeSigner(for: ownSignKeyId)
-    }
-
-    func consentedSigner(for contactAccountId: AccountId, ownSignKeyId: String) async throws -> StatementStoreSigning? {
-        guard try await consentStore.hasConsent(for: contactAccountId) else { return nil }
 
         return try signManager.makeSigner(for: ownSignKeyId)
     }

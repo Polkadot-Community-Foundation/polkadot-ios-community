@@ -39,3 +39,17 @@ struct UnsignedStatementTests {
         #expect(signers == [first, second])
     }
 }
+
+struct UnsignedStatementSizeTests {
+    @Test func signedSizeMatchesTheSignedEncoding() throws {
+        let statement = UnsignedStatement()
+            .addTopic1(Data(repeating: 0x01, count: 32))
+            .addChannel(Data(repeating: 0x02, count: 32))
+            .addExpiry(42)
+            .addScaleEncodedPayload(Data(repeating: 0xAA, count: 100))
+
+        let signed = try statement.signed(by: MockStatementStoreSigning()).build()
+
+        #expect(try statement.signedSize() == signed.encodedStatement.count)
+    }
+}

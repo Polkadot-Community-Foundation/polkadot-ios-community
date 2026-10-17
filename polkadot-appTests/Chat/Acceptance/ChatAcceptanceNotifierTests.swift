@@ -11,21 +11,21 @@ struct ChatAcceptanceNotifierTests {
 
     @Test func pushesAcceptanceOnce() async {
         let notifier = makeNotifier()
-        let candidate = fixture.makeCandidate(period: nil)
+        let input = fixture.makeInput()
 
-        await notifier.notify(candidate)
-        await notifier.notify(candidate)
+        await notifier.didPublishFirstTime(input)
+        await notifier.didPublishFirstTime(input)
 
         #expect(apns.pushedMessageIds == ["acceptance"])
     }
 
     @Test func failedPushIsRetriedNextTime() async {
         let notifier = makeNotifier()
-        let candidate = fixture.makeCandidate(period: nil)
+        let input = fixture.makeInput()
         apns.failNext = true
 
-        await notifier.notify(candidate)
-        await notifier.notify(candidate)
+        await notifier.didPublishFirstTime(input)
+        await notifier.didPublishFirstTime(input)
 
         #expect(apns.pushedMessageIds == ["acceptance", "acceptance"])
     }

@@ -1,26 +1,36 @@
 import IssueMonitoring
+import StatementDelivery
 
 struct ChatAcceptanceIssueDiagnostics: Sendable {
     let publishFailing: IssueDiagnostic
-    let unacknowledged: IssueDiagnostic
 }
 
 extension ChatAcceptanceIssueDiagnostics {
     static func make(reporter: IssueReporting) -> Self {
         guard IssueMonitoringFactory.isReportingSupported else {
-            return Self(publishFailing: NoopIssueDiagnostic(), unacknowledged: NoopIssueDiagnostic())
+            return Self(publishFailing: NoopIssueDiagnostic())
         }
-
-        let flow: StaticString = "chat-acceptance"
 
         return Self(
             publishFailing: ThresholdIssueDiagnostic(
-                flow: flow,
+                flow: "chat-acceptance",
                 kind: "publish-failing",
                 threshold: 3,
                 reporter: reporter
-            ),
-            unacknowledged: ThresholdIssueDiagnostic(flow: flow, kind: "unacknowledged", reporter: reporter)
+            )
+        )
+    }
+
+    func statementDiagnostics(logger: LoggerProtocol) -> OutgoingStatementDiagnostics {
+        OutgoingStatementDiagnostics(
+            logger: logger,
+            issues: OutgoingStatementIssueDiagnostics(
+                oversized: publishFailing,
+                deliveryStalled: publishFailing,
+                deliveryStateUnreadable: NoopIssueDiagnostic(),
+                renewalPublishFailed: publishFailing,
+                renewalFailing: NoopIssueDiagnostic()
+            )
         )
     }
 }

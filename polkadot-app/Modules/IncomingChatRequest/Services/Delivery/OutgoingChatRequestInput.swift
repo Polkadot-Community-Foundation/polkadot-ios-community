@@ -3,7 +3,7 @@ import MessageExchangeKit
 import StatementDelivery
 
 /// A recorded outgoing chat request, delivered and renewed until the peer accepts it.
-struct OutgoingChatRequestInput: OutgoingStatementInput, @unchecked Sendable {
+struct OutgoingChatRequestInput: ChatNotificationStatementInput, @unchecked Sendable {
     let message: Chat.RequestMessage
     let session: MessageExchange.SessionRequest
 

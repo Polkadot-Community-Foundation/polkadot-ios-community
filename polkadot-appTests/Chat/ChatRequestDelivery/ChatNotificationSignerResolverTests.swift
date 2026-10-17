@@ -5,7 +5,7 @@ import StatementStore
 import Testing
 @testable import polkadot_app
 
-struct ChatRequestSignerResolverTests {
+struct ChatNotificationSignerResolverTests {
     private let allocator = StubNotificationAllocator()
     private let signerManager = ChatSignerManager(entropyManager: FixedRootEntropyManager())
     private let fallback = FakeIdentitySigningFallback(signer: StubStatementSigner(accountId: Data(
@@ -86,9 +86,9 @@ struct ChatRequestSignerResolverTests {
     }
 }
 
-private extension ChatRequestSignerResolverTests {
+private extension ChatNotificationSignerResolverTests {
     func resolve(_ ids: [String]) async throws -> [String: Result<StatementStoreSigning, Error>] {
-        let resolver = ChatRequestSignerResolver(
+        let resolver = ChatNotificationSignerResolver<OutgoingChatRequestInput>(
             allocator: allocator,
             signerManager: signerManager,
             fallback: fallback,
