@@ -31,6 +31,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         initializeApp(windowScene)
         handleContexts(with: options.urlContexts)
         handleUserActivities(options.userActivities)
+
+        #if targetEnvironment(simulator)
+            openTrUAPIE2EChatIfRequested()
+        #endif
     }
 
     func scene(_: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -124,6 +128,34 @@ private extension SceneDelegate {
             let placeholder = UIViewController()
             placeholder.view.backgroundColor = .bgSurfaceMain
             window?.rootViewController = placeholder
+        }
+    }
+#endif
+
+#if targetEnvironment(simulator)
+    private extension SceneDelegate {
+        /// Shows the product's chat, so a custom body is decoded and rendered while
+        /// the harness watches. The bot creates the room moments after launch, hence
+        /// the retries; each one re-selects the chat tab, so they stop at the first
+        /// rendered body. It cannot move out of the app: `simctl openurl` on the `chat` deeplink
+        /// raises iOS's "Open in …?" confirmation, which nothing can tap.
+        func openTrUAPIE2EChatIfRequested() {
+            let environment = ProcessInfo.processInfo.environment
+            guard environment["TRUAPI_IOS_E2E_OPEN_CHAT"] == "1",
+                  let extensionId = environment["TRUAPI_IOS_E2E_CHAT_PRODUCT_HOST"],
+                  let roomId = environment["TRUAPI_IOS_E2E_CHAT_ROOM_ID"]
+            else {
+                return
+            }
+
+            Task { @MainActor in
+                for _ in 0 ..< 15 {
+                    guard !TrUAPIE2EMarkers.exists("custom-renderer-update") else { return }
+
+                    try? await Task.sleep(for: .seconds(1))
+                    ModuleNavigator().openChat(.chatExtension(extensionId, roomId: roomId))
+                }
+            }
         }
     }
 #endif
