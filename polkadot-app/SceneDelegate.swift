@@ -40,6 +40,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_: UIScene, continue userActivity: NSUserActivity) {
         handleUserActivities([userActivity])
     }
+
+    func sceneDidEnterBackground(_: UIScene) {
+        guard let renewalTask = (UIApplication.shared.delegate as? AppDelegate)?.statementRenewalTask else {
+            return
+        }
+
+        Task { await renewalTask.schedule() }
+    }
 }
 
 extension SceneDelegate {
