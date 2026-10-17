@@ -11,17 +11,16 @@ import BackgroundExecution
 import ChainRegistry
 import Individuality
 import IssueMonitoring
+import StatementDelivery
 
 protocol ChatRequestServiceMaking {
     func makeDiscoveryService() async throws -> ChatDiscoveryServicing
 
     func makeIncomingChatRequestService() async throws -> IncomingChatRequestServicing
 
-    func makeOutgoingChatRequestService() async throws -> OutgoingChatRequestServicing
+    func makeChatRequestDeliveryService() async throws -> any OutgoingStatementDelivering<OutgoingChatRequestInput>
 
-    func makeChatRequestDeliveryService() async throws -> ChatRequestDelivering
-
-    func makeChatRequestRenewer() async throws -> ChatRequestRenewing
+    func makeChatRequestRenewer() async throws -> OutgoingStatementRenewing
 
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext
 
@@ -56,6 +55,7 @@ actor ChatRequestServiceFactory {
     private var accountSignManager: ChatSignerManager?
     private var accountEncryptionManager: MessageExchangeEncryptionManaging?
     private var diagnostics: ChatRequestDiagnostics?
+    private var requestPipeline: ChatRequestPipeline?
 
     init(
         remoteContactResolver: RemoteContactResolving,
@@ -132,32 +132,6 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         )
     }
 
-    func makeOutgoingChatRequestService() async throws -> OutgoingChatRequestServicing {
-        let connection = try await makeConnection()
-        let encryptionManager = makeAccountEncryptionManager()
-        let accountSignManager = makeAccountSignManager()
-
-        let channelFactory = ChatRequestChannelFactory(
-            encryptionManager: encryptionManager,
-            signingManager: accountSignManager,
-            sessionIdFactory: PeerSessionIdFactory()
-        )
-
-        let chatRequestFactory = ChatRequestFactory(
-            encryptionManager: encryptionManager,
-            signManager: accountSignManager,
-            remoteContactResolver: remoteContactResolver
-        )
-
-        return OutgoingChatRequestService(
-            statementStoreConnection: connection,
-            requestFactory: chatRequestFactory,
-            priorityFactory: StatementPriorityFactory(),
-            channelFactory: channelFactory,
-            logger: logger
-        )
-    }
-
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext {
         let encryptionManager = makeAccountEncryptionManager()
         let signManager = makeAccountSignManager()
@@ -178,20 +152,8 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         OutgoingChatRequestCoordinationContext(logger: logger)
     }
 
-    func makeChatRequestDeliveryService() async throws -> ChatRequestDelivering {
-        let resolver = ChatRequestDeliveryAccountResolver(
-            allocator: notificationAllocator,
-            signerManager: makeAccountSignManager(),
-            fallback: signingFallback
-        )
-
-        return try await ChatRequestDeliveryService(
-            outgoingService: makeOutgoingChatRequestService(),
-            resolver: resolver,
-            store: ChatRequestDeliveryStore(storageFacade: storageFacade),
-            execution: ChatRequestDeliveryExecution(backgroundExecutor: backgroundExecutor),
-            diagnostics: makeDiagnostics()
-        )
+    func makeChatRequestDeliveryService() async throws -> any OutgoingStatementDelivering<OutgoingChatRequestInput> {
+        try await makeRequestPipeline().delivery
     }
 
     func makeChatAcceptancePublisher(
@@ -262,21 +224,89 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         )
     }
 
-    func makeChatRequestRenewer() async throws -> ChatRequestRenewing {
-        try await ChatRequestRenewer(
-            store: ChatRequestDeliveryStore(storageFacade: storageFacade),
-            signing: ChatRequestRenewalSigning(
-                allocator: notificationAllocator,
-                signerManager: makeAccountSignManager(),
-                fallback: signingFallback
+    func makeChatRequestRenewer() async throws -> OutgoingStatementRenewing {
+        let pipeline = try await makeRequestPipeline()
+
+        return OutgoingStatementRenewer(
+            dependencies: OutgoingStatementRenewalDependencies(
+                store: pipeline.store,
+                resolver: pipeline.resolver,
+                service: pipeline.service,
+                delivery: pipeline.delivery
             ),
-            outgoingService: makeOutgoingChatRequestService(),
-            diagnostics: makeDiagnostics()
+            bound: nil,
+            dateProvider: NowDateProvider(),
+            diagnostics: makeDiagnostics().statementDiagnostics
         )
     }
 }
 
+/// One delivery service shared by first delivery and renewal, so the two never publish the same request at once.
+private struct ChatRequestPipeline {
+    let store: ChatRequestOutgoingStore
+    let resolver: ChatRequestSignerResolver
+    let service: OutgoingStatementService<OutgoingChatRequestInput>
+    let delivery: OutgoingStatementDeliveryService<OutgoingChatRequestInput>
+}
+
 private extension ChatRequestServiceFactory {
+    func makeRequestPipeline() async throws -> ChatRequestPipeline {
+        if let requestPipeline {
+            return requestPipeline
+        }
+
+        let builder = makeRequestStatementBuilder()
+        let diagnostics = makeDiagnostics()
+        let store = ChatRequestOutgoingStore(storageFacade: storageFacade)
+        let resolver = ChatRequestSignerResolver(
+            allocator: notificationAllocator,
+            signerManager: makeAccountSignManager(),
+            fallback: signingFallback,
+            renewalStarved: diagnostics.issues.renewalStarved,
+            logger: logger
+        )
+        let service = try await OutgoingStatementService(
+            builder: builder,
+            connection: makeConnection(),
+            signerManager: makeAccountSignManager()
+        )
+        let delivery = OutgoingStatementDeliveryService(
+            dependencies: OutgoingStatementDeliveryDependencies(
+                store: store,
+                resolver: resolver,
+                service: service,
+                builder: builder,
+                postDelivery: nil
+            ),
+            execution: OutgoingStatementDeliveryExecution(backgroundExecutor: backgroundExecutor),
+            diagnostics: diagnostics.statementDiagnostics
+        )
+
+        let pipeline = ChatRequestPipeline(store: store, resolver: resolver, service: service, delivery: delivery)
+        requestPipeline = pipeline
+
+        return pipeline
+    }
+
+    func makeRequestStatementBuilder() -> ChatRequestStatementBuilder {
+        let encryptionManager = makeAccountEncryptionManager()
+        let signManager = makeAccountSignManager()
+
+        return ChatRequestStatementBuilder(
+            requestFactory: ChatRequestFactory(
+                encryptionManager: encryptionManager,
+                signManager: signManager,
+                remoteContactResolver: remoteContactResolver
+            ),
+            channelFactory: ChatRequestChannelFactory(
+                encryptionManager: encryptionManager,
+                signingManager: signManager,
+                sessionIdFactory: PeerSessionIdFactory()
+            ),
+            priorityFactory: StatementPriorityFactory()
+        )
+    }
+
     func makeRequestStoreService(
         encryptionManager: MessageExchangeEncryptionManaging,
         signManager: StatementStoreSignerManaging

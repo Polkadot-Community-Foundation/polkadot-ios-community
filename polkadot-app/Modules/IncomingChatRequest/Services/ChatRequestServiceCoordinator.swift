@@ -3,6 +3,7 @@ import BackgroundExecution
 import CommonService
 import MessageExchangeKit
 import SDKLogger
+import StatementDelivery
 import ChainStore
 
 protocol ChatRequestCoordinatorServicing: ApplicationServiceProtocol {}
@@ -126,7 +127,7 @@ extension ChatRequestCoordinatorService: ChatRequestCoordinatorServicing {
 private extension ChatRequestCoordinatorService {
     // The renewer stays executor-free so a background task can drive it under its own expiration.
     static func runRenewal(
-        _ renewer: ChatRequestRenewing,
+        _ renewer: OutgoingStatementRenewing,
         acceptanceRenewer: ChatAcceptanceRenewing,
         backgroundExecutor: BackgroundExecuting
     ) async {
@@ -248,7 +249,7 @@ private extension ChatRequestCoordinatorService {
     }
 
     func setupOutgoingRequestsTask(
-        deliveryService: ChatRequestDelivering,
+        deliveryService: any OutgoingStatementDelivering<OutgoingChatRequestInput>,
         context: OutgoingChatRequestCoordinationContext
     ) -> Task<Void, Never> {
         Task {
@@ -257,7 +258,9 @@ private extension ChatRequestCoordinatorService {
             do {
                 for try await requestMessages in outgoingRequestsStream {
                     await context.process(requestMessages: requestMessages) { message, session in
-                        await deliveryService.deliverUntilDone(message, session: session)
+                        await deliveryService.deliverUntilPublished(
+                            OutgoingChatRequestInput(message: message, session: session)
+                        )
                     }
                 }
             } catch {
@@ -270,7 +273,7 @@ private extension ChatRequestCoordinatorService {
 }
 
 private struct OutgoingRequestServices {
-    let deliveryService: ChatRequestDelivering
+    let deliveryService: any OutgoingStatementDelivering<OutgoingChatRequestInput>
     let acceptanceListener: ChatAcceptanceListening
     let acceptContext: ChatRequestAcceptProcessorContext
 }

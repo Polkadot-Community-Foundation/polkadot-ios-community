@@ -8,7 +8,7 @@ import SubstrateSdk
 final class FakeIdentitySigningFallback: NonPrivateSigningFallbacking, @unchecked Sendable {
     private struct State {
         var contacts: [AccountId] = []
-        var declines = false
+        var failure: Error?
         var hasConsent = false
     }
 
@@ -22,7 +22,11 @@ final class FakeIdentitySigningFallback: NonPrivateSigningFallbacking, @unchecke
     }
 
     func decline() {
-        state.withLock { $0.declines = true }
+        fail(with: ChatSigningConsentError.declined)
+    }
+
+    func fail(with error: Error) {
+        state.withLock { $0.failure = error }
     }
 
     func grantConsent() {
@@ -30,13 +34,13 @@ final class FakeIdentitySigningFallback: NonPrivateSigningFallbacking, @unchecke
     }
 
     func identitySigner(for contactAccountId: AccountId, ownSignKeyId _: String) async throws -> StatementStoreSigning {
-        let declines = state.withLock { state in
+        let failure = state.withLock { state in
             state.contacts.append(contactAccountId)
-            return state.declines
+            return state.failure
         }
 
-        if declines {
-            throw ChatSigningConsentError.declined
+        if let failure {
+            throw failure
         }
 
         return signer

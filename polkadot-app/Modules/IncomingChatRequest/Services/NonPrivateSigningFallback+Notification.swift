@@ -3,6 +3,10 @@ import Individuality
 import MessageExchangeKit
 import StatementStore
 
+enum ChatNotificationSlots {
+    static let allocationTimeout: Duration = .seconds(5 * 60)
+}
+
 /// Notification-funded statements (requests, acceptances) toward the session's peer.
 extension NonPrivateSigningFallbacking {
     /// `oneShot` once its notification slot is claimed; the identity account, with consent, when no slot is free.
@@ -14,7 +18,7 @@ extension NonPrivateSigningFallbacking {
         do {
             try await allocator.allocate(
                 oneShot.accountId,
-                timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
+                timeout: ChatNotificationSlots.allocationTimeout
             )
             return oneShot
         } catch NotificationAllocationError.noFreeSlotInPeriod {

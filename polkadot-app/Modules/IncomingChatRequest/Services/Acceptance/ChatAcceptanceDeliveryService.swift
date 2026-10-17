@@ -2,6 +2,11 @@ import BackgroundExecution
 import Foundation
 import Individuality
 
+struct ChatRequestDeliveryExecution {
+    let backgroundExecutor: BackgroundExecuting
+    var clock: any Clock<Duration> = ContinuousClock()
+}
+
 protocol ChatAcceptanceDelivering: Sendable {
     /// Publishes a recorded acceptance for the first time, retrying with backoff while it is still unpublished.
     func deliverUntilDone(messageId: String) async

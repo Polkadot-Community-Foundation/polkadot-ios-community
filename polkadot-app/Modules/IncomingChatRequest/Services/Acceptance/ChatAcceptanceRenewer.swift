@@ -131,7 +131,7 @@ private extension ChatAcceptanceRenewer {
         do {
             try await dependencies.allocator.awaitAllocated(
                 signer.accountId,
-                timeout: ChatRequestDeliveryAccountResolver.allocationTimeout
+                timeout: ChatNotificationSlots.allocationTimeout
             )
             try await dependencies.statementService.send(candidate, signer: signer)
             try await dependencies.store.markPublished(candidate, period: period)
