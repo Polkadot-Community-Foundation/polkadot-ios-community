@@ -84,7 +84,7 @@ struct ChatRequestDeliveryStoreTests {
             fetchRequest.predicate = .chatRequestById(requestId)
             let request = try context.fetch(fetchRequest).first
 
-            let period = request?.anonymousDeliveryPeriod.map { UInt32(bitPattern: $0.int32Value) }
+            let period = try context.outgoingStatementPeriod(for: requestId)
 
             return (period, request?.message?.status)
         }

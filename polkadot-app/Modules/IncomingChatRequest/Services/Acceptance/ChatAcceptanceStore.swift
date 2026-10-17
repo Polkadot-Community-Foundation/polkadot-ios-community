@@ -80,10 +80,7 @@ extension ChatAcceptanceStore: ChatAcceptanceStoring {
 
     func markPublished(_ candidate: ChatAcceptanceCandidate, period: UInt32) async throws {
         try await databaseService.performWrite { context in
-            if let request = try Self.fetchRequest(candidate.requestId, in: context) {
-                request.anonymousDeliveryPeriod = NSNumber(value: Int32(bitPattern: period))
-            }
-
+            try context.setOutgoingStatementPeriod(period, for: candidate.message.messageId)
             try Self.updateStatus(of: candidate, to: .outgoing(.sent), in: context)
         }
     }
@@ -147,22 +144,15 @@ private extension ChatAcceptanceStore {
         }
 
         let contact = try ChatContactMapper().transform(entity: contactEntity)
-        let period = try fetchRequest(acceptance.requestId, in: context)?.anonymousDeliveryPeriod
+        let period = try context.outgoingStatementPeriod(for: message.messageId)
 
         return ChatAcceptanceCandidate(
             message: message,
             requestId: acceptance.requestId,
             contact: contact,
             session: contact.toMessageExchangeSessionRequest(),
-            period: period.map { UInt32(bitPattern: $0.int32Value) }
+            period: period
         )
-    }
-
-    static func fetchRequest(_ requestId: String, in context: NSManagedObjectContext) throws -> CDChatRequest? {
-        let fetchRequest = CDChatRequest.fetchRequest()
-        fetchRequest.predicate = .chatRequestById(requestId)
-        fetchRequest.fetchLimit = 1
-        return try context.fetch(fetchRequest).first
     }
 
     static func updateStatus(

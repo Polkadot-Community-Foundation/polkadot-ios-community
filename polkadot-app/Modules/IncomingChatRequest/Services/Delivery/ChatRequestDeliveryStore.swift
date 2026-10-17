@@ -53,7 +53,7 @@ extension ChatRequestDeliveryStore: ChatRequestDeliveryStoring {
         try await databaseService.performWrite { context in
             guard let request = try Self.fetchRequest(requestId, in: context) else { return }
 
-            request.anonymousDeliveryPeriod = NSNumber(value: Int32(bitPattern: anonymousPeriod))
+            try context.setOutgoingStatementPeriod(anonymousPeriod, for: requestId)
             request.message?.status = Chat.LocalMessage.Status.outgoing(.sent).rawValue
             request.message?.touchParent()
             request.touchParent()
@@ -81,18 +81,18 @@ extension ChatRequestDeliveryStore: ChatRequestRenewalStoring {
             ]
 
             let mapper = ChatContactMapper()
+            let contacts = try context.fetch(fetchRequest).map { try mapper.transform(entity: $0) }
+            let periods = try context.outgoingStatementPeriods(for: contacts.compactMap(\.chatRequest?.requestId))
 
-            return try context.fetch(fetchRequest)
-                .map { try mapper.transform(entity: $0) }
-                .compactMap(Self.renewalCandidate(from:))
+            return contacts.compactMap { Self.renewalCandidate(from: $0, periods: periods) }
         }
     }
 
     func updateAnonymousPeriod(requestId: String, period: UInt32) async throws {
         try await databaseService.performWrite { context in
-            guard let request = try Self.fetchRequest(requestId, in: context) else { return }
+            guard try Self.fetchRequest(requestId, in: context) != nil else { return }
 
-            request.anonymousDeliveryPeriod = NSNumber(value: Int32(bitPattern: period))
+            try context.setOutgoingStatementPeriod(period, for: requestId)
         }
     }
 }
@@ -105,19 +105,21 @@ private extension ChatRequestDeliveryStore {
         ]
 
         return NSPredicate(
-            format: "%K == %d AND %K != nil AND %K IN %@",
+            format: "%K == %d AND %K IN %@",
             #keyPath(CDChatContact.chatRequest.status),
             Chat.RequestStatus.outgoing.rawValue,
-            #keyPath(CDChatContact.chatRequest.anonymousDeliveryPeriod),
             #keyPath(CDChatContact.chatRequest.message.status),
             sentStatuses
         )
     }
 
-    static func renewalCandidate(from contact: Chat.Contact) -> ChatRequestRenewalCandidate? {
+    static func renewalCandidate(
+        from contact: Chat.Contact,
+        periods: [String: UInt32]
+    ) -> ChatRequestRenewalCandidate? {
         guard
             let request = contact.chatRequest,
-            let period = request.anonymousDeliveryPeriod,
+            let period = periods[request.requestId],
             let localMessage = request.message,
             let message = Chat.RequestMessage(localMessage: localMessage)
         else {

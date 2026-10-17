@@ -105,7 +105,6 @@
         <relationship name="message" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDChatMessage" inverseName="reactions" inverseEntity="CDChatMessage"/>
     </entity>
     <entity name="CDChatRequest" representedClassName="CDChatRequest" syncable="YES" codeGenerationType="class">
-        <attribute name="anonymousDeliveryPeriod" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
         <attribute name="contactId" optional="YES" attributeType="String"/>
         <attribute name="identifier" optional="YES" attributeType="String"/>
         <attribute name="status" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
@@ -355,6 +354,15 @@
         <attribute name="firstAttemptAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="status" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="message" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDChatMessage" inverseName="incomingTransferState" inverseEntity="CDChatMessage"/>
+    </entity>
+    <entity name="CDOutgoingStatementPublication" representedClassName="CDOutgoingStatementPublication" syncable="YES" codeGenerationType="class">
+        <attribute name="period" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="statementId" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="statementId"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
     </entity>
     <entity name="CDOutgoingTransferState" representedClassName="CDOutgoingTransferState" syncable="YES" codeGenerationType="class">
         <attribute name="actualValue" optional="YES" attributeType="String"/>
