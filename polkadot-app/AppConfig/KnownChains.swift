@@ -11,7 +11,7 @@ enum KnownChainId {
         static let paseoBulletIn = "paseo-bulletin"
         static let paseoAH = "paseo-asset-hub"
         static let previewAH = "preview-ah"
-    #elseif NIGHTLY || DEV
+    #elseif NIGHTLY || SAFETYNET || DEV
         static let paseoRelay = "nightly-relay"
         static let paseoAH = "nightly-ah"
         static let paseoPeople = "nightly-people"

@@ -62,7 +62,7 @@ jobs:
       - name: Configure Google services
         uses: ./.github/actions/configure-google-services
         with:
-          google_service_info_base64: ${{ secrets.GOOGLE_SERVICE_INFO_DEV_BASE64 || secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
+          google_service_info_base64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
           expected_bundle_id: ${{ env.IOS_BUNDLE_ID }}
 
       - name: Configure secrets
