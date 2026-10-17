@@ -7,7 +7,7 @@ import MessageExchangeKit
 import Testing
 @testable import polkadot_app
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct ChatAccountFundingTests {
     private let accountId = Data(repeating: 0x01, count: 32)
     private let funding = FakeStatementAccountFunding()

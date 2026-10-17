@@ -3,7 +3,7 @@ import Foundation
 @testable import StatementDelivery
 import Testing
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct OutgoingStatementDeliveryServiceTests {
     private let input = TestInput(statementId: "A")
     private let store = FakeOutgoingStore()

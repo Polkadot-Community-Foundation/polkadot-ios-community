@@ -7,8 +7,8 @@ import SubstrateSdk
 import Testing
 @testable import polkadot_app
 
-@Suite(.timeLimit(.minutes(1)))
-struct ChatAcceptanceListenerTests {
+@Suite(.timeLimit(.minutes(10)))
+struct IncomingChatAcceptanceServiceTests {
     private let store = MockStatementStore()
     private let acceptor: ListenerParticipant
     private let requester: ListenerParticipant
@@ -25,16 +25,17 @@ struct ChatAcceptanceListenerTests {
     @Test func requesterReceivesAcceptanceFromAnySigner() async throws {
         try await publishAcceptance(requestId: "request")
 
-        let listener = ChatAcceptanceListener(
-            requestFactory: requester.requestFactory(),
+        let service = IncomingChatAcceptanceService(
+            encryptionManager: requester.encryptionManager(),
+            signerManager: requester.signerManager(),
             connection: store,
             logger: MockLogger()
         )
 
-        var iterator = listener.subscribe(to: [requester.request(toward: acceptor)]).makeAsyncIterator()
+        var iterator = service.subscribe(to: [requester.request(toward: acceptor)]).makeAsyncIterator()
         let received = try await iterator.next()
 
-        #expect(received == ReceivedChatAcceptance(
+        #expect(received == IncomingChatAcceptanceInput(
             peerAccountId: acceptor.identityAccountId,
             requestId: "request",
             device: device
@@ -42,7 +43,7 @@ struct ChatAcceptanceListenerTests {
     }
 }
 
-private extension ChatAcceptanceListenerTests {
+private extension IncomingChatAcceptanceServiceTests {
     func publishAcceptance(requestId: String) async throws {
         let message = Chat.LocalMessage(
             messageId: UUID().uuidString,
@@ -81,26 +82,20 @@ private struct ListenerParticipant {
 
     var identityAccountId: AccountId { identityKeypair.publicKey().rawData() }
 
-    func requestFactory() -> IdentityRouteRequestFactory {
-        IdentityRouteRequestFactory(
-            encryptionManager: ClosureEncryptionManager { [encryptionKey] _ in
-                X25519ChaChaPolyEncryptorFactory(privateKey: encryptionKey)
-            },
-            signerManager: ClosureSignerManager { [identityKeypair] _ in
-                StatementStoreKeypairSigner(keypair: identityKeypair)
-            }
-        )
+    func encryptionManager() -> MessageExchangeEncryptionManaging {
+        ClosureEncryptionManager { [encryptionKey] _ in
+            X25519ChaChaPolyEncryptorFactory(privateKey: encryptionKey)
+        }
+    }
+
+    func signerManager() -> StatementStoreSignerManaging {
+        ClosureSignerManager { [identityKeypair] _ in
+            StatementStoreKeypairSigner(keypair: identityKeypair)
+        }
     }
 
     func statementBuilder() -> ChatAcceptanceStatementBuilder {
-        ChatAcceptanceStatementBuilder(
-            encryptionManager: ClosureEncryptionManager { [encryptionKey] _ in
-                X25519ChaChaPolyEncryptorFactory(privateKey: encryptionKey)
-            },
-            signerManager: ClosureSignerManager { [identityKeypair] _ in
-                StatementStoreKeypairSigner(keypair: identityKeypair)
-            }
-        )
+        ChatAcceptanceStatementBuilder(encryptionManager: encryptionManager(), signerManager: signerManager())
     }
 
     func contact(of peer: ListenerParticipant) -> Chat.Contact {

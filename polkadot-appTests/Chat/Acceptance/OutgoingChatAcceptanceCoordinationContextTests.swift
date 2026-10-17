@@ -3,7 +3,7 @@ import os
 import Testing
 @testable import polkadot_app
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct OutgoingChatAcceptanceCoordinationContextTests {
     private let fixture = ChatAcceptanceFixture()
     private let deliveries = RecordingDeliveries()

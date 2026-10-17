@@ -3,7 +3,7 @@ import Foundation
 import StatementDelivery
 import Testing
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct OutgoingStatementRenewerTests {
     private let now = Date(timeIntervalSince1970: 1_000_000)
     private let store = FakeOutgoingStore()

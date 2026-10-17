@@ -2,13 +2,17 @@ import Foundation
 import MessageExchangeKit
 import SubstrateSdk
 
-actor ChatRequestAcceptProcessorContext {
+/// Listens for acceptances of our pending outgoing requests and applies each once; mirrors
+/// `IncomingChatRequestCoordinationContext`.
+actor IncomingChatAcceptanceCoordinationContext {
     private let requestStoreService: ChatRequestStoreServicing
     private let contactsStorageService: ContactsLocalStorageServicing
 
     let logger: LoggerProtocol
 
     private var processedRequestIds: Set<String> = []
+    private var peersWithOutgoingRequests: [AccountId: MessageExchange.SessionRequest] = [:]
+    private var incomingAcceptancesTask: Task<Void, Never>?
 
     init(
         requestStoreService: ChatRequestStoreServicing,
@@ -21,13 +25,41 @@ actor ChatRequestAcceptProcessorContext {
     }
 }
 
-extension ChatRequestAcceptProcessorContext {
+extension IncomingChatAcceptanceCoordinationContext {
+    func update(
+        contacts: [Chat.Contact],
+        incomingAcceptanceTaskBuilder: ([MessageExchange.SessionRequest]) -> Task<Void, Never>
+    ) {
+        let newPeers: [AccountId: MessageExchange.SessionRequest] = contacts.reduce(into: [:]) { peers, contact in
+            guard contact.hasOutgoingChatRequest else { return }
+
+            peers[contact.accountId] = MessageExchange.SessionRequest(
+                own: contact.ownKeyId.toMessageExchangeOwn(),
+                peer: contact.toMessageExchangePeer()
+            )
+        }
+
+        guard newPeers != peersWithOutgoingRequests else { return }
+
+        peersWithOutgoingRequests = newPeers
+
+        incomingAcceptancesTask?.cancel()
+        incomingAcceptancesTask = newPeers.isEmpty ? nil : incomingAcceptanceTaskBuilder(Array(newPeers.values))
+    }
+
+    func cancelAll() {
+        incomingAcceptancesTask?.cancel()
+        incomingAcceptancesTask = nil
+        peersWithOutgoingRequests = [:]
+    }
+
+    /// Copies from earlier periods can coexist; each request is accepted once.
     @discardableResult
-    func accept(
-        requestId: String,
-        from contactId: AccountId,
-        peerDevice: Chat.PeerDevice
-    ) async throws -> Chat.Request? {
+    func handle(_ acceptance: IncomingChatAcceptanceInput) async throws -> Chat.Request? {
+        let requestId = acceptance.requestId
+        let contactId = acceptance.peerAccountId
+        let peerDevice = acceptance.device
+
         guard !processedRequestIds.contains(requestId) else {
             return nil
         }
@@ -78,7 +110,7 @@ extension ChatRequestAcceptProcessorContext {
     }
 }
 
-private extension ChatRequestAcceptProcessorContext {
+private extension IncomingChatAcceptanceCoordinationContext {
     /// Remove own push token for an existing contact after accepting,
     /// it will be updated in ChatPushService later
     func erasePushToken(_ contact: Chat.Contact) async {

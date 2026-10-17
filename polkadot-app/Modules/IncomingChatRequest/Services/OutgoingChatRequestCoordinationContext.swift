@@ -27,12 +27,10 @@ actor OutgoingChatRequestCoordinationContext {
     private var messageState: [String: MessageState] = [:]
     private var sentMessages: Set<String> = []
     private var outgoingRequestsTask: Task<Void, Never>?
-    private var acceptanceTask: Task<Void, Never>?
 
     func update(
         contacts: [Chat.Contact],
-        outgoingRequestTaskBuilder: () -> Task<Void, Never>,
-        acceptanceTaskBuilder: ([MessageExchange.SessionRequest]) -> Task<Void, Never>
+        outgoingRequestTaskBuilder: () -> Task<Void, Never>
     ) {
         let newPeers: [AccountId: MessageExchange.SessionRequest] = contacts.reduce(into: [:]) { accum, contact in
             guard contact.hasOutgoingChatRequest else { return }
@@ -51,9 +49,6 @@ actor OutgoingChatRequestCoordinationContext {
 
         outgoingRequestsTask?.cancel()
         outgoingRequestsTask = outgoingRequestTaskBuilder()
-
-        acceptanceTask?.cancel()
-        acceptanceTask = acceptanceTaskBuilder(Array(newPeers.values))
 
         // don't process already sent messages again in any case
         messageState = messageState.filter { !$0.value.isSent }
@@ -96,8 +91,6 @@ extension OutgoingChatRequestCoordinationContext {
     func cancelAll() {
         outgoingRequestsTask?.cancel()
         outgoingRequestsTask = nil
-        acceptanceTask?.cancel()
-        acceptanceTask = nil
 
         for case let .sending(task) in messageState.values {
             task.cancel()

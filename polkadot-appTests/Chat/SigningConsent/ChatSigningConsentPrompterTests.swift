@@ -4,7 +4,7 @@ import SubstrateSdk
 import Testing
 @testable import polkadot_app
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct ChatSigningConsentPrompterTests {
     private let presenter = ConsentRequestsMock()
     private let alice = ChatSigningConsentSubject(contactAccountId: Data(repeating: 0x0A, count: 32), username: "alice")

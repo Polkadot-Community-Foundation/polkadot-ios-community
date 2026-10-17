@@ -33,9 +33,9 @@ protocol ChatRequestServiceMaking {
 
     func makeChatAcceptanceRenewer() async throws -> OutgoingStatementRenewing
 
-    func makeChatAcceptanceListener() async throws -> ChatAcceptanceListening
+    func makeIncomingChatAcceptanceService() async throws -> IncomingChatAcceptanceService
 
-    func makeAcceptContext() async -> ChatRequestAcceptProcessorContext
+    func makeIncomingChatAcceptanceContext() async -> IncomingChatAcceptanceCoordinationContext
 }
 
 actor ChatRequestServiceFactory {
@@ -167,22 +167,20 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
         try await makeAcceptancePipeline().delivery
     }
 
-    func makeChatAcceptanceListener() async throws -> ChatAcceptanceListening {
-        try await ChatAcceptanceListener(
-            requestFactory: IdentityRouteRequestFactory(
-                encryptionManager: makeAccountEncryptionManager(),
-                signerManager: makeAccountSignManager()
-            ),
+    func makeIncomingChatAcceptanceService() async throws -> IncomingChatAcceptanceService {
+        try await IncomingChatAcceptanceService(
+            encryptionManager: makeAccountEncryptionManager(),
+            signerManager: makeAccountSignManager(),
             connection: makeConnection(),
             logger: logger
         )
     }
 
-    func makeAcceptContext() async -> ChatRequestAcceptProcessorContext {
+    func makeIncomingChatAcceptanceContext() async -> IncomingChatAcceptanceCoordinationContext {
         let encryptionManager = makeAccountEncryptionManager()
         let signManager = makeAccountSignManager()
 
-        return ChatRequestAcceptProcessorContext(
+        return IncomingChatAcceptanceCoordinationContext(
             requestStoreService: makeRequestStoreService(
                 encryptionManager: encryptionManager,
                 signManager: signManager

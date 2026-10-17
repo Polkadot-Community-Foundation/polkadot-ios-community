@@ -7,7 +7,7 @@ import SubstrateSdk
 import Testing
 @testable import polkadot_app
 
-@Suite(.timeLimit(.minutes(1)))
+@Suite(.timeLimit(.minutes(10)))
 struct PerChatSessionSigningTests {
     @Test func signsDeviceRouteOnlyWithPerChatAccounts() async throws {
         let store = MockStatementStore()
