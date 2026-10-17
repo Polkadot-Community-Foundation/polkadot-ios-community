@@ -33,6 +33,11 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
         self.logger = logger
     }
 
+    /// Whether services are already up, i.e. a background run reuses them instead of booting headless.
+    var hasCoordinator: Bool {
+        coordinator != nil
+    }
+
     /// Creates the coordinator on first use and starts its interactive part for the first interactive lease.
     func acquireInteractive() -> DashboardServicesLease<Coordinator>? {
         guard let coordinator = existingOrNewCoordinator() else { return nil }

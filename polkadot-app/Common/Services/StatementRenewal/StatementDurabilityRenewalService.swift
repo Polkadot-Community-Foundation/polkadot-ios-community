@@ -28,13 +28,20 @@ struct StatementDurabilityRenewalReport: Sendable, Equatable {
 actor StatementDurabilityRenewalService {
     private let allowances: AllowanceSlotsRenewing
     private let renewers: StatementRenewerProviding
+    private let issues: StatementRenewalIssueDiagnostics
     private let logger: LoggerProtocol
 
     private var inFlight: Task<StatementDurabilityRenewalReport, Never>?
 
-    init(allowances: AllowanceSlotsRenewing, renewers: StatementRenewerProviding, logger: LoggerProtocol) {
+    init(
+        allowances: AllowanceSlotsRenewing,
+        renewers: StatementRenewerProviding,
+        issues: StatementRenewalIssueDiagnostics,
+        logger: LoggerProtocol
+    ) {
         self.allowances = allowances
         self.renewers = renewers
+        self.issues = issues
         self.logger = logger
     }
 }
@@ -77,7 +84,12 @@ private extension StatementDurabilityRenewalService {
         async let chatRequests = renew(.chatRequests)
         async let chatAcceptances = renew(.chatAcceptances)
 
-        return await StatementDurabilityRenewalReport(chatRequests: chatRequests, chatAcceptances: chatAcceptances)
+        let report = await StatementDurabilityRenewalReport(
+            chatRequests: chatRequests,
+            chatAcceptances: chatAcceptances
+        )
+        issues.record(report)
+        return report
     }
 
     enum StatementKind {

@@ -11,7 +11,11 @@ enum DebugSettingsViewFactory {
             mnemonicBackupHelper: MnemonicBackupHelper(),
             logsDraftFactory: LogsEmailDraftFactory(),
             keystore: Keychain(),
-            entropyManager: RootEntropyManager.shared
+            entropyManager: RootEntropyManager.shared,
+            renewal: DebugRenewalTools(
+                task: StatementRenewalBackgroundTask.shared,
+                work: StatementRenewalBackgroundWork()
+            )
         )
         let shareActivityPresenter = ShareActivityAdapter()
         let emailComposePresenter = EmailComposeAdapter()

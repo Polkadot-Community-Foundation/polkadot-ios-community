@@ -1,6 +1,5 @@
 import UIKit
 import TipKit
-import BackgroundExecution
 import IssueMonitoring
 import Keystore_iOS
 
@@ -10,8 +9,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     let issueMonitoringService: IssueMonitoringServiceProtocol = IssueMonitoringFactory.createService(
         dsn: GeneratedSecrets.sentryDSN
     )
-
-    private(set) var statementRenewalTask: ScheduledBackgroundTask?
 
     var apnsTokenProvider: APNSTokenProviding {
         APNSTokenProviderFacade.sharedManager
@@ -33,8 +30,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         issueMonitoringService.setup()
 
         // The OS requires every background task handler to be registered before launch finishes.
-        statementRenewalTask = StatementRenewalBackgroundTaskFactory.make()
-        statementRenewalTask?.register()
+        StatementRenewalBackgroundTask.shared?.register()
 
         UserNotificationService.shared.startGatheringNotifications()
 

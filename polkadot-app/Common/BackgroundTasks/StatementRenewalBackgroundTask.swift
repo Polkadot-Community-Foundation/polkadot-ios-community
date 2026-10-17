@@ -1,9 +1,10 @@
 import BackgroundExecution
+import Foundation
 import FoundationExt
-import UIKit
 
-/// Builds the background task that keeps statements and allowances renewed while the app is closed.
-enum StatementRenewalBackgroundTaskFactory {
+/// The background task that keeps statements, their allowances and coin recycling going while the app is closed.
+/// One per process: AppDelegate registers it at launch, the scene schedules it on every move to the background.
+enum StatementRenewalBackgroundTask {
     private static let identifierSuffix = ".statement-renewal"
     private static let logTag = "BGRenewal"
 
@@ -12,13 +13,19 @@ enum StatementRenewalBackgroundTaskFactory {
         constraints: BackgroundTaskConstraints(requiresNetworkConnectivity: true, requiresExternalPower: false)
     )
 
-    static func make(baseLogger: LoggerProtocol = Logger.shared) -> ScheduledBackgroundTask? {
+    static let shared: ScheduledBackgroundTask? = make(baseLogger: Logger.shared)
+}
+
+private extension StatementRenewalBackgroundTask {
+    static func make(baseLogger: LoggerProtocol) -> ScheduledBackgroundTask? {
         let logger = TaggedLogger(tag: logTag, logger: baseLogger)
 
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
             logger.error("no bundle identifier, task not created")
             return nil
         }
+
+        let work = StatementRenewalBackgroundWork()
 
         return ScheduledBackgroundTask(
             identifier: bundleIdentifier + identifierSuffix,
@@ -28,21 +35,7 @@ enum StatementRenewalBackgroundTaskFactory {
                 dateProvider: NowDateProvider(),
                 logger: logger
             ),
-            work: { await describeLaunch() }
+            work: { await work() }
         )
-    }
-}
-
-private extension StatementRenewalBackgroundTaskFactory {
-    // TODO: Replace with the renewal run (T5); until then the run only records how iOS launched the app.
-    @MainActor
-    static func describeLaunch() -> BackgroundTaskWorkOutcome {
-        let application = UIApplication.shared
-        let sceneStates = application.connectedScenes.map { "\($0.activationState.rawValue)" }
-
-        let fields = "connectedScenes=\(sceneStates.count) sceneStates=[\(sceneStates.joined(separator: ","))]"
-            + " applicationState=\(application.applicationState.rawValue)"
-
-        return .completed(logFields: fields)
     }
 }

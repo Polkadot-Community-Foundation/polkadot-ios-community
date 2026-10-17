@@ -54,6 +54,30 @@ struct StatementDurabilityRenewalServiceTests {
         #expect(reports[0] == reports[1])
     }
 
+    @Test func missedPeriodIsReportedWithCountersOnly() async {
+        let missedPeriod = RecordingIssueDiagnostic()
+        let service = makeService(allowances: AllowanceSlotsRenewalSpy(), missedPeriod: missedPeriod)
+
+        _ = await service.renewAll()
+
+        #expect(missedPeriod.failureCount == 1)
+        #expect(missedPeriod.lastCounters == ["statements": 1, "missedPeriods": 1])
+    }
+
+    @Test func runWithoutGapsResetsTheLapse() async {
+        let missedPeriod = RecordingIssueDiagnostic()
+        let service = makeService(
+            allowances: AllowanceSlotsRenewalSpy(),
+            missedPeriod: missedPeriod,
+            requests: Self.acceptances
+        )
+
+        _ = await service.renewAll()
+
+        #expect(missedPeriod.failureCount == 0)
+        #expect(missedPeriod.recoveryCount == 1)
+    }
+
     @Test func cancelledRunIsNotHandedToTheNextCaller() async {
         let allowances = AllowanceSlotsRenewalSpy(holdsRenewal: true)
         let service = makeService(allowances: allowances)
@@ -72,10 +96,18 @@ struct StatementDurabilityRenewalServiceTests {
 }
 
 private extension StatementDurabilityRenewalServiceTests {
-    func makeService(allowances: AllowanceSlotsRenewalSpy) -> StatementDurabilityRenewalService {
+    func makeService(
+        allowances: AllowanceSlotsRenewalSpy,
+        missedPeriod: RecordingIssueDiagnostic = RecordingIssueDiagnostic(),
+        requests: OutgoingStatementRenewalSummary = Self.requests
+    ) -> StatementDurabilityRenewalService {
         StatementDurabilityRenewalService(
             allowances: allowances,
-            renewers: StatementRenewerProviderStub(chatRequests: Self.requests, chatAcceptances: Self.acceptances),
+            renewers: StatementRenewerProviderStub(chatRequests: requests, chatAcceptances: Self.acceptances),
+            issues: StatementRenewalIssueDiagnostics(
+                chatRequestsMissedPeriod: missedPeriod,
+                chatAcceptancesMissedPeriod: RecordingIssueDiagnostic()
+            ),
             logger: StubLogger()
         )
     }

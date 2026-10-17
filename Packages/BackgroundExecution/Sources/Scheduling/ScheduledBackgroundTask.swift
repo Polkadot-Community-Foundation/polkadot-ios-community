@@ -80,6 +80,11 @@ extension ScheduledBackgroundTask: @unchecked Sendable {
         }
     }
 
+    /// Whether the OS currently holds a request for this task.
+    public func isRequestPending() async -> Bool {
+        await dependencies.scheduler.pendingRequestIdentifiers().contains(identifier)
+    }
+
     /// Queues the next launch, replacing any pending request for this identifier.
     public func schedule() async {
         let now = await dependencies.dateProvider.read()

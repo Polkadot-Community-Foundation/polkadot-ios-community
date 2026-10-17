@@ -46,6 +46,17 @@ struct ScheduledBackgroundTaskTests {
         #expect(scheduler.submittedRequests == [expected])
     }
 
+    @Test func requestIsPendingOnlyAfterSchedule() async {
+        let task = makeTask { .completed(logFields: "") }
+
+        let before = await task.isRequestPending()
+        await task.schedule()
+        let after = await task.isRequestPending()
+
+        #expect(!before)
+        #expect(after)
+    }
+
     @Test func submitFailureIsLoggedNotThrown() async {
         let scheduler = BackgroundTaskSchedulerSpy(submitError: SampleError())
         let logger = RecordingLogger()

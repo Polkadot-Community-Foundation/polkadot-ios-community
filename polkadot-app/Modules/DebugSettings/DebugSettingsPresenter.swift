@@ -105,6 +105,14 @@ extension DebugSettingsPresenter: DebugSettingsPresenterProtocol {
         wireframe.showTrUAPIPlayground(from: view)
     }
 
+    func scheduleRenewal() {
+        interactor.scheduleRenewal()
+    }
+
+    func runRenewalNow() {
+        interactor.runRenewalNow()
+    }
+
     func resetTips() {
         interactor.resetTips()
 
@@ -142,5 +150,19 @@ extension DebugSettingsPresenter: DebugSettingsInteractorOutputProtocol {
 
     func didReceive(truApiRuntimeEnabled: Bool) {
         view?.didReceive(truApiRuntimeEnabled: truApiRuntimeEnabled)
+    }
+
+    func didReceive(renewalRequestPending: Bool) {
+        view?.didReceive(renewalRequestPending: renewalRequestPending)
+    }
+
+    func didCompleteRenewalRun(summary: String) {
+        let viewModel = AlertPresentableViewModel(
+            title: "Renewal run",
+            message: summary,
+            actions: [AlertPresentableAction(title: "OK", style: .cancel)]
+        )
+
+        wireframe.present(viewModel: viewModel, style: .alert, from: view)
     }
 }

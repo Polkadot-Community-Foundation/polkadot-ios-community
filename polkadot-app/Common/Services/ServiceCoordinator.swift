@@ -282,6 +282,7 @@ extension ServiceCoordinator {
         let durabilityRenewal = StatementDurabilityRenewalService(
             allowances: allowanceManagerFacade,
             renewers: chatRequestServiceFactory,
+            issues: StatementRenewalIssueDiagnostics.make(reporter: IssueReportingFacade.shared),
             logger: logger
         )
         let chatRequestCoordinator = createChatRequestCoordinator(
