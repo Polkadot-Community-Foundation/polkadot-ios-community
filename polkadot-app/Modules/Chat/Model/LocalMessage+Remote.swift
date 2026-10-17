@@ -56,7 +56,7 @@ extension Chat.LocalMessage.Content {
         case let .richText(richText):
             richText.isReadyToSend
 
-        // Published from a one-shot account by ChatAcceptancePublisher, never by the session.
+        // Published on the identity route by the acceptance delivery pipeline, never by the session.
         case .multiChatAccepted:
             false
 

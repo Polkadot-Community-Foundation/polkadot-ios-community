@@ -10,7 +10,7 @@ struct ChatAcceptanceStatementBuilderTests {
     private let fixture = ChatAcceptanceFixture()
     private let identityEncryptionKey = Curve25519.KeyAgreement.PrivateKey()
 
-    @Test func storedCopiesAreLookedUpOnTheIdentityRouteRequestTopic() throws {
+    @Test func storedCopiesAreLookedUpOnTheOwnSessionTopic() throws {
         let builder = makeBuilder()
         let input = makeInput()
 
