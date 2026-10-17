@@ -3,7 +3,6 @@
     <entity name="CDAllowanceRecord" representedClassName="CDAllowanceRecord" syncable="YES" codeGenerationType="class">
         <attribute name="accountId" optional="YES" attributeType="Binary"/>
         <attribute name="allocatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="domain" optional="NO" attributeType="Integer 16" defaultValueString="2" usesScalarValueType="YES"/>
         <attribute name="identifier" optional="YES" attributeType="String"/>
         <attribute name="kind" optional="NO" attributeType="Integer 16" defaultValueString="-1" usesScalarValueType="YES"/>
         <attribute name="latestRenewedPeriod" optional="NO" attributeType="Integer 64" defaultValueString="-1" usesScalarValueType="YES"/>
@@ -46,15 +45,6 @@
         <attribute name="chatId" optional="YES" attributeType="String"/>
         <attribute name="extensionId" optional="YES" attributeType="String"/>
         <attribute name="identifier" optional="YES" attributeType="String"/>
-    </entity>
-    <entity name="CDChatIdentitySigningConsent" representedClassName="CDChatIdentitySigningConsent" syncable="YES" codeGenerationType="class">
-        <attribute name="grantedAt" attributeType="Date" usesScalarValueType="NO"/>
-        <attribute name="identifier" attributeType="String"/>
-        <uniquenessConstraints>
-            <uniquenessConstraint>
-                <constraint value="identifier"/>
-            </uniquenessConstraint>
-        </uniquenessConstraints>
     </entity>
     <entity name="CDChatMessage" representedClassName="CDChatMessage" syncable="YES" codeGenerationType="class">
         <attribute name="compactionId" optional="YES" attributeType="String"/>
