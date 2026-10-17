@@ -18,7 +18,7 @@ import Individuality
 import UniqueDevice
 import ChainRegistry
 
-protocol ServiceCoordinatorProtocol: ApplicationServiceProtocol {
+protocol ServiceCoordinatorProtocol: DashboardServicesCoordinating {
     var depositService: DepositServiceProtocol { get }
     var fiatOnrampService: FiatOnrampServicing { get }
     var fiatOnrampTrackingService: FiatOnrampTrackingServiceProtocol { get }
@@ -77,6 +77,10 @@ final class ServiceCoordinator {
 
     // Retained so the weakly-held dependency-locator entry stays alive for the product host.
     let paymentsSupport: PaymentsSupport
+
+    // Lifecycle state, touched only from the main actor by DashboardServicesManager.
+    var durabilityStart: Task<Bool, Never>?
+    var interactiveStart: Task<Void, Never>?
 
     var coinageService: CoinageServicing {
         paymentsSupport.coinageService
@@ -149,78 +153,11 @@ final class ServiceCoordinator {
     }
 }
 
-extension ServiceCoordinator: ServiceCoordinatorProtocol {
-    func setup() {
-        // Keep the cached TLD warm on each launch without blocking.
-        tldProvider.refresh()
-
-        chatCoordinator.setup()
-        productWorkerFacade.setup()
-        chatExtensionsRegistry.discover()
-        chatRequestCoordinator.setup()
-        fiatOnrampTrackingService.setup()
-        attachmentUploadService.setup()
-        attachmentDownloadService.setup()
-        notificationBadgeSyncService.setup()
-        messageExpansionService.start()
-        allowanceRenewalService.setup()
-
-        Task {
-            await chainStatusProvider.start()
-            await signInHostCoordinator.setup()
-            await setupDeviceSyncService()
-
-            // Setup coinage service with main asset from chain
-            let chainRegistry = ChainRegistryFacade.sharedRegistry
-            let mainAssetId = AppConfig.Assets.mainAsset
-
-            guard
-                let chain = chainRegistry.getChain(for: mainAssetId.chainId),
-                let asset = chain.asset(for: mainAssetId.assetId)
-            else {
-                assertionFailure()
-                return
-            }
-            do {
-                try await coinageService.setup(with: asset)
-            } catch {
-                logger.error("Coinage service setup failed: \(error)")
-                return
-            }
-            // After coinage setup, which releases uncommitted handoffs the first pass must not see.
-            durableTransactionEngine.txService.start()
-            // Recovering backup 1st
-            await coinageTransferMonitor.setup()
-            await w3sPaymentTracking.setup()
-            await depositService.setup()
-        }
-    }
-
-    func throttle() {
-        chatCoordinator.throttle()
-        chatRequestCoordinator.throttle()
-        fiatOnrampTrackingService.throttle()
-        attachmentUploadService.throttle()
-        attachmentDownloadService.throttle()
-        notificationBadgeSyncService.throttle()
-        allowanceRenewalService.throttle()
-
-        messageExpansionService.stop()
-        durableTransactionEngine.txService.stop()
-
-        Task {
-            await deviceSyncService.throttle()
-            await coinageTransferMonitor.throttle()
-            await w3sPaymentTracking.throttle()
-            await signInHostCoordinator.throttle()
-            await depositService.throttle()
-        }
-    }
-}
+extension ServiceCoordinator: ServiceCoordinatorProtocol {}
 
 extension ServiceCoordinator {
     // swiftlint:disable:next function_body_length
-    static func createDefault(spaFlowState: SPAFlowState) -> ServiceCoordinatorProtocol? {
+    static func createDefault(spaFlowState: SPAFlowState) -> ServiceCoordinator? {
         let walletRepo: WalletManagerRepositoryProtocol = .shared
 
         // The dashboard is only reachable after onboarding cached the TLD, so built-in accounts

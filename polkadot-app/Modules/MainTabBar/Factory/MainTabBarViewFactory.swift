@@ -14,9 +14,12 @@ enum MainTabBarViewFactory {
     ) -> MainTabBarViewProtocol? {
         let spaFlowState = flowStateProvider.flowState()
 
-        guard let serviceCoordinator = ServiceCoordinator.createDefault(spaFlowState: spaFlowState) else {
+        // Taking the lease starts the dashboard services; the interactor releases it when the dashboard goes away.
+        guard let servicesLease = DashboardServices.manager.acquireInteractive() else {
             return nil
         }
+
+        let serviceCoordinator = servicesLease.coordinator
 
         let polkadotSignInService = PolkadotSignInService(
             polkadotHandshakeService: serviceCoordinator.polkadotHandshakeService
@@ -44,7 +47,7 @@ enum MainTabBarViewFactory {
         let mnemonicBackupHelper = MnemonicBackupHelper()
         let browserCoordinator = createBrowserCoordinator(flowStateProvider: flowStateProvider)
         let interactor = MainTabBarInteractor(
-            serviceCoordinator: serviceCoordinator,
+            servicesLease: servicesLease,
             chainStatusProvider: serviceCoordinator.chainStatusProvider,
             userNotificationService: userNotificationService,
             urlHandlingService: urlHandler,

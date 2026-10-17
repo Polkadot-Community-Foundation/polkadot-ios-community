@@ -53,7 +53,7 @@ final class RootInteractor {
 
     let chainRegistryClosure: ChainRegistryLazyClosure
 
-    let migrator: Migrating
+    let launchBootstrapper: LaunchBootstrapping
     let logger: LoggerProtocol
     let resolver: any DecisionResolver<RootDestination>
     let tokenManager: JWTTokenManaging
@@ -79,7 +79,7 @@ final class RootInteractor {
 
     init(
         chainRegistryClosure: @escaping ChainRegistryLazyClosure,
-        migrator: Migrating,
+        launchBootstrapper: LaunchBootstrapping,
         logger: LoggerProtocol,
         resolver: any DecisionResolver<RootDestination>,
         tokenManager: JWTTokenManaging,
@@ -94,7 +94,7 @@ final class RootInteractor {
     ) {
         self.chainRegistryClosure = chainRegistryClosure
 
-        self.migrator = migrator
+        self.launchBootstrapper = launchBootstrapper
         self.logger = logger
         self.resolver = resolver
         self.tokenManager = tokenManager
@@ -114,27 +114,16 @@ final class RootInteractor {
     }
 
     @MainActor
-    private func performCommonSetup(with chainRegistry: ChainRegistryProtocol) {
+    private func beginSetupAttempt(with chainRegistry: ChainRegistryProtocol) {
         completionTask?.cancel()
         didReportOutcome.withLock { $0 = false }
 
-        setupChainUpdate(for: chainRegistry)
-        fetchRemoteConfig()
         startObservationIfNeeded()
-
         startSetupCompletionTask(for: chainRegistry)
     }
 
     private func setupChainUpdate(for registry: ChainRegistryProtocol) {
         chainRegistryConfigurator.set(chainRegistry: registry)
-    }
-
-    private func runMigrators() {
-        do {
-            try migrator.migrate()
-        } catch {
-            logger.error("Migration failed: \(error.localizedDescription)")
-        }
     }
 
     private func fetchRemoteConfig() {
@@ -286,9 +275,10 @@ extension RootInteractor: RootInteractorInputProtocol {
     }
 
     func setup() {
-        runMigrators()
+        // Migrations, registry wiring and the first config fetch; a headless background launch may have run it already.
+        launchBootstrapper.start()
         let chainRegistry = chainRegistryClosure()
-        performCommonSetup(with: chainRegistry)
+        beginSetupAttempt(with: chainRegistry)
 
         #if TESTNET_FEATURE
             appFactoryResetChecker = appFactoryResetCheckerFactory?
@@ -298,7 +288,9 @@ extension RootInteractor: RootInteractorInputProtocol {
 
     func retrySetup() {
         let chainRegistry = chainRegistryClosure()
-        performCommonSetup(with: chainRegistry)
+        setupChainUpdate(for: chainRegistry)
+        fetchRemoteConfig()
+        beginSetupAttempt(with: chainRegistry)
     }
 
     func completeWalletsCreation() {

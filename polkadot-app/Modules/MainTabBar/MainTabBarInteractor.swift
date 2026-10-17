@@ -8,7 +8,7 @@ import PolkadotUI
 final class MainTabBarInteractor {
     weak var presenter: MainTabBarInteractorOutputProtocol?
 
-    private let serviceCoordinator: ServiceCoordinatorProtocol
+    private let servicesLease: DashboardServicesLease<ServiceCoordinator>
     private let chainStatusProvider: ChainStatusProviding
 
     private let userNotificationService: UserNotificationServicing
@@ -28,7 +28,7 @@ final class MainTabBarInteractor {
     private var tabBarLabelsSubscription: Task<Void, Never>?
 
     init(
-        serviceCoordinator: ServiceCoordinatorProtocol,
+        servicesLease: DashboardServicesLease<ServiceCoordinator>,
         chainStatusProvider: ChainStatusProviding,
         userNotificationService: UserNotificationServicing,
         urlHandlingService: URLHandlingServiceProtocol,
@@ -41,7 +41,7 @@ final class MainTabBarInteractor {
         extensionWidgetStreamProvider: ChatExtensionWidgetStreaming? = nil,
         tabBarLabelsStore: any TabBarLabelsProviding = TabBarLabelsStore.shared
     ) {
-        self.serviceCoordinator = serviceCoordinator
+        self.servicesLease = servicesLease
         self.chainStatusProvider = chainStatusProvider
         self.userNotificationService = userNotificationService
         self.mnemonicBackupHelper = mnemonicBackupHelper
@@ -52,7 +52,7 @@ final class MainTabBarInteractor {
         self.deferredLinkHandler = deferredLinkHandler
         self.browserCoordinator = browserCoordinator
         self.extensionWidgetStreamProvider = extensionWidgetStreamProvider ?? ChatExtensionWidgetStreamProvider(
-            registry: serviceCoordinator.chatExtensionsRegistry,
+            registry: servicesLease.coordinator.chatExtensionsRegistry,
             logger: logger
         )
         self.tabBarLabelsStore = tabBarLabelsStore
@@ -60,7 +60,7 @@ final class MainTabBarInteractor {
 
     deinit {
         unsubscribeFromExtensionWidgets()
-        serviceCoordinator.throttle()
+        servicesLease.release()
         removeBackupObservers()
         chainStatusSubscription?.cancel()
         tabBarLabelsSubscription?.cancel()
@@ -69,7 +69,6 @@ final class MainTabBarInteractor {
 
 extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
     func setup() {
-        serviceCoordinator.setup()
         requestNotificationsAuthorization()
         subscribeToBackupAvailability()
         subscribeToBackupStatusChanges()

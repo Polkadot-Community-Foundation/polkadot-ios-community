@@ -433,14 +433,30 @@ private extension RootInteractorSetupTests {
         },
         clock: any Clock<Duration> = TestClock<Duration>()
     ) -> RootInteractor {
-        RootInteractor(
+        let chainRegistryConfigurator = MockChainRegistryConfigurator()
+        let launchBootstrapper = LaunchBootstrapper(
+            dependencies: LaunchBootstrapDependencies(
+                migrator: migrator,
+                chainRegistryClosure: { chainRegistry },
+                remoteConfigManager: remoteConfigManager,
+                chainRegistryConfigurator: chainRegistryConfigurator,
+                paymentAssetBranding: .shared,
+                tldProvider: tldProvider,
+                appliedConfigReader: appliedConfigReader,
+                destinationResolver: MockDecisionResolver()
+            ),
+            clock: clock,
+            logger: StubLogger()
+        )
+
+        return RootInteractor(
             chainRegistryClosure: { chainRegistry },
-            migrator: migrator,
+            launchBootstrapper: launchBootstrapper,
             logger: StubLogger(),
             resolver: MockDecisionResolver(),
             tokenManager: MockJWTTokenManager(),
             remoteConfigManager: remoteConfigManager,
-            chainRegistryConfigurator: MockChainRegistryConfigurator(),
+            chainRegistryConfigurator: chainRegistryConfigurator,
             productPrewarmer: MockProductContentPrewarmer(),
             observer: RootSetupObserver(pathMonitor: pathMonitor),
             tldProvider: tldProvider,
