@@ -75,7 +75,9 @@ extension ScheduledBackgroundTask: @unchecked Sendable {
             _ = self?.handle(task)
         }
 
-        if !accepted {
+        if accepted {
+            dependencies.logger.debug("Did register processing task with \(identifier)")
+        } else {
             dependencies.logger.error("registerRejected id=\(identifier) not in permitted identifiers")
         }
     }
