@@ -1,10 +1,10 @@
 import BackgroundExecution
-import Coinage
 import Foundation
 import StatementDelivery
 
-/// One background run: borrow the dashboard services (booting them headless when the app was not running), renew
-/// statements and allowances while a recycling pass runs alongside, then give the services back.
+/// One background run: borrow the dashboard services (booting them headless when the app was not running) and renew
+/// statements and allowances. Coinage setup inside the durability part also starts the recycling evaluator's own
+/// schedule, which recycles for as long as the process runs.
 struct StatementRenewalBackgroundWork: Sendable {
     func callAsFunction() async -> BackgroundTaskWorkOutcome {
         let manager = await DashboardServices.manager
@@ -18,25 +18,18 @@ struct StatementRenewalBackgroundWork: Sendable {
         // claim that is still in flight.
         defer { lease.release() }
 
-        async let renewal = lease.coordinator.durabilityRenewal.renewAll()
-        async let recycling = lease.coordinator.coinageService.runRecyclingPass()
+        let renewal = await lease.coordinator.durabilityRenewal.renewAll()
 
-        let fields = await Self.logFields(launchKind: launchKind, renewal: renewal, recycling: recycling)
-        return .completed(logFields: fields)
+        return .completed(logFields: Self.logFields(launchKind: launchKind, renewal: renewal))
     }
 }
 
 private extension StatementRenewalBackgroundWork {
-    static func logFields(
-        launchKind: String,
-        renewal: StatementDurabilityRenewalReport,
-        recycling: RecyclingPassOutcome
-    ) -> String {
+    static func logFields(launchKind: String, renewal: StatementDurabilityRenewalReport) -> String {
         [
             "launchKind=\(launchKind)",
             fields(prefix: "requests", renewal.chatRequests),
-            fields(prefix: "acceptances", renewal.chatAcceptances),
-            fields(recycling)
+            fields(prefix: "acceptances", renewal.chatAcceptances)
         ].joined(separator: " ")
     }
 
@@ -45,16 +38,5 @@ private extension StatementRenewalBackgroundWork {
 
         return "\(prefix)Due=\(summary.due) \(prefix)Renewed=\(summary.republished) "
             + "\(prefix)Failed=\(summary.failed) \(prefix)MissedPeriods=\(summary.missedPeriods)"
-    }
-
-    static func fields(_ outcome: RecyclingPassOutcome) -> String {
-        switch outcome {
-        case .notReady:
-            "recycling=notReady"
-        case .failed:
-            "recycling=failed"
-        case let .completed(evaluatedCoins, gated, submitted):
-            "recycleCoins=\(evaluatedCoins) recycleGated=\(gated) recycleSubmitted=\(submitted)"
-        }
     }
 }
