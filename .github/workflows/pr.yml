@@ -44,6 +44,20 @@ jobs:
             const skip = pr ? labels.includes('skip-ci') : false;
             core.setOutput('skip', skip.toString());
 
+  hardcoded-strings:
+    needs: check-skip-label
+    if: needs.check-skip-label.outputs.skip == 'false' && !startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check hardcoded UI strings
+        run: |
+          status=0
+          python3 Runscripts/check_hardcoded_strings.py "$GITHUB_WORKSPACE" > hardcoded.txt || status=$?
+          sed -E "s#^$GITHUB_WORKSPACE/([^:]+):([0-9]+): warning: (.*)#::error file=\1,line=\2::\3#" hardcoded.txt
+          exit $status
+
   build:
     needs: check-skip-label
     if: needs.check-skip-label.outputs.skip == 'false' && !startsWith(github.head_ref, 'release/')

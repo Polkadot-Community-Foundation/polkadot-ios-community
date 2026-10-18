@@ -1,0 +1,13 @@
+#!/bin/sh
+root="$(git rev-parse --show-toplevel)"
+
+if [ -z "$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')" ]; then
+    exit 0
+fi
+
+git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift' \
+    | xargs -0 python3 "$root/Runscripts/check_hardcoded_strings.py" "$root" \
+    || {
+        echo "Commit blocked: move the strings above to a string catalog and use String(localized:)."
+        exit 1
+    }

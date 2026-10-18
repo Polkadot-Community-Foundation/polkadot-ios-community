@@ -191,27 +191,42 @@ def scan(path):
             previous = code
 
 
-def swift_files(root):
+def is_checked(path, root):
+    relative = "/" + os.path.relpath(path, root)
+    return path.endswith(".swift") and relative.split("/")[1] in SCAN_DIRS and not SKIP_PATH.search(relative)
+
+
+def swift_files(root, paths):
+    if paths:
+        for path in paths:
+            path = os.path.join(root, path)
+            if os.path.isfile(path) and is_checked(path, root):
+                yield path
+        return
     for directory in SCAN_DIRS:
         for folder, _, files in os.walk(os.path.join(root, directory)):
             for name in sorted(files):
                 path = os.path.join(folder, name)
-                if name.endswith(".swift") and not SKIP_PATH.search("/" + os.path.relpath(path, root)):
+                if is_checked(path, root):
                     yield path
 
 
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else "."
-    for path in swift_files(root):
+    found = False
+    for path in swift_files(root, sys.argv[2:]):
         try:
             hits = list(scan(path))
         except OSError as error:
+            hits = []
+            found = True
             print(f"{os.path.abspath(path)}:1: warning: Hardcoded UI string check could not read this file: {error}")
-            continue
         for number, code in hits:
+            found = True
             print(f"{os.path.abspath(path)}:{number}: warning: Hardcoded UI string, "
                   f"move it to a string catalog and use String(localized:): {code}")
+    return 1 if found else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

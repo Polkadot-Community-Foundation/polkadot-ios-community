@@ -118,7 +118,7 @@ When touching legacy Operation-iOS code, prefer migrating to async/await:
 
 ### 10. Localize All User-Visible Strings
 
-All strings shown to users must go through localization. Hardcoded strings in views are flagged in reviews. The "Check Hardcoded Strings" build phase (`Runscripts/check_hardcoded_strings.py`) warns on a string literal passed to UI text, and the warning ratchet in the PR build job fails a PR that adds one.
+All strings shown to users must go through localization. Hardcoded strings in views are flagged in reviews. `Runscripts/check_hardcoded_strings.py` finds a string literal passed to UI text; it runs in the pre-commit hook (`Runscripts/hooks/pre-commit`) and in the `hardcoded-strings` job of the PR workflow, which fails the PR.
 
 ### 11. Disable Features at the Factory/Registration Level
 
@@ -221,7 +221,7 @@ These areas have old and new patterns coexisting. New code follows the north-sta
 
 - SDKs like Sentry should not run in unit tests or preview builds
 - Guard with environment checks (isRunningTests, isPreview)
-- Build scripts should also be gated per configuration (Debug excluded); lint and check phases that only print warnings run in every configuration, Debug included
+- Build scripts should also be gated per configuration (Debug excluded)
 - Build phase scripts for symbol upload (e.g., Sentry dSYMs) must exclude Debug configuration
 
 ## Build Variant Feature Flags
