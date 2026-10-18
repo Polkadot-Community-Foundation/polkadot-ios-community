@@ -8,6 +8,7 @@ enum DashboardServices {
     @MainActor static let manager = DashboardServicesManager<ServiceCoordinator>(
         bootstrapper: LaunchBootstrapper.shared,
         coordinatorFactory: ServiceCoordinatorFactory(flowStateProvider: flowStateProvider),
+        connectionRetention: ChainRegistryConnectionRetention(),
         headlessBootDeadline: .seconds(20),
         logger: Logger.shared
     )

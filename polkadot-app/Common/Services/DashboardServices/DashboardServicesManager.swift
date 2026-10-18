@@ -13,6 +13,7 @@ protocol DashboardServicesCoordinatorMaking<Coordinator> {
 final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating> {
     private let bootstrapper: LaunchBootstrapping
     private let coordinatorFactory: any DashboardServicesCoordinatorMaking<Coordinator>
+    private let connectionRetention: BackgroundConnectionRetaining
     private let headlessBootDeadline: Duration
     private let logger: LoggerProtocol
 
@@ -24,11 +25,13 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
     init(
         bootstrapper: LaunchBootstrapping,
         coordinatorFactory: any DashboardServicesCoordinatorMaking<Coordinator>,
+        connectionRetention: BackgroundConnectionRetaining,
         headlessBootDeadline: Duration,
         logger: LoggerProtocol
     ) {
         self.bootstrapper = bootstrapper
         self.coordinatorFactory = coordinatorFactory
+        self.connectionRetention = connectionRetention
         self.headlessBootDeadline = headlessBootDeadline
         self.logger = logger
     }
@@ -46,15 +49,18 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
             coordinator.startInteractive()
         }
 
-        return makeLease(.interactive, for: coordinator)
+        return makeLease(.interactive, for: coordinator, connectionHold: nil)
     }
 
-    /// Reuses the live coordinator or boots one headless, then waits for its durability part.
+    /// Reuses the live coordinator or boots one headless, keeps every chain connection awake for the lease, then waits
+    /// for the durability part.
     /// - Returns: `nil` when the app is not ready for dashboard services or the durability part failed to start.
     func acquireDurability() async -> DashboardServicesLease<Coordinator>? {
         guard let coordinator = await existingOrHeadlessCoordinator() else { return nil }
 
-        let lease = makeLease(.durability, for: coordinator)
+        // After the boot, never before: reaching the registry opens the chain store, which migrations must precede.
+        let connectionHold = connectionRetention.retainAllConnections()
+        let lease = makeLease(.durability, for: coordinator, connectionHold: connectionHold)
 
         guard await coordinator.startDurability() else {
             lease.release()
@@ -123,11 +129,17 @@ private extension DashboardServicesManager {
 
     func makeLease(
         _ demand: DashboardServicesDemand,
-        for coordinator: Coordinator
+        for coordinator: Coordinator,
+        connectionHold: (any ConnectionHold)?
     ) -> DashboardServicesLease<Coordinator> {
         leaseCounts[demand, default: 0] += 1
 
-        return DashboardServicesLease(coordinator: coordinator, demand: demand, generation: generation) { [weak self] in
+        return DashboardServicesLease(
+            coordinator: coordinator,
+            demand: demand,
+            generation: generation,
+            connectionHold: connectionHold
+        ) { [weak self] in
             self?.didRelease($0)
         }
     }

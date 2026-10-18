@@ -13,6 +13,7 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
     let demand: DashboardServicesDemand
     let generation: UInt64
 
+    private let connectionHold: (any ConnectionHold)?
     private let onRelease: @MainActor (DashboardServicesLease) -> Void
     private let isReleased = OSAllocatedUnfairLock(initialState: false)
 
@@ -20,11 +21,13 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
         coordinator: Coordinator,
         demand: DashboardServicesDemand,
         generation: UInt64,
+        connectionHold: (any ConnectionHold)?,
         onRelease: @escaping @MainActor (DashboardServicesLease) -> Void
     ) {
         self.coordinator = coordinator
         self.demand = demand
         self.generation = generation
+        self.connectionHold = connectionHold
         self.onRelease = onRelease
     }
 
@@ -36,6 +39,7 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
 
         guard !wasReleased else { return }
 
+        connectionHold?.release()
         Task { @MainActor [onRelease] in onRelease(self) }
     }
 }

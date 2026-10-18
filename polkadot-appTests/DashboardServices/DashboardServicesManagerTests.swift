@@ -126,6 +126,41 @@ struct DashboardServicesManagerTests {
         #expect(coordinator.stopInteractiveCallCount == 0)
     }
 
+    @Test func durabilityLeaseKeepsConnectionsAwakeUntilReleased() async throws {
+        let retention = ConnectionRetentionSpy()
+        let manager = makeManager(connectionRetention: retention)
+
+        let lease = try #require(await manager.acquireDurability())
+        #expect(retention.heldCount == 1)
+
+        lease.release()
+
+        #expect(retention.retainCount == 1)
+        #expect(retention.heldCount == 0)
+    }
+
+    @Test func interactiveLeaseLeavesConnectionsToTheForegroundApp() throws {
+        let retention = ConnectionRetentionSpy()
+        let manager = makeManager(connectionRetention: retention)
+
+        _ = try #require(manager.acquireInteractive())
+
+        #expect(retention.retainCount == 0)
+    }
+
+    @Test func failedDurabilityStartReleasesConnections() async {
+        let retention = ConnectionRetentionSpy()
+        let manager = makeManager(
+            factory: DashboardServicesCoordinatorFactorySpy(durabilityStarts: false),
+            connectionRetention: retention
+        )
+
+        _ = await manager.acquireDurability()
+
+        #expect(retention.retainCount == 1)
+        #expect(retention.heldCount == 0)
+    }
+
     @Test func failedDurabilityStartDropsCoordinator() async {
         let factory = DashboardServicesCoordinatorFactorySpy(durabilityStarts: false)
         let manager = makeManager(factory: factory)
@@ -142,11 +177,13 @@ struct DashboardServicesManagerTests {
 private extension DashboardServicesManagerTests {
     func makeManager(
         bootstrapper: LaunchBootstrapperStub = LaunchBootstrapperStub(),
-        factory: DashboardServicesCoordinatorFactorySpy? = nil
+        factory: DashboardServicesCoordinatorFactorySpy? = nil,
+        connectionRetention: ConnectionRetentionSpy = ConnectionRetentionSpy()
     ) -> DashboardServicesManager<DashboardServicesCoordinatorSpy> {
         DashboardServicesManager(
             bootstrapper: bootstrapper,
             coordinatorFactory: factory ?? DashboardServicesCoordinatorFactorySpy(),
+            connectionRetention: connectionRetention,
             headlessBootDeadline: .seconds(1),
             logger: StubLogger()
         )
