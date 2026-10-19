@@ -192,12 +192,12 @@ private extension DSTabBarContainer {
         GeometryReader { proxy in
             DSTabBarShape()
                 .stroke(
-                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Spec.barRimStops, size: proxy.size),
+                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.barRimStops, size: proxy.size),
                     lineWidth: DSTabBarStyle.strokeWidth * 2
                 )
                 .overlay {
                     DSTabBarShape()
-                        .stroke(DSTabBarStyle.Spec.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
+                        .stroke(DSTabBarStyle.Palette.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
                 }
                 .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
         }
@@ -210,7 +210,7 @@ private extension DSTabBarContainer {
             DSTabBarCutoutEdge()
                 .stroke(
                     LinearGradient(
-                        colors: DSTabBarStyle.Spec.notchGlintColors,
+                        colors: DSTabBarStyle.Palette.notchGlintColors,
                         startPoint: UnitPoint(x: 0.5 - halfShoulder, y: 0.5),
                         endPoint: UnitPoint(x: 0.5 + halfShoulder, y: 0.5)
                     ),
@@ -232,7 +232,7 @@ private extension DSTabBarContainer {
             .padding(.bottom, DSTabBarStyle.barShadowSpread)
             .padding(.top, DSTabBarStyle.barShadowTopInset)
             .shadow(
-                color: DSTabBarStyle.Spec.barShadow,
+                color: DSTabBarStyle.Palette.barShadow,
                 radius: DSTabBarStyle.barShadowRadius,
                 y: DSTabBarStyle.barShadowY
             )

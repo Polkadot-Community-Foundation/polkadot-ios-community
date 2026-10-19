@@ -278,7 +278,7 @@ private extension DSTabBarCenterControl {
     var glyph: some View {
         DSTabBarScanFrameShape()
             .stroke(
-                DSTabBarStyle.Spec.centerGlyph,
+                DSTabBarStyle.Palette.centerGlyph,
                 style: StrokeStyle(
                     lineWidth: DSTabBarScanFrameShape.strokeWidth * glyphSize / DSTabBarScanFrameShape.gridSide,
                     lineCap: .round,
@@ -312,7 +312,7 @@ private extension DSTabBarCenterControl {
     /// so a drag there reaches the content, which moves the panel through `centerPanelDrag`.
     var grabber: some View {
         Capsule()
-            .fill(DSTabBarStyle.Spec.grabber)
+            .fill(DSTabBarStyle.Palette.grabber)
             .frame(width: DSTabBarStyle.centerGrabberWidth, height: DSTabBarStyle.centerGrabberThickness)
             .padding(.top, DSTabBarStyle.centerGrabberTopInset)
             .frame(maxWidth: .infinity, alignment: .top)
@@ -631,14 +631,14 @@ private extension DSTabBarCenterControl {
         GeometryReader { proxy in
             DSTabBarMorphShape()
                 .strokeBorder(
-                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Spec.centerRestingRimStops, size: proxy.size),
+                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.centerRestingRimStops, size: proxy.size),
                     lineWidth: DSTabBarStyle.strokeWidth
                 )
                 .opacity(1 - openBlend)
                 .overlay {
                     DSTabBarMorphShape()
                         .strokeBorder(
-                            DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Spec.barRimStops, size: proxy.size),
+                            DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.barRimStops, size: proxy.size),
                             lineWidth: DSTabBarStyle.strokeWidth
                         )
                         .opacity(openBlend)

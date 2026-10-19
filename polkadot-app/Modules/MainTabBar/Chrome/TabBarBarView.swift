@@ -84,7 +84,7 @@ private struct TabBarSlotView: View {
     }
 
     private var iconColor: Color {
-        isEmphasized ? DSTabBarStyle.Spec.activeIcon : DSTabBarStyle.Spec.inactiveIcon
+        isEmphasized ? DSTabBarStyle.Palette.activeIcon : DSTabBarStyle.Palette.inactiveIcon
     }
 
     var body: some View {

@@ -18,19 +18,30 @@ public final class ScanPanelViewLayout: UIView {
     /// roughly a second. It sits behind the preview, which fades in over it.
     private let placeholderView: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor(DSTabBarStyle.Spec.cameraBacking)
+        view.backgroundColor = UIColor(DSTabBarStyle.Palette.cameraBacking)
         view.layer.cornerRadius = DSRadii.large
         view.layer.masksToBounds = true
         return view
     }()
 
-    private let scanButton = DSIconButton(
-        style: .secondary,
-        shape: .pill,
-        size: .mediumIncreased,
-        icon: UIImage(resource: .scan18),
-        glass: true
-    )
+    private let scanButton: UIButton = {
+        let button = UIButton()
+        let material = DSTabBarFieldMaterialView(cornerRadius: 24)
+        let icon = UIImageView(image: UIImage(resource: .scan18).withRenderingMode(.alwaysTemplate))
+        icon.tintColor = UIColor(DSTabBarStyle.Palette.fieldIcon)
+        icon.contentMode = .scaleAspectFit
+        icon.isUserInteractionEnabled = false
+        button.addSubview(material)
+        button.addSubview(icon)
+        button.snp.makeConstraints { $0.size.equalTo(48) }
+        material.snp.makeConstraints { $0.edges.equalToSuperview() }
+        icon.snp.makeConstraints {
+            $0.size.equalTo(24)
+            $0.center.equalToSuperview()
+        }
+        button.accessibilityLabel = String(localized: .searchContactScanButton)
+        return button
+    }()
 
     private let contentStack: UIStackView = {
         let stack = UIStackView()
@@ -43,7 +54,7 @@ public final class ScanPanelViewLayout: UIView {
     private let searchRowStack: UIStackView = {
         let stack = UIStackView()
         stack.axis = .horizontal
-        stack.spacing = DSSpacings.small
+        stack.spacing = 10
         stack.alignment = .center
         return stack
     }()
@@ -74,7 +85,7 @@ public final class ScanPanelViewLayout: UIView {
             make.height.equalTo(Self.searchRowHeight)
         }
 
-        scanButton.onTap = { [weak self] in self?.onCameraTapped?() }
+        scanButton.addAction(UIAction { [weak self] _ in self?.onCameraTapped?() }, for: .touchUpInside)
 
         contentStack.snp.makeConstraints { make in
             make.top.equalToSuperview()
@@ -122,6 +133,7 @@ public final class ScanPanelViewLayout: UIView {
         } else {
             resultsCollapsedConstraint?.activate()
         }
+        searchRow.setSearchFocused(focused)
         resultsView.alpha = 0
         if focused {
             UIView.animate(

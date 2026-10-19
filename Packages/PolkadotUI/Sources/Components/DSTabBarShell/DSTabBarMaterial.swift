@@ -17,7 +17,7 @@ struct DSTabBarCenterMaterial: View {
         DSTabBarVariableBlur(intensity: DSTabBarStyle.centerBlurIntensity)
             .overlay {
                 LinearGradient(
-                    colors: [DSTabBarStyle.Spec.glassLight, DSTabBarStyle.Spec.glassDark],
+                    colors: [DSTabBarStyle.Palette.glassLight, DSTabBarStyle.Palette.glassDark],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -25,7 +25,7 @@ struct DSTabBarCenterMaterial: View {
             }
             .overlay {
                 Rectangle()
-                    .fill(DSTabBarStyle.Spec.centerOpenFill)
+                    .fill(DSTabBarStyle.Palette.centerOpenFill)
                     .opacity(openBlend)
             }
     }
@@ -37,7 +37,7 @@ public struct DSTabBarDimLayer: View {
 
     public var body: some View {
         DSTabBarVariableBlur(intensity: DSTabBarStyle.dimBlurIntensity)
-            .overlay(DSTabBarStyle.Spec.dimWash)
+            .overlay(DSTabBarStyle.Palette.dimWash)
     }
 }
 
@@ -50,7 +50,7 @@ private extension DSTabBarBarMaterial {
             Rectangle()
                 .fill(
                     EllipticalGradient(
-                        colors: [DSTabBarStyle.Spec.glassLight, DSTabBarStyle.Spec.glassDark],
+                        colors: [DSTabBarStyle.Palette.glassLight, DSTabBarStyle.Palette.glassDark],
                         center: .top,
                         startRadiusFraction: 0,
                         endRadiusFraction: DSTabBarStyle.barWashRadiusFraction

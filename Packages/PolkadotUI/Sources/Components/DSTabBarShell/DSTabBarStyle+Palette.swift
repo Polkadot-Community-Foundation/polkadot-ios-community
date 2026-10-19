@@ -2,7 +2,7 @@ import SwiftUI
 
 public extension DSTabBarStyle {
     /// Tab bar values with no exact design-system match. They are the same in every theme.
-    enum Spec {
+    enum Palette {
         /// A flat fill rather than glass, because glass samples whatever scrolls under the bar and the
         /// selection would drift in colour from screen to screen.
         public static let selectionFill = Color.white.opacity(0.10)
@@ -18,6 +18,19 @@ public extension DSTabBarStyle {
         public static let grabber = Color.white.opacity(0.32)
         /// The tile behind the camera while it starts.
         public static let cameraBacking = Color(hex: 0x1A1B1F)
+
+        // MARK: Search field and list
+
+        public static let fieldFill = Color.white.opacity(0.06)
+        public static let fieldTopLine = Color.white.opacity(0.18)
+        public static let fieldOutline = Color.white.opacity(0.08)
+        public static let fieldIcon = Color(hex: 0xECECEC)
+        public static let placeholder = Color(hex: 0x999999)
+        public static let primaryText = Color(hex: 0xF4F4F5)
+        public static let sectionHeader = Color(hex: 0x8E8E96)
+        public static let caret = Color(hex: 0x0A84FF)
+        public static let clearFill = Color(hex: 0x3A3A3C)
+        public static let clearGlyph = Color(hex: 0xE5E5EA)
 
         /// The light end of the glass wash: the top centre of the bar and the top of the centre control.
         public static let glassLight = Color(hex: 0x919191).opacity(0.2)
@@ -66,5 +79,25 @@ public extension DSTabBarStyle {
                 Gradient.Stop(color: .white.opacity(opacity), location: location)
             }
         }
+    }
+}
+
+extension DSTabBarStyle {
+    enum SearchTypography {
+        static let sectionHeader = LabelStyle(
+            font: interFont(.interMedium, size: 12),
+            lineHeight: 16,
+            tracking: 0.72
+        )
+        static let rowName = LabelStyle(font: interFont(.interSemiBold, size: 16), lineHeight: 22)
+        static let query = LabelStyle(font: interFont(.interRegular, size: 16), lineHeight: 22)
+        static var avatarInitial: Font { Font(interFont(.interSemiBold, size: 20)) }
+    }
+}
+
+private extension DSTabBarStyle.SearchTypography {
+    static func interFont(_ font: CustomFont, size: CGFloat) -> UIFont {
+        UIFont.registerAllFontsIfNeeded()
+        return UIFont(name: font.name, size: size) ?? .systemFont(ofSize: size)
     }
 }

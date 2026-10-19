@@ -22,12 +22,12 @@ enum DSTabBarSelectionPill {
     static let matchedGeometryId = "selection"
 
     static func fill(_ shape: some InsettableShape) -> some View {
-        shape.fill(DSTabBarStyle.Spec.selectionFill)
+        shape.fill(DSTabBarStyle.Palette.selectionFill)
             .overlay {
                 shape.strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: DSTabBarStyle.Spec.selectionTopLine, location: 0),
+                            .init(color: DSTabBarStyle.Palette.selectionTopLine, location: 0),
                             .init(color: .clear, location: 0.3)
                         ],
                         startPoint: .top,
