@@ -20,6 +20,7 @@ public struct DSTabBarContainer<
     private let availableHeight: CGFloat
     private let selectedSlot: Int?
     private let isBarHidden: Bool
+    private let playsBarHiddenFeedback: Bool
     private let openProgress: CGFloat
     private let first: First
     private let second: Second
@@ -42,14 +43,16 @@ public struct DSTabBarContainer<
     /// is the index, 0 to 3 left to right, of the slot the selection pill sits behind. `nil` draws no bar pill,
     /// which is also the case while a shelf view holds the pill through `dsTabBarSelectionPill`.
     /// `isBarHidden` fades the bar out, shelf included, leaving the centre slot. Changing it while the centre panel
-    /// is fully open plays a medium impact. `openProgress` is the centre control's open progress, 0 closed to 1 open;
-    /// the bar row blurs, fades and rises with it. A tap on any slot plays a selection tick.
+    /// is fully open plays a medium impact unless `playsBarHiddenFeedback` is false. `openProgress` is the centre
+    /// control's open progress, 0 closed to 1 open; the bar row blurs, fades and rises with it. A tap on any slot
+    /// plays a selection tick.
     public init(
         isShelfOpen: Binding<Bool>,
         shelfContentHeight: Binding<CGFloat>,
         availableHeight: CGFloat,
         selectedSlot: Int?,
         isBarHidden: Bool,
+        playsBarHiddenFeedback: Bool = true,
         openProgress: CGFloat,
         @ViewBuilder first: () -> First,
         @ViewBuilder second: () -> Second,
@@ -63,6 +66,7 @@ public struct DSTabBarContainer<
         self.availableHeight = availableHeight
         self.selectedSlot = selectedSlot
         self.isBarHidden = isBarHidden
+        self.playsBarHiddenFeedback = playsBarHiddenFeedback
         self.openProgress = openProgress
         self.first = first()
         self.second = second()
@@ -103,7 +107,9 @@ public struct DSTabBarContainer<
         .allowsHitTesting(!isBarHidden)
         .accessibilityHidden(isBarHidden)
         .animation(barFadeAnimation, value: isBarHidden)
-        .sensoryFeedback(trigger: isBarHidden) { _, _ in openProgress == 1 ? .impact(weight: .medium) : nil }
+        .sensoryFeedback(trigger: isBarHidden) { _, _ in
+            playsBarHiddenFeedback && openProgress == 1 ? .impact(weight: .medium) : nil
+        }
         .overlay(alignment: .bottom) { center }
     }
 }

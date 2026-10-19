@@ -83,6 +83,24 @@ final class TabBarBottomChromeController: UIViewController {
     /// Fires once the centre panel has settled fully open or fully closed, not during the drag.
     var onCenterPanelDidChangeOpen: ((Bool) -> Void)?
 
+    /// Fires when a swipe up on the centre button begins, before the panel is committed open.
+    var onCenterPanelSwipeOpenBegan: (() -> Void)? {
+        didSet {
+            barModel.onCenterPanelSwipeOpenBegan = onCenterPanelSwipeOpenBegan == nil
+                ? nil
+                : { [weak self] in self?.onCenterPanelSwipeOpenBegan?() }
+        }
+    }
+
+    /// Fires as a swipe-opened centre panel lands, once the panel is committed open, so the host can focus search.
+    var onCenterPanelSwipeOpenLanding: (() -> Void)? {
+        didSet {
+            barModel.onCenterPanelSwipeOpenLanding = onCenterPanelSwipeOpenLanding == nil
+                ? nil
+                : { [weak self] in self?.centerPanelSwipeOpenLanding() }
+        }
+    }
+
     /// Builds the centre control's content. Called when the control first shows it, not when the panel commits.
     var makeCenterContent: (() -> UIViewController?)?
 
@@ -207,8 +225,9 @@ final class TabBarBottomChromeController: UIViewController {
         panelController.setPanel(kind)
     }
 
-    /// Fades the bar row out or back in. An open centre panel stays.
-    func setBarHidden(_ hidden: Bool) {
+    /// Fades the bar row out or back in. An open centre panel stays. `playsFeedback` false skips the medium impact.
+    func setBarHidden(_ hidden: Bool, playsFeedback: Bool = true) {
+        barModel.playsBarHiddenFeedback = playsFeedback
         barModel.isBarHidden = hidden
     }
 
@@ -325,6 +344,12 @@ private extension TabBarBottomChromeController {
         onCenterPanelWillClose?()
         barModel.setCenterPanelOpen(false, duration: duration)
         setPanel(nil)
+    }
+
+    /// Commits the panel open before the host focuses search, so the keyboard lift applies as the keyboard rises.
+    func centerPanelSwipeOpenLanding() {
+        setPanel(.content(.scan))
+        onCenterPanelSwipeOpenLanding?()
     }
 
     /// Only the centre control's own panel is driven here; another open panel is left alone.

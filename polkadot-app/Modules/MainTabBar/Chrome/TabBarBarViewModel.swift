@@ -15,6 +15,8 @@ final class TabBarBarViewModel {
     var activeActionItemIndex: Int?
     /// Whether the bar row is faded out, leaving only an open centre panel. Set while the panel's search is focused.
     var isBarHidden = false
+    /// Whether the next `isBarHidden` change plays the container's medium impact.
+    var playsBarHiddenFeedback = true
     var onSlotTapped: ((Int) -> Void)?
 
     /// Whether the shelf is open. Written by the chrome from the open panel, never by the shelf itself.
@@ -66,6 +68,10 @@ final class TabBarBarViewModel {
     /// Fires when the centre control would settle closed from open. The chrome closes the panel, so the close
     /// animates through `centerProgress` like an outside tap. It receives the close's duration, nil for the default.
     var onCenterPanelCloseRequested: ((TimeInterval?) -> Void)?
+    /// Forwarded from the centre control's swipe open. Nil keeps a swipe opening like a tap.
+    var onCenterPanelSwipeOpenBegan: (() -> Void)?
+    /// Forwarded from the centre control's swipe landing, once the open is nearly done.
+    var onCenterPanelSwipeOpenLanding: (() -> Void)?
 
     /// Matches the centre control's own settle, so a UIKit-driven move looks like a tap. Snaps under Reduce Motion.
     /// Once the move has logically finished it reports through `onCenterPanelOpenChanged`, as a settle from the

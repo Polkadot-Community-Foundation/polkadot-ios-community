@@ -16,6 +16,7 @@ struct TabBarBarView: View {
             availableHeight: model.availablePanelHeight,
             selectedSlot: model.selectedSlot,
             isBarHidden: model.isBarHidden,
+            playsBarHiddenFeedback: model.playsBarHiddenFeedback,
             openProgress: model.centerProgress,
             first: { slot(at: 0) },
             second: { slot(at: 1) },
@@ -28,7 +29,9 @@ struct TabBarBarView: View {
                     accessibilityLabel: String(localized: .Products.productTabsAccessibilityScanner),
                     openAccessibilityLabel: String(localized: .Products.productTabsAccessibilityCloseSearch),
                     onSettled: { model.onCenterPanelOpenChanged?($0) },
-                    onCloseRequested: { model.onCenterPanelCloseRequested?($0) }
+                    onCloseRequested: { model.onCenterPanelCloseRequested?($0) },
+                    onSwipeOpenBegan: model.onCenterPanelSwipeOpenBegan,
+                    onSwipeOpenLanding: model.onCenterPanelSwipeOpenLanding
                 ) {
                     TabBarScanPanelContent(makeController: model.makeCenterContent)
                 }

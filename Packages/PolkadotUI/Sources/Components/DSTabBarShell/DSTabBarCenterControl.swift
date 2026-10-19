@@ -15,6 +15,8 @@ public struct DSTabBarCenterControl<Content: View>: View {
     private let openAccessibilityLabel: String
     private let onSettled: (Bool) -> Void
     private let onCloseRequested: ((TimeInterval?) -> Void)?
+    private let onSwipeOpenBegan: (() -> Void)?
+    private let onSwipeOpenLanding: (() -> Void)?
     private let content: Content
 
     @State private var dragStart: CGFloat?
@@ -37,6 +39,14 @@ public struct DSTabBarCenterControl<Content: View>: View {
     /// Bumped to play the light impact when the panel closes.
     @State private var lightFeedback = 0
     @GestureState private var isDragging = false
+    /// Whether a swipe open has begun and has not yet reached its landing.
+    @State private var isSwipeOpen = false
+    /// Whether a swipe into Search is past the halfway point, so crossing it plays a haptic.
+    @State private var isSwipePastHalfway = false
+    /// Skips the light impact of the close ending a swipe into Search, whose haptics played at the halfway crossings.
+    @State private var mutesNextCloseFeedback = false
+    /// The pending landing. A new drag cancels it.
+    @State private var swipeLanding: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// `contentHeight` is the height `content` takes when laid out at the panel's open width. `accessibilityLabel`
@@ -44,7 +54,9 @@ public struct DSTabBarCenterControl<Content: View>: View {
     /// open. `onSettled` receives whether the panel ended open after each settle the control runs. It is not called
     /// while a drag is in flight. `onCloseRequested` is called instead of animating closed when the control would
     /// settle closed from open. It receives the close's duration, nil for the default, and the host closes the panel
-    /// through `progress`.
+    /// through `progress`. `onSwipeOpenBegan` is called once per drag when a drag on the button that began short
+    /// of fully open moves up past the tap slop. `onSwipeOpenLanding` is called when that drag's release settles
+    /// open and `swipeLandingFraction` of the settle has run, at once under Reduce Motion.
     public init(
         progress: Binding<CGFloat>,
         contentHeight: CGFloat,
@@ -52,6 +64,8 @@ public struct DSTabBarCenterControl<Content: View>: View {
         openAccessibilityLabel: String,
         onSettled: @escaping (Bool) -> Void,
         onCloseRequested: ((TimeInterval?) -> Void)? = nil,
+        onSwipeOpenBegan: (() -> Void)? = nil,
+        onSwipeOpenLanding: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         _progress = progress
@@ -60,6 +74,8 @@ public struct DSTabBarCenterControl<Content: View>: View {
         self.openAccessibilityLabel = openAccessibilityLabel
         self.onSettled = onSettled
         self.onCloseRequested = onCloseRequested
+        self.onSwipeOpenBegan = onSwipeOpenBegan
+        self.onSwipeOpenLanding = onSwipeOpenLanding
         self.content = content()
     }
 
@@ -92,7 +108,7 @@ public struct DSTabBarCenterControl<Content: View>: View {
                 unmountContentIfClosed()
             }
             if new == 0, old > 0, dragStart == nil {
-                lightFeedback += 1
+                playCloseFeedback()
             }
             guard dragStart == nil, old != new else {
                 return
@@ -154,7 +170,7 @@ private extension DSTabBarCenterControl {
     var pressMinimumHold: Double { 0.15 }
 
     /// Distance the finger travels to open the panel fully.
-    var travel: CGFloat { max(1, expandedHeight - DSTabBarStyle.centerButtonSize) }
+    var travel: CGFloat { max(minimumTravel, expandedHeight - DSTabBarStyle.centerButtonSize) }
 
     var expandedHeight: CGFloat {
         DSTabBarStyle.centerPanelHeight(contentHeight: contentHeight)
@@ -165,6 +181,12 @@ private extension DSTabBarCenterControl {
 
     /// Movement the finger makes before the panel starts to follow it, so a tap never nudges the panel.
     var dragStartDistance: CGFloat { 10 }
+
+    /// Shortest distance the finger travels to open the panel fully.
+    var minimumTravel: CGFloat { 120 }
+
+    /// Share of a swipe's settle open after which the host is told it is landing.
+    var swipeLandingFraction: Double { 0.6 }
 
     /// Share of the finger's travel past fully open that the panel stretches by.
     var stretchFraction: CGFloat { 1.0 / 3 }
@@ -329,6 +351,8 @@ private extension DSTabBarCenterControl {
             }
             .onChanged { value in
                 followDrag(translationHeight: value.translation.height)
+                beginSwipeOpenIfNeeded(translationHeight: value.translation.height)
+                playSwipeHalfwayCrossing()
             }
             .onEnded { value in
                 let start = dragStart ?? progress
@@ -369,6 +393,10 @@ private extension DSTabBarCenterControl {
     func followDrag(translationHeight: CGFloat) {
         if dragStart == nil {
             adoptPresentedProgress()
+            swipeLanding?.cancel()
+            swipeLanding = nil
+            isSwipeOpen = false
+            mutesNextCloseFeedback = false
         }
         let start = dragStart ?? progress
         dragStart = start
@@ -380,6 +408,34 @@ private extension DSTabBarCenterControl {
         progress = clamped
         stretch = max(0, unclamped - 1) * travel * stretchFraction
         reveal = dragReveal(at: clamped)
+    }
+
+    /// Begins a swipe open once a button drag that began short of fully open moves up past the tap slop.
+    func beginSwipeOpenIfNeeded(translationHeight: CGFloat) {
+        guard onSwipeOpenBegan != nil,
+              !isSwipeOpen,
+              let start = dragStart,
+              start < 1,
+              translationHeight <= -tapSlop
+        else {
+            return
+        }
+        isSwipeOpen = true
+        isSwipePastHalfway = progress >= halfwayProgress
+        onSwipeOpenBegan?()
+    }
+
+    /// Plays a medium impact each time a swipe into Search carries the panel across the halfway point.
+    func playSwipeHalfwayCrossing() {
+        guard isSwipeOpen else {
+            return
+        }
+        let isPast = progress >= halfwayProgress
+        guard isPast != isSwipePastHalfway else {
+            return
+        }
+        isSwipePastHalfway = isPast
+        mediumFeedback += 1
     }
 
     /// Stops a running settle at the progress on screen, so a new drag or tap starts from the shape the user sees.
@@ -408,15 +464,22 @@ private extension DSTabBarCenterControl {
 
     /// Settles the panel where the release leaves it. `velocityHeight` is positive downward, like the translations.
     func endDrag(velocityHeight: CGFloat) {
+        let isSwipe = isSwipeOpen
         let upwardVelocity = -velocityHeight
         let start = dragStart ?? progress
         dragStart = nil
         let target = releaseTarget(upwardVelocity: upwardVelocity)
-        if target == 1, start < 1 {
-            mediumFeedback += 1
-        }
-        if target == 0, progress == 0, start > 0 {
-            lightFeedback += 1
+        if isSwipe {
+            if target == 0, progress > 0 {
+                mutesNextCloseFeedback = true
+            }
+        } else {
+            if target == 1, start < 1 {
+                mediumFeedback += 1
+            }
+            if target == 0, progress == 0, start > 0 {
+                lightFeedback += 1
+            }
         }
         settle(to: target, duration: releaseDuration(to: target, upwardVelocity: upwardVelocity))
     }
@@ -425,6 +488,15 @@ private extension DSTabBarCenterControl {
     func cancelDrag() {
         dragStart = nil
         settle(to: progress > 0.5 ? 1 : 0)
+    }
+
+    /// Plays the light impact of a close, unless the close ends a swipe into Search.
+    func playCloseFeedback() {
+        guard !mutesNextCloseFeedback else {
+            mutesNextCloseFeedback = false
+            return
+        }
+        lightFeedback += 1
     }
 
     /// A fast flick decides by where it would carry the panel in `flickLookahead` seconds. A slow release decides
@@ -457,6 +529,11 @@ private extension DSTabBarCenterControl {
     func settle(to target: CGFloat, duration: Double? = nil) {
         if target == 1 {
             mountContent()
+            scheduleSwipeLanding(duration: duration)
+        } else {
+            isSwipeOpen = false
+            swipeLanding?.cancel()
+            swipeLanding = nil
         }
         if target == 0, progress > 0 || stretch > 0, let onCloseRequested {
             requestClose(duration: duration, onCloseRequested: onCloseRequested)
@@ -480,6 +557,22 @@ private extension DSTabBarCenterControl {
             }
             onSettled(target == 1)
             unmountContentIfClosed()
+        }
+    }
+
+    /// Tells the host a swipe is landing once `swipeLandingFraction` of its open has run, at once under Reduce Motion.
+    func scheduleSwipeLanding(duration: Double?) {
+        guard isSwipeOpen else {
+            return
+        }
+        isSwipeOpen = false
+        let delay = reduceMotion ? 0 : swipeLandingFraction * (duration ?? DSTabBarStyle.centerDuration)
+        swipeLanding = Task {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, progress == 1, dragStart == nil else {
+                return
+            }
+            onSwipeOpenLanding?()
         }
     }
 
@@ -627,6 +720,7 @@ private struct PresentedProgressTracker: GeometryEffect {
 private extension DSTabBarCenterControl {
     /// Hairline that catches the light along the edge. The closed button and the open panel each have their own
     /// gradient, which cross-fade with `openBlend`. A border stroke, so the clip leaves its full width.
+    /// Rendered as a drawing group, because SwiftUI rasterises gradient strokes on the CPU on every frame of the morph.
     var rim: some View {
         GeometryReader { proxy in
             DSTabBarMorphShape()
@@ -644,5 +738,6 @@ private extension DSTabBarCenterControl {
                         .opacity(openBlend)
                 }
         }
+        .drawingGroup()
     }
 }

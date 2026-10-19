@@ -9,6 +9,7 @@ final class ScanPanelViewController: UIViewController, ViewHolder {
     private let scannerController: UIViewController & ScanPanelScannerControlling
     private let presenter: SearchContactPresenterProtocol
     private var isSearchFocused = false
+    private var isSearchPending = false
     private var isClosing = false
 
     var onChatFound: ((ChatOpenModel) -> Void)?
@@ -63,9 +64,31 @@ final class ScanPanelViewController: UIViewController, ViewHolder {
         cancelSearch()
     }
 
+    /// Shows the Search state's layout without focus while a swipe carries the panel toward it.
+    /// The bar keeps the Scan state's look until focus.
+    func setSearchPending(_ pending: Bool) {
+        guard pending != isSearchPending, !isSearchFocused else {
+            return
+        }
+        isSearchPending = pending
+        if pending {
+            scannerController.setCaptureActive(false)
+        }
+        let layout = rootView
+        DSTabBarStyle.animateCenterChange(in: view) {
+            layout.setSearchFocused(pending)
+        }
+        onContentHeightChanged?()
+    }
+
+    /// Focuses the search field, which takes the panel into the Search state.
+    func focusSearch() {
+        rootView.searchRow.searchField.becomeFirstResponder()
+    }
+
     /// The height this panel declares. The tab bar chrome reads it whenever it sizes the open panel.
     func declaredContentHeight() -> TabBarCenterContentHeight {
-        guard !isSearchFocused else {
+        guard !isSearchFocused, !isSearchPending else {
             return .fill
         }
         return .fits(ScanPanelViewLayout.declaredHeight)
@@ -110,9 +133,13 @@ private extension ScanPanelViewController {
         isSearchFocused = focused
         scannerController.setCaptureActive(!focused && !isClosing)
 
+        let wasPending = isSearchPending
+        isSearchPending = false
         let layout = rootView
         DSTabBarStyle.animateCenterChange(in: view) {
-            layout.setSearchFocused(focused)
+            if !(focused && wasPending) {
+                layout.setSearchFocused(focused)
+            }
         }
         onContentHeightChanged?()
         onSearchFocusChanged?(focused)
@@ -138,6 +165,6 @@ extension ScanPanelViewController {
             isClosing = false
         }
         // Search keeps the camera off; ending focus restarts it.
-        scannerController.setCaptureActive(active && !isSearchFocused)
+        scannerController.setCaptureActive(active && !isSearchFocused && !isSearchPending)
     }
 }
