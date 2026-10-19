@@ -192,6 +192,11 @@ final class TabBarBottomChromeController: UIViewController {
         barModel.shelfChips = chips
         barModel.mountedChipId = selected
         updateActiveActionIndex()
+        // The last product closing empties the grid, so the shelf it opened from closes too.
+        guard chips.isEmpty, panelController.open?.action == .spaTabs else {
+            return
+        }
+        setPanel(nil)
     }
 
     func setChainStatus(_ rows: [ChainConnectionStatusViewModel]) {
