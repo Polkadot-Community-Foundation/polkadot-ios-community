@@ -92,7 +92,7 @@ private extension OutgoingStatementRenewer {
                 try await dependencies.store.markAbandoned(input)
             } else if candidate.period < period {
                 due.append(candidate)
-            } else if try await !isStored(input, period: candidate.period) {
+            } else if await !isStored(input, period: candidate.period) {
                 due.append(candidate)
             }
         }
