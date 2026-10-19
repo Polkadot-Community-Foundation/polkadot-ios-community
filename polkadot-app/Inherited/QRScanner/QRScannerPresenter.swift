@@ -124,6 +124,10 @@ class QRScannerPresenter: QRScannerPresenterProtocol {
 }
 
 extension QRScannerPresenter: @MainActor QRCaptureServiceDelegate {
+    func qrCapture(service _: QRCaptureServiceProtocol, willStart captureSession: AVCaptureSession) {
+        view?.attachPreview(to: captureSession)
+    }
+
     func qrCapture(service _: QRCaptureServiceProtocol, didSetup captureSession: AVCaptureSession) {
         DispatchQueue.main.async {
             self.view?.didReceive(session: captureSession)

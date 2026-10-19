@@ -52,9 +52,12 @@ final class ScanPanelViewController: UIViewController, ViewHolder {
     }
 
     /// Suspends capture before the search is cancelled, so the focus change that cancelling causes does not
-    /// restart it while the panel closes. Suspending detaches the preview first, so tearing the panel down does
-    /// not reconfigure a session that is stopping.
+    /// restart it while the panel closes.
+    /// The chrome may call it twice for one close; the second call does nothing.
     func prepareForClose() {
+        guard !isClosing else {
+            return
+        }
         isClosing = true
         scannerController.setCaptureActive(false)
         cancelSearch()
@@ -134,6 +137,7 @@ extension ScanPanelViewController {
         if active {
             isClosing = false
         }
-        scannerController.setCaptureActive(active)
+        // Search keeps the camera off; ending focus restarts it.
+        scannerController.setCaptureActive(active && !isSearchFocused)
     }
 }

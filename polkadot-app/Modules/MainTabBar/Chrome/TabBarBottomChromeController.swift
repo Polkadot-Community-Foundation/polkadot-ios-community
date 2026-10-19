@@ -315,7 +315,9 @@ private extension TabBarBottomChromeController {
     /// Animates the centre control closed with the requested duration, then commits the close. The progress moves
     /// here rather than in `applyCommittedPanel`, because a commit of an already closed panel does nothing, and a
     /// centre control that was grabbed mid-close would otherwise stay where it was left.
+    /// The panel is told first, because the control can remove the content as soon as the progress reaches zero.
     func closeCenterPanel(duration: TimeInterval?) {
+        onCenterPanelWillClose?()
         barModel.setCenterPanelOpen(false, duration: duration)
         setPanel(nil)
     }

@@ -88,7 +88,7 @@ public struct DSTabBarCenterControl<Content: View>: View {
         .onChange(of: progress) { old, new in
             if new > 0 {
                 mountContent()
-            } else {
+            } else if dragStart == nil {
                 unmountContentIfClosed()
             }
             if new == 0, old > 0, dragStart == nil {
@@ -467,6 +467,7 @@ private extension DSTabBarCenterControl {
             progress = target
             stretch = 0
             onSettled(target == 1)
+            unmountContentIfClosed()
             return
         }
         let curve = settleCurve(duration: duration)
@@ -478,6 +479,7 @@ private extension DSTabBarCenterControl {
                 return
             }
             onSettled(target == 1)
+            unmountContentIfClosed()
         }
     }
 
@@ -546,7 +548,8 @@ private extension DSTabBarCenterControl {
         }
     }
 
-    /// Removes the content once the panel is closed and the content has faded out.
+    /// Removes the content once the panel is closed and the content has faded out. Never mid-drag: a drag that reaches
+    /// closed leaves it to the settle, which removes it after reporting, so the host prepares the content first.
     func unmountContentIfClosed() {
         guard isContentMounted, progress == 0, reveal == 0 else {
             return

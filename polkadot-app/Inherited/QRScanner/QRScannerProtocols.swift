@@ -5,6 +5,8 @@ import UIKitExt
 protocol QRScannerViewProtocol: ControllerBackedProtocol {
     var isCoveredByModal: Bool { get }
     func didReceive(session: AVCaptureSession)
+    /// Attaches the preview to a session that has not started yet, without showing it.
+    func attachPreview(to session: AVCaptureSession)
     func present(message: String, animated: Bool, autoDismiss: Bool)
 }
 
