@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import re
 import sys
@@ -211,20 +212,31 @@ def swift_files(root, paths):
                     yield path
 
 
+def report(path, root, line, message, as_rdjsonl):
+    if as_rdjsonl:
+        location = {"path": os.path.relpath(path, root), "range": {"start": {"line": line}}}
+        print(json.dumps({"message": message, "location": location, "severity": "ERROR"}))
+    else:
+        print(f"{os.path.abspath(path)}:{line}: warning: {message}")
+
+
 def main():
-    root = sys.argv[1] if len(sys.argv) > 1 else "."
+    arguments = sys.argv[1:]
+    as_rdjsonl = "--rdjsonl" in arguments
+    arguments = [argument for argument in arguments if argument != "--rdjsonl"]
+    root = arguments[0] if arguments else "."
     found = False
-    for path in swift_files(root, sys.argv[2:]):
+    for path in swift_files(root, arguments[1:]):
         try:
             hits = list(scan(path))
         except OSError as error:
             hits = []
             found = True
-            print(f"{os.path.abspath(path)}:1: warning: Hardcoded UI string check could not read this file: {error}")
+            print(f"Hardcoded UI string check could not read {path}: {error}", file=sys.stderr)
         for number, code in hits:
             found = True
-            print(f"{os.path.abspath(path)}:{number}: warning: Hardcoded UI string, "
-                  f"move it to a string catalog and use String(localized:): {code}")
+            report(path, root, number, "Hardcoded UI string, move it to a string catalog and use "
+                   f"String(localized:): {code}", as_rdjsonl)
     return 1 if found else 0
 
 
