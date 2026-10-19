@@ -32,6 +32,10 @@ public struct DSTabBarCenterControl<Content: View>: View {
     @State private var pressStart: ContinuousClock.Instant?
     /// The pending release. A new press cancels it so it cannot lift that press.
     @State private var pressRelease: Task<Void, Never>?
+    /// Bumped to play the medium impact when the panel opens.
+    @State private var mediumFeedback = 0
+    /// Bumped to play the light impact when the panel closes.
+    @State private var lightFeedback = 0
     @GestureState private var isDragging = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -87,11 +91,16 @@ public struct DSTabBarCenterControl<Content: View>: View {
             } else {
                 unmountContentIfClosed()
             }
+            if new == 0, old > 0, dragStart == nil {
+                lightFeedback += 1
+            }
             guard dragStart == nil, old != new else {
                 return
             }
             revealContent(open: new > old)
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: mediumFeedback)
+        .sensoryFeedback(.impact(weight: .light), trigger: lightFeedback)
     }
 }
 
@@ -285,7 +294,12 @@ private extension DSTabBarCenterControl {
             .accessibilityElement()
             .accessibilityLabel(progress > 0.5 ? openAccessibilityLabel : accessibilityLabel)
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { settle(to: progress > 0.5 ? 0 : 1) }
+            .accessibilityAction {
+                if progress <= 0.5 {
+                    mediumFeedback += 1
+                }
+                settle(to: progress > 0.5 ? 0 : 1)
+            }
             .accessibilityAction(.escape) {
                 guard progress > 0.5 else {
                     return
@@ -320,6 +334,9 @@ private extension DSTabBarCenterControl {
                 let start = dragStart ?? progress
                 guard abs(value.translation.height) >= tapSlop else {
                     dragStart = nil
+                    if start <= 0.5 {
+                        mediumFeedback += 1
+                    }
                     settle(to: start > 0.5 ? 0 : 1)
                     return
                 }
@@ -392,8 +409,15 @@ private extension DSTabBarCenterControl {
     /// Settles the panel where the release leaves it. `velocityHeight` is positive downward, like the translations.
     func endDrag(velocityHeight: CGFloat) {
         let upwardVelocity = -velocityHeight
+        let start = dragStart ?? progress
         dragStart = nil
         let target = releaseTarget(upwardVelocity: upwardVelocity)
+        if target == 1, start < 1 {
+            mediumFeedback += 1
+        }
+        if target == 0, progress == 0, start > 0 {
+            lightFeedback += 1
+        }
         settle(to: target, duration: releaseDuration(to: target, upwardVelocity: upwardVelocity))
     }
 

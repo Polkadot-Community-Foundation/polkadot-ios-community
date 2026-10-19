@@ -30,6 +30,8 @@ public struct DSTabBarContainer<
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionNamespace
+    /// Bumped on every slot tap to play the selection tick.
+    @State private var slotTapCount = 0
 
     /// Slots are placed left to right, two either side of the hole, each taking an equal share
     /// of the width left over. The centre slot is laid over the bar after its mask, so a control
@@ -39,8 +41,9 @@ public struct DSTabBarContainer<
     /// shelf content's measured height, so the caller can size its touch region to the shelf. `selectedSlot`
     /// is the index, 0 to 3 left to right, of the slot the selection pill sits behind. `nil` draws no bar pill,
     /// which is also the case while a shelf view holds the pill through `dsTabBarSelectionPill`.
-    /// `isBarHidden` fades the bar out, shelf included, leaving the centre slot. `openProgress` is the centre
-    /// control's open progress, 0 closed to 1 open; the bar row blurs, fades and rises with it.
+    /// `isBarHidden` fades the bar out, shelf included, leaving the centre slot. Changing it while the centre panel
+    /// is fully open plays a medium impact. `openProgress` is the centre control's open progress, 0 closed to 1 open;
+    /// the bar row blurs, fades and rises with it. A tap on any slot plays a selection tick.
     public init(
         isShelfOpen: Binding<Bool>,
         shelfContentHeight: Binding<CGFloat>,
@@ -84,6 +87,7 @@ public struct DSTabBarContainer<
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isTabBar)
             .animation(selectionAnimation, value: selectedSlot)
+            .sensoryFeedback(.selection, trigger: slotTapCount)
             .blur(radius: DSTabBarStyle.openItemBlurRadius * openProgress)
             .opacity(1 - (1 - DSTabBarStyle.openItemOpacity) * openProgress)
         }
@@ -99,6 +103,7 @@ public struct DSTabBarContainer<
         .allowsHitTesting(!isBarHidden)
         .accessibilityHidden(isBarHidden)
         .animation(barFadeAnimation, value: isBarHidden)
+        .sensoryFeedback(trigger: isBarHidden) { _, _ in openProgress == 1 ? .impact(weight: .medium) : nil }
         .overlay(alignment: .bottom) { center }
     }
 }
@@ -116,6 +121,7 @@ private extension DSTabBarContainer {
     func slot(_ content: some View, at index: Int) -> some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .simultaneousGesture(TapGesture().onEnded { slotTapCount += 1 })
             .background {
                 if selectedSlot == index {
                     selectionPill
