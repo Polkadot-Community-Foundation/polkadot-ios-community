@@ -48,6 +48,6 @@ hits="$(awk -v root="$staged/tree/" '
 
 if [ -n "$hits" ]; then
     echo "$hits"
-    echo "Commit blocked: move the strings above to a string catalog and use String(localized:)."
+    echo "Commit blocked: localize the strings above, or use Text(verbatim:) / // hardcoded-string:ignore for text that must not be localized."
     exit 1
 fi

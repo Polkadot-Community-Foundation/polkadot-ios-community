@@ -10,7 +10,7 @@ NON_SHIPPING_FLAGS = {"DEBUG", "TESTNET_FEATURE"}
 DIRECTIVE = re.compile(r"#(if|elseif|else|endif)\b\s*(.*)")
 PREVIEW_START = re.compile(r"^(#Preview\b|.*:\s*PreviewProvider\b)")
 OPENER = (
-    r"\b(Text|Button|Label|TextField|SecureField|Toggle|Section|Link|Menu|Picker)\(\s*(verbatim:\s*)?"
+    r"\b(Text|Button|Label|TextField|SecureField|Toggle|Section|Link|Menu|Picker)\(\s*"
     r"|\.(navigationTitle|accessibilityLabel|accessibilityHint|accessibilityValue)\(\s*"
     r"|(?<!case )\b(title|subtitle|text|placeholder|actionTitle|buttonTitle)\s*[:=]\s*"
     r"|setTitle\(\s*"
@@ -23,6 +23,7 @@ ESCAPE = re.compile(r"\\u\{[0-9A-Fa-f]+\}|\\.")
 LETTER = re.compile(r"[A-Za-z]")
 SPECIAL = re.compile(r'//|/\*|"')
 LITERAL_SPECIAL = re.compile(r'["\\]')
+IGNORE_MARKER = re.compile(r"^//\s*hardcoded-string:ignore(\s|$)")
 
 
 class Line:
@@ -31,6 +32,7 @@ class Line:
         self.position = 0
         self.code = ""
         self.texts = []
+        self.comment = ""
         self.closing = closing
         self.read()
 
@@ -44,6 +46,7 @@ class Line:
                 self.position = len(self.source) if end < 0 else end + len(self.closing)
                 self.closing = self.closing if end < 0 else None
             elif self.peek("//"):
+                self.comment = self.source[self.position:]
                 break
             elif self.peek("/*") or self.peek('"""'):
                 self.closing = "*/" if self.peek("/*") else '"""'
@@ -187,7 +190,7 @@ def scan(path):
             if not scope.advance(code):
                 previous = ""
                 continue
-            if is_hit(line, previous):
+            if is_hit(line, previous) and not IGNORE_MARKER.match(line.comment):
                 yield number, raw.strip()
             previous = code
 
@@ -235,8 +238,9 @@ def main():
             print(f"Hardcoded UI string check could not read {path}: {error}", file=sys.stderr)
         for number, code in hits:
             found = True
-            report(path, root, number, "Hardcoded UI string, move it to a string catalog and use "
-                   f"String(localized:): {code}", as_rdjsonl)
+            report(path, root, number, "Hardcoded UI string, move it to a string catalog and use String(localized:), "
+                   f"or use Text(verbatim:) / // hardcoded-string:ignore if it must not be localized: {code}",
+                   as_rdjsonl)
     return 1 if found else 0
 
 
