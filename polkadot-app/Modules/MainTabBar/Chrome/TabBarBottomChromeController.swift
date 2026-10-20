@@ -5,16 +5,14 @@ import PolkadotUI
 import SnapKit
 
 final class TabBarBottomChromeController: UIViewController {
-    /// How far the keyboard covers the foot of the open centre panel's button.
-    private static let keyboardButtonOverlap: CGFloat = 4
     /// Room the open centre panel leaves below the top safe area.
     private static let centerPanelTopGap: CGFloat = 12
 
-    private let chromeSurface = TabBarChromeSurfaceView()
-    private let centerButtonAnchorGuide = UILayoutGuide()
-    private let barModel = TabBarBarViewModel()
-    private lazy var barHost = UIHostingController(rootView: TabBarBarView(model: barModel))
-    private lazy var dimHost = UIHostingController(rootView: TabBarDimView(model: barModel))
+    let chromeSurface = TabBarChromeSurfaceView()
+    let centerButtonAnchorGuide = UILayoutGuide()
+    let barModel = TabBarBarViewModel()
+    lazy var barHost = UIHostingController(rootView: TabBarBarView(model: barModel))
+    lazy var dimHost = UIHostingController(rootView: TabBarDimView(model: barModel))
 
     private var slots: [TabBarSlot] = []
     private var slotMap = TabBarSlotMap(slots: [])
@@ -26,13 +24,13 @@ final class TabBarBottomChromeController: UIViewController {
     private var committedPanel: TabBarPanelKind?
     /// The centre panel's content, built once per open. SwiftUI may build the content more than once while
     /// measuring, and the capture session must be built only once.
-    private var centerPanelContent: UIViewController?
+    var centerPanelContent: UIViewController?
     /// The first settled layout places the bar. Animating it would spring the bar in from its unplaced frame at launch.
     private var hasPerformedInitialLayout = false
     /// The last keyboard frame in screen coordinates, kept so the lift can be re-derived when the scan panel changes.
-    private var keyboardFrame: CGRect?
+    var keyboardFrame: CGRect?
 
-    private lazy var foldController = TabBarFoldController(
+    lazy var foldController = TabBarFoldController(
         foldSurface: chromeSurface,
         chromeBounds: { [unowned self] in view.bounds },
         bottomSafeAreaInset: { [unowned self] in view.safeAreaInsets.bottom },
@@ -55,7 +53,7 @@ final class TabBarBottomChromeController: UIViewController {
         statusStripAnchor: { [weak self] in self?.statusStripAnchorProvider?() }
     )
 
-    private lazy var panelController = TabBarPanelController(
+    lazy var panelController = TabBarPanelController(
         onPanelChanged: { [weak self] kind in
             self?.applyCommittedPanel(kind)
         },
@@ -281,10 +279,10 @@ final class TabBarBottomChromeController: UIViewController {
 
 // MARK: - Bar items and panel content
 
-private extension TabBarBottomChromeController {
+extension TabBarBottomChromeController {
     /// The item list is derived from the slots rather than stored, and the map every index
     /// conversion goes through is rebuilt with it.
-    func rebuildItems() {
+    private func rebuildItems() {
         slotMap = TabBarSlotMap(slots: slots)
 
         barModel.items = slots.map { slot in
@@ -297,7 +295,7 @@ private extension TabBarBottomChromeController {
     }
 
     /// The Apps item reads active while a panel opened from it is open, and while a product is mounted.
-    func updateActiveActionIndex() {
+    private func updateActiveActionIndex() {
         let activeAction: TabBarAction? =
             panelController.open?.action ?? (barModel.mountedChipId != nil ? .spaTabs : nil)
         barModel.activeActionItemIndex = activeAction.flatMap { slotMap.itemIndex(for: $0) }
@@ -306,7 +304,7 @@ private extension TabBarBottomChromeController {
     /// Any committed panel change moves the centre control and the shelf to match, so a close from anywhere
     /// (outside tap, a slot, a fold) also closes whichever surface was showing. The surface that animates the
     /// close reports it back, which releases a queued reopen.
-    func applyCommittedPanel(_ kind: TabBarPanelKind?) {
+    private func applyCommittedPanel(_ kind: TabBarPanelKind?) {
         // `committedPanel` still names the panel being replaced, so it names the surface a close belongs to.
         let closingSurface = kind == nil ? committedPanel : nil
         let reportClose: () -> Void = { [weak self] in self?.panelController.panelCloseDidComplete() }
@@ -347,7 +345,7 @@ private extension TabBarBottomChromeController {
     }
 
     /// Commits the panel open before the host focuses search, so the keyboard lift applies as the keyboard rises.
-    func centerPanelSwipeOpenLanding() {
+    private func centerPanelSwipeOpenLanding() {
         setPanel(.content(.scan))
         onCenterPanelSwipeOpenLanding?()
     }
@@ -414,7 +412,7 @@ private extension TabBarBottomChromeController {
         onSelect?(tabIndex, isReselection)
     }
 
-    func handleAction(_ action: TabBarAction) {
+    private func handleAction(_ action: TabBarAction) {
         switch action {
         case .connectionStatus:
             #if FEATURE_PRODUCTS
@@ -427,236 +425,5 @@ private extension TabBarBottomChromeController {
         case .scan:
             panelController.togglePanel(.content(.scan))
         }
-    }
-}
-
-// MARK: - Layout
-
-private extension TabBarBottomChromeController {
-    /// Installed before the chrome surface so the dim sits below the bar and the open panels. It spans the whole
-    /// screen, which the bar's host does not, and takes no touches so the chrome's passthrough hit test skips it.
-    func installDimLayer() {
-        addChild(dimHost)
-        view.addSubview(dimHost.view)
-        dimHost.view.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
-        dimHost.didMove(toParent: self)
-        dimHost.view.backgroundColor = .clear
-        dimHost.view.isUserInteractionEnabled = false
-        dimHost.safeAreaRegions = []
-    }
-
-    func installChromeSurface() {
-        chromeSurface.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(chromeSurface)
-        chromeSurface.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
-    }
-
-    func installOutsideTapRecognizer() {
-        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleOutsideTap))
-        recognizer.delegate = self
-        view.addGestureRecognizer(recognizer)
-    }
-
-    @objc func handleOutsideTap() {
-        guard !foldController.isFolded else {
-            foldController.setUserOverride(.shown, velocityX: 0)
-            return
-        }
-        panelController.setPanel(nil)
-    }
-
-    func installKeyboardObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleKeyboardFrameChange(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-    }
-
-    /// The keyboard's own animation drives the lift, so the chrome moves in step with the keyboard.
-    @objc func handleKeyboardFrameChange(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let frame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
-            return
-        }
-        keyboardFrame = frame
-        let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
-        let curve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int
-            ?? UIView.AnimationCurve.easeInOut.rawValue
-        UIView.animate(
-            withDuration: duration,
-            delay: 0,
-            options: UIView.AnimationOptions(rawValue: UInt(curve) << 16)
-        ) {
-            self.applyKeyboardLift()
-        }
-    }
-
-    /// Moves the chrome to the lift the keyboard and scan panel call for, then re-declares the room above it.
-    func applyKeyboardLift() {
-        foldController.setKeyboardLift(currentKeyboardLift())
-        refreshAvailablePanelHeight()
-        refreshCenterContentHeight()
-    }
-
-    /// Re-derives the lift on the centre spring, so a panel commit moves the chrome with the centre control.
-    func refreshKeyboardLift() {
-        DSTabBarStyle.animateCenterChange(in: view) {
-            self.applyKeyboardLift()
-        }
-    }
-
-    /// While the scan panel is open, the chrome moves up until the keyboard covers the centre button's foot by
-    /// `keyboardButtonOverlap`, keeping the panel above it clear. Any other keyboard, or a closed panel, returns the
-    /// chrome to rest.
-    func currentKeyboardLift() -> CGFloat {
-        guard panelController.open == .content(.scan), let keyboardFrame else {
-            return 0
-        }
-        let keyboardTop = view.convert(keyboardFrame, from: nil).minY
-        let keyboardOverlap = max(0, view.bounds.maxY - keyboardTop)
-        let restingHeight = DSTabBarStyle.restingHeight(bottomSafeAreaInset: view.safeAreaInsets.bottom)
-        let buttonFootOffset = restingHeight - DSTabBarStyle.centerButtonFootFromRowTop
-        let allowedOverlap = buttonFootOffset + Self.keyboardButtonOverlap
-        return max(0, keyboardOverlap - allowedOverlap)
-    }
-
-    @objc func handleFoldPan(_ recognizer: UIPanGestureRecognizer) {
-        guard recognizer.state == .ended else {
-            return
-        }
-
-        foldController.foldPanEnded(
-            translationX: recognizer.translation(in: chromeSurface).x,
-            velocityX: recognizer.velocity(in: chromeSurface).x
-        )
-    }
-
-    func installBar() {
-        addChild(barHost)
-        chromeSurface.addBar(barHost.view)
-        barHost.didMove(toParent: self)
-        barHost.view.backgroundColor = .clear
-        // The pinned bar geometry owns the home-indicator gap. The default safe area would apply it a second time.
-        barHost.safeAreaRegions = []
-        installCenterButtonAnchor()
-
-        barModel.onSlotTapped = { [weak self] itemIndex in
-            self?.handleSlotTap(itemIndex: itemIndex)
-        }
-        barModel.makeCenterContent = { [weak self] in
-            guard let self else {
-                return nil
-            }
-            if centerPanelContent == nil {
-                centerPanelContent = makeCenterContent?()
-            }
-            return centerPanelContent
-        }
-        barModel.onCenterPanelOpenChanged = { [weak self] isOpen in
-            self?.centerPanelOpenChanged(isOpen)
-        }
-        barModel.onCenterPanelCloseRequested = { [weak self] duration in
-            self?.closeCenterPanel(duration: duration)
-        }
-        barModel.onShelfContentHeightChanged = { [weak self] in
-            self?.applyBarLiveHeight()
-        }
-        barModel.onShelfChipTapped = { [weak self] id in
-            self?.onChipTapped?(id)
-        }
-        barModel.onShelfChipCloseRequested = { [weak self] id in
-            self?.onChipCloseRequested?(id)
-        }
-        barModel.onShelfSettingsTapped = { [weak self] in
-            self?.onSettingsTapped?()
-        }
-        barModel.onShelfConnectionStatusTapped = { [weak self] in
-            self?.onConnectionStatusTapped?()
-        }
-
-        let foldRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handleFoldPan(_:)))
-        foldRecognizer.delegate = self
-        chromeSurface.addGestureRecognizer(foldRecognizer)
-
-        // The resting centre button stands above the row, so its top has to be live before any layout pass.
-        applyBarLiveHeight()
-    }
-
-    /// The tip popover points at the resting centre button. Its frame follows from the bar geometry, because the
-    /// button is drawn in SwiftUI and has no view of its own.
-    func installCenterButtonAnchor() {
-        barHost.view.addLayoutGuide(centerButtonAnchorGuide)
-        let buttonSize = DSTabBarStyle.centerButtonRestingRise + DSTabBarStyle.centerButtonFootFromRowTop
-        centerButtonAnchorGuide.snp.makeConstraints { make in
-            make.centerX.equalTo(barHost.view)
-            make.bottom.equalTo(barHost.view).offset(DSTabBarStyle.centerButtonFootFromRowTop - DSTabBarStyle.height)
-            make.size.equalTo(buttonSize)
-        }
-    }
-
-    /// A fold drag starts on the bar row, outside the centre hole where the centre control sits.
-    func canStartFoldDrag(at touch: UITouch) -> Bool {
-        // The hosting view is taller than the row while the centre panel is open, and the row sits at its bottom.
-        let bounds = barHost.view.bounds
-        let row = CGRect(
-            x: 0,
-            y: bounds.height - DSTabBarStyle.height,
-            width: bounds.width,
-            height: DSTabBarStyle.height
-        )
-        let point = touch.location(in: barHost.view)
-        guard row.contains(point) else {
-            return false
-        }
-        let pointInRow = CGPoint(x: point.x, y: point.y - row.minY)
-        return !DSTabBarStyle.isInCenterHole(pointInRow, inRowOfWidth: row.width)
-    }
-}
-
-// MARK: - UIGestureRecognizerDelegate
-
-extension TabBarBottomChromeController: UIGestureRecognizerDelegate {
-    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard recognizer is UIPanGestureRecognizer else {
-            return touch.view === view
-        }
-        return canStartFoldDrag(at: touch)
-    }
-
-    /// Only a drag that leads horizontally folds the bar, so a vertical scroll past it is left alone. A tab root
-    /// cannot fold, and a hidden bar has nothing to fold.
-    func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        guard let pan = recognizer as? UIPanGestureRecognizer else {
-            return true
-        }
-        guard !foldController.isTabRoot, foldController.state != .hidden else {
-            return false
-        }
-        let translation = pan.translation(in: chromeSurface)
-        return abs(translation.x) > abs(translation.y)
-    }
-}
-
-// MARK: - Dim
-
-/// Dims the whole screen behind the open centre panel. It reads the same `TabBarBarViewModel.centerProgress` as the
-/// bar, so it follows the morph in the same transaction. The bar's host is too narrow and starts below the top safe
-/// area to carry the dim itself.
-private struct TabBarDimView: View {
-    let model: TabBarBarViewModel
-
-    var body: some View {
-        DSTabBarDimLayer()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(model.centerProgress)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
