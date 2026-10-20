@@ -50,6 +50,9 @@ enum MainTabBarViewFactory {
             deferredLinkHandler: deepLinkHandling,
             browserCoordinator: browserCoordinator
         )
+        #if !FEATURE_PRODUCTS
+            interactor.settingsAttentionObserver = SettingsBackupAttentionObserver()
+        #endif
 
         let qrHandler = WalletQRScanResultHandler(
             dsfinvkRouter: W3sDsfinvkRouter.createDefault(coinageService: serviceCoordinator.coinageService)

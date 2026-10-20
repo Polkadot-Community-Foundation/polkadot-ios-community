@@ -7,6 +7,9 @@ import Products
 protocol MainTabBarViewProtocol: ControllerBackedProtocol, AppWidgetManaging {
     func show(slots: [TabBarSlot], selecting tab: TabBarItem)
     func select(tab: TabBarItem)
+    #if !FEATURE_PRODUCTS
+        func setAttention(_ isVisible: Bool, for tab: TabBarItem)
+    #endif
     func setLabels(visible: Bool)
     func showSPATabs(_ viewModels: [SPATabChipViewModel])
     func showChainStatus(_ rows: [ChainConnectionStatusViewModel])
@@ -31,6 +34,9 @@ protocol MainTabBarInteractorInputProtocol: AnyObject {
 
 @MainActor
 protocol MainTabBarInteractorOutputProtocol: AnyObject {
+    #if !FEATURE_PRODUCTS
+        func didUpdateSettingsAttention(isVisible: Bool)
+    #endif
     func didReceiveWidget(
         configuration: any HashableContentConfiguration,
         for extensionId: ChatExtension.Id
@@ -82,12 +88,14 @@ enum TabBarItem: String, CaseIterable {
 }
 
 extension TabBarItem {
-    func makeBarItem(showsLabel: Bool) -> TabBarBarItem {
+    func makeBarItem(showsLabel: Bool, showsAttention: Bool) -> TabBarBarItem {
         TabBarBarItem(
             icon: image,
             title: showsLabel ? title : nil,
             accessibilityLabel: title,
-            accessibilityID: AccessibilityID.Tab.item(for: self)
+            accessibilityID: AccessibilityID.Tab.item(for: self),
+            accessibilityValue: showsAttention ? String(localized: .tabSettingsBackupNeeded) : nil,
+            showsAttention: showsAttention
         )
     }
 }

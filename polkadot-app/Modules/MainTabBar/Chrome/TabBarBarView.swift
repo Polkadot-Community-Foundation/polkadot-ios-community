@@ -77,6 +77,7 @@ struct TabBarBarView: View {
 
 private struct TabBarSlotView: View {
     private static let iconSize: CGFloat = 28
+    private static let attentionDotSize: CGFloat = 8
 
     let item: TabBarBarItem
     let isSelected: Bool
@@ -109,6 +110,7 @@ private struct TabBarSlotView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.accessibilityLabel)
+        .accessibilityValue(item.accessibilityValue ?? "")
         .accessibilityId(item.accessibilityID)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -123,6 +125,13 @@ private struct TabBarSlotView: View {
                 .scaledToFit()
                 .foregroundStyle(iconColor)
                 .frame(width: Self.iconSize, height: Self.iconSize)
+                .overlay(alignment: .topTrailing) {
+                    if item.showsAttention {
+                        Circle()
+                            .fill(Color.bgStatusWarning)
+                            .frame(width: Self.attentionDotSize, height: Self.attentionDotSize)
+                    }
+                }
         case let .tabsGlyph(count):
             TabsGlyph(count: count, color: UIColor(iconColor))
                 .frame(width: Self.iconSize, height: Self.iconSize)

@@ -305,6 +305,12 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         refreshChrome()
     }
 
+    #if !FEATURE_PRODUCTS
+        func setAttention(_ isVisible: Bool, for tab: TabBarItem) {
+            chromeController.setAttention(isVisible, for: tab)
+        }
+    #endif
+
     func setLabels(visible: Bool) {
         chromeController.setLabels(visible: visible)
     }

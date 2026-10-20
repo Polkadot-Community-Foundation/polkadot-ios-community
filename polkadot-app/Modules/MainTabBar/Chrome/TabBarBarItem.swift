@@ -12,30 +12,40 @@ struct TabBarBarItem: Equatable {
     let title: String?
     let accessibilityLabel: String
     let accessibilityID: AccessibilityID.Tab?
+    let accessibilityValue: String?
+    let showsAttention: Bool
 
     init(
         content: Content,
         title: String?,
         accessibilityLabel: String,
-        accessibilityID: AccessibilityID.Tab? = nil
+        accessibilityID: AccessibilityID.Tab? = nil,
+        accessibilityValue: String? = nil,
+        showsAttention: Bool = false
     ) {
         self.content = content
         self.title = title
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityID = accessibilityID
+        self.accessibilityValue = accessibilityValue
+        self.showsAttention = showsAttention
     }
 
     init(
         icon: UIImage,
         title: String?,
         accessibilityLabel: String,
-        accessibilityID: AccessibilityID.Tab? = nil
+        accessibilityID: AccessibilityID.Tab? = nil,
+        accessibilityValue: String? = nil,
+        showsAttention: Bool = false
     ) {
         self.init(
             content: .icon(icon),
             title: title,
             accessibilityLabel: accessibilityLabel,
-            accessibilityID: accessibilityID
+            accessibilityID: accessibilityID,
+            accessibilityValue: accessibilityValue,
+            showsAttention: showsAttention
         )
     }
 }

@@ -16,6 +16,9 @@ final class MainTabBarPresenter {
 
     private let chipViewModelFactory: SPATabChipViewModelFactory
     private let connectionStatusViewModel = ConnectionStatusSheetViewModel()
+    #if !FEATURE_PRODUCTS
+        private var isSettingsAttentionVisible = false
+    #endif
 
     init(
         interactor: MainTabBarInteractorInputProtocol,
@@ -35,6 +38,9 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
 
     func configureViews() {
         view?.show(slots: slots, selecting: .chat)
+        #if !FEATURE_PRODUCTS
+            view?.setAttention(isSettingsAttentionVisible, for: .settings)
+        #endif
     }
 
     func didRequestConnectionStatus() {
@@ -57,6 +63,16 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
 }
 
 extension MainTabBarPresenter: MainTabBarInteractorOutputProtocol {
+    #if !FEATURE_PRODUCTS
+        func didUpdateSettingsAttention(isVisible: Bool) {
+            guard isSettingsAttentionVisible != isVisible else {
+                return
+            }
+            isSettingsAttentionVisible = isVisible
+            view?.setAttention(isVisible, for: .settings)
+        }
+    #endif
+
     func didReceiveWidget(
         configuration: any HashableContentConfiguration,
         for extensionId: ChatExtension.Id

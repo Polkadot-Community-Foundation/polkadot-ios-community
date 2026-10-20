@@ -21,10 +21,10 @@ extension TabBarSlot {
         return item
     }
 
-    func makeBarItem(spaTabCount: Int, showsLabel: Bool) -> TabBarBarItem {
+    func makeBarItem(spaTabCount: Int, showsLabel: Bool, attentionTabs: Set<TabBarItem>) -> TabBarBarItem {
         switch self {
         case let .tab(item):
-            item.makeBarItem(showsLabel: showsLabel)
+            item.makeBarItem(showsLabel: showsLabel, showsAttention: attentionTabs.contains(item))
         case let .action(action):
             action.makeBarItem(spaTabCount: spaTabCount, showsLabel: showsLabel)
         }

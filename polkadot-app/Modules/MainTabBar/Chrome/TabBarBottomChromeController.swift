@@ -19,6 +19,7 @@ final class TabBarBottomChromeController: UIViewController {
     private var spaTabCount = 0
     private var selectedTabIndex = 0
     private var showsLabels = false
+    private var attentionTabs: Set<TabBarItem> = []
     /// The last panel that reached `applyCommittedPanel`. By then `TabBarPanelController.open` is already the new
     /// panel.
     private var committedPanel: TabBarPanelKind?
@@ -182,6 +183,18 @@ final class TabBarBottomChromeController: UIViewController {
         rebuildItems()
     }
 
+    func setAttention(_ isVisible: Bool, for tab: TabBarItem) {
+        guard attentionTabs.contains(tab) != isVisible else {
+            return
+        }
+        if isVisible {
+            attentionTabs.insert(tab)
+        } else {
+            attentionTabs.remove(tab)
+        }
+        rebuildItems()
+    }
+
     /// Indices crossing this boundary are tab-space; `TabBarSlotMap` converts them.
     func setSelectedIndex(_ tabIndex: Int) {
         selectedTabIndex = tabIndex
@@ -286,7 +299,7 @@ extension TabBarBottomChromeController {
         slotMap = TabBarSlotMap(slots: slots)
 
         barModel.items = slots.map { slot in
-            slot.makeBarItem(spaTabCount: spaTabCount, showsLabel: showsLabels)
+            slot.makeBarItem(spaTabCount: spaTabCount, showsLabel: showsLabels, attentionTabs: attentionTabs)
         }
         barModel.appsItemIndex = slotMap.itemIndex(for: .spaTabs)
 
