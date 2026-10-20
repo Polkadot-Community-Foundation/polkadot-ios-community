@@ -59,7 +59,7 @@ MainTabBarViewController            container, status strip, widget and inset la
 | Bar, center control, shelf container | `Packages/PolkadotUI/Sources/Components/DSTabBarShell/DSTabBarContainer.swift`, `DSTabBarCenterControl.swift` |
 | Bar outline, morph shape, geometry | `Packages/PolkadotUI/Sources/Components/DSTabBarShell/DSTabBarShape.swift`, `DSTabBarMorphShape.swift`, `DSTabBarStyle.swift` |
 | Bar material, dim layer | `Packages/PolkadotUI/Sources/Components/DSTabBarShell/DSTabBarMaterial.swift`, `DSTabBarVariableBlur.swift` |
-| Colours and type | `DSTabBarStyle.Palette`, `DSTabBarStyle.SearchTypography` in `DSTabBarStyle+Palette.swift` and `DSTabBarStyle.swift` |
+| Colours and type | `DSTabBarStyle.Palette` (token-less values only) in `DSTabBarStyle+Palette.swift` and `DSTabBarStyle.swift`. Themed colours and type come from DesignSystem tokens |
 | Bar item and chip models | `polkadot-app/Modules/MainTabBar/Chrome/TabBarBarItem.swift` (`TabBarBarItem`), `TabBarShelfChip.swift` (`TabBarShelfChip`) |
 | Bar icons | `Packages/PolkadotUI/Sources/Components/DSTabBarShell/DSTabBarConnectionGlyph.swift`, `DSTabBarTabsGlyphView.swift` |
 | Top status strip | `Packages/PolkadotUI/Sources/Modules/MainTabBar/ChainConnectionStatusBarView.swift` |
@@ -76,9 +76,7 @@ MainTabBarViewController            container, status strip, widget and inset la
 
 The bar row is an accessibility container with the tab-bar trait.
 
-**Center hole.** The notch is cut from the bar's top edge. Its bowl is sized from the center button, so the resting center button stands above the bar. The two inner slots stop at the shoulders of the bowl. `DSTabBarShape` and `DSTabBarShadowMask` cut the same bowl from the bar. While the shelf is open, the part of the bowl above the row is cut as well, so the resting button keeps its ring.
-
-**Bar shadow.** The shadow is drawn from a plain pill silhouette with no notch. It is masked to outside the bar's outline (`DSTabBarOutsideMask`), and the notch is cut from it afterwards (`DSTabBarShadowMask`). It fades out while the center panel opens.
+**Center hole.** The notch is cut from the bar's top edge. Its bowl is sized from the center button, so the resting center button stands above the bar. The two inner slots stop at the shoulders of the bowl. `DSTabBarShape` cuts the same bowl from the bar. While the shelf is open, the part of the bowl above the row is cut as well, so the resting button keeps its ring.
 
 **Selection pill.** `DSTabBarContainer` draws the selection pill behind the slot it gets from its `selectedSlot` parameter. The pill slides between slots. It snaps under Reduce Motion. The Apps slot never takes the pill. It reads as active through its colour.
 
@@ -94,7 +92,7 @@ The center control, `DSTabBarCenterControl`, sits in the hole and shows the cent
 
 - **Morph shape** (`DSTabBarMorphShape`). One shape for the resting button and the open panel. Its body rounds into a lobe under the bottom edge. The lobe narrows while the panel is narrow.
 - **Scan frame** (`DSTabBarScanFrameShape`). The viewfinder brackets on the center button.
-- **Materials** (`DSTabBarBarMaterial`, `DSTabBarCenterMaterial`). Glass for the bar row and for the control. They are separate surfaces, so each can tune its own intensity.
+- **Materials** (`DSTabBarBarMaterial`, `DSTabBarCenterMaterial`). Glass for the bar row and for the control. They are separate surfaces, so each can tune its own intensity. Dark themes add the grey wash and the open fill. Light themes (read from `colorScheme`, which the app sets from the theme) use a stronger blur with neither.
 - **Dim layer** (`DSTabBarDimLayer`). Dims the screen behind an opening center panel.
 - **Grabber.** A handle on the open panel. It shows with the content.
 
@@ -138,7 +136,7 @@ The chrome takes the width from `DSTabBarStyle.rowWidth(inAvailableWidth:)` of i
 
 **Keyboard.** The keyboard lift has one owner, `TabBarFoldController.keyboardLift`, which the fold transform carries. `TabBarBottomChromeController` recomputes it on each keyboard frame change, using the keyboard's own duration and curve. It also recomputes on every panel open and close. While the scan panel is open, the chrome lifts until the keyboard covers the center button's foot by `keyboardButtonOverlap`. Any other keyboard, or a closed panel, leaves the chrome at rest. The lift reduces `availablePanelHeight` by the same amount.
 
-**Search field and list.** The scan panel's field (`DSSearchRowView`), its scan button and the plain arm's `SearchContactFieldButton` share the field material, `DSTabBarFieldMaterialView`. The field switches its icon position between the Scan state and the Search state (`setSearchFocused`). The results list is shared with the full-screen Search Contact screen. The bar-specific styling lives in `DSTabBarStyle.Palette` and `DSTabBarStyle.SearchTypography`. Avatars use `DSSearchAvatar`, so the shared `DSAvatar` stays untouched.
+**Search field and list.** The scan panel's field (`DSSearchRowView`), its scan button and the plain arm's `SearchContactFieldButton` share the field material, `DSTabBarFieldMaterialView`. The field switches its icon position between the Scan state and the Search state (`setSearchFocused`). The results list is shared with the full-screen Search Contact screen. Colours are DesignSystem theme tokens that follow all five themes. `DSTabBarFieldMaterialView` and `DSSearchRowView` re-apply their resolved colours when `DSThemeTrait` changes. `DSTabBarStyle.Palette` keeps only the values with no token: the glass stroke, the glass wash, the open fill and the dim wash. Search type uses DS typography tokens, so the bar has no type style of its own. `DSSearchAvatar` shows the contact's image, otherwise `DSLetterAvatar` at `.s40`. The shared `DSAvatar` stays untouched.
 
 ## Closing and Capture
 

@@ -13,7 +13,7 @@ final class ScanPanelPlainViewLayout: UIView {
     /// roughly a second. It sits behind the preview, which fades in over it.
     private let placeholderView: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor(DSTabBarStyle.Palette.cameraBacking)
+        view.backgroundColor = .bgSurfaceContainer
         view.layer.cornerRadius = DSRadii.large
         view.layer.masksToBounds = true
         return view

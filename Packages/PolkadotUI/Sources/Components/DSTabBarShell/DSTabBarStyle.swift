@@ -48,25 +48,6 @@ public enum DSTabBarStyle {
     static let shelfSelectionCornerRadius: CGFloat = DSRadii.mediumIncreased
     static let strokeWidth: CGFloat = 1
 
-    /// Each axis component of a unit vector at 45°, which is 1 / √2.
-    private static let diagonalAxisFactor = CGFloat(0.5.squareRoot())
-
-    /// Rim gradient for a shape of `size`. It runs along a 45° line from the top leading corner for
-    /// `(width + height) / 2` points, then holds its last stop. A unit-space gradient would stretch that
-    /// diagonal with the shape's aspect ratio, which leaves a wide bar's top edge in the first stops.
-    static func rimGradient(stops: [Gradient.Stop], size: CGSize) -> LinearGradient {
-        guard size.width > 0, size.height > 0 else {
-            return LinearGradient(stops: stops, startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
-        let length = (size.width + size.height) / 2
-        let axisOffset = length * diagonalAxisFactor
-        return LinearGradient(
-            stops: stops,
-            startPoint: .topLeading,
-            endPoint: UnitPoint(x: axisOffset / size.width, y: axisOffset / size.height)
-        )
-    }
-
     /// Gap between the hole's edge and the centre control sitting in it.
     static let notchRingGap: CGFloat = 2
     /// Radius of the hole cut from the bar: the centre control plus the ring gap around it.
@@ -90,24 +71,16 @@ public enum DSTabBarStyle {
     static let barBlurIntensity: Double = 0.35
     /// Strength of the centre control's variable blur, tuned by eye like `barBlurIntensity`.
     static let centerBlurIntensity: Double = 0.6
+    /// `barBlurIntensity` for light themes, which frost with the white material and no grey wash.
+    static let barBlurIntensityLight: Double = 0.5
+    /// `centerBlurIntensity` for light themes, which frost with the white material and no grey wash.
+    static let centerBlurIntensityLight: Double = 0.7
     /// Strength of the scrim behind the bar while the centre panel is open, tuned by eye like `barBlurIntensity`.
     static let dimBlurIntensity: Double = 0.3
 
     /// Horizontal radius of the bar's wash ellipse as a fraction of the bar's width. Its vertical radius is the bar
     /// height.
     static let barWashRadiusFraction: CGFloat = 0.45
-
-    /// Blur radius of the bar's shadow, tuned toward the brief's 30 pt blur.
-    static let barShadowRadius: CGFloat = 15
-    /// Distance the bar's shadow falls below the bar.
-    static let barShadowY: CGFloat = 14
-    /// How far the shadow's silhouette is pulled in from the bar's outline on its sides and bottom.
-    static let barShadowSpread: CGFloat = 6
-    /// How far the shadow's silhouette is pulled in from the bar's top edge. Deep enough that the blurred falloff
-    /// ends at the top edge, so none of it shows above the bar and the notch cuts no line across it.
-    static var barShadowTopInset: CGFloat { barShadowRadius * 2 - barShadowY }
-    /// Reach of the shadow mask past the bar, so the blurred shadow is not cut off at the bar edge.
-    static let shadowMaskSpread: CGFloat = barShadowRadius * 4 + 40
 
     /// Blur the bar row reaches as the centre panel opens fully. The slot items and selection pill take it.
     static let openItemBlurRadius: CGFloat = 3
@@ -212,7 +185,7 @@ public enum DSTabBarStyle {
         animator.startAnimation()
     }
 
-    /// Centre control progress at which its fill and rim start to blend from the closed button to the open panel.
+    /// Centre control progress at which its fill starts to blend from the closed button to the open panel.
     static let centerBlendStart: CGFloat = 0.2
     /// Centre control progress at which the blend from the closed button to the open panel completes.
     static let centerBlendEnd: CGFloat = 0.7

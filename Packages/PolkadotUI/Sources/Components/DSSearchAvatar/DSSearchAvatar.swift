@@ -1,7 +1,7 @@
 import DesignSystem
 import SwiftUI
 
-/// Search result avatar: a 40 pt circle with the contact's image, or its initial in the R1 search type.
+/// Search result avatar: the contact's image in a 40 pt circle, or its initial as a `DSLetterAvatar`.
 public struct DSSearchAvatar: View, Equatable {
     public static let dimension: CGFloat = 40
 
@@ -19,12 +19,12 @@ public struct DSSearchAvatar: View, Equatable {
                 .frame(width: Self.dimension, height: Self.dimension)
                 .clipShape(Circle())
         } else {
-            Text(viewModel.text ?? "")
-                .font(DSTabBarStyle.SearchTypography.avatarInitial)
-                .foregroundStyle(viewModel.textColor.map { Color($0) } ?? .avatarFgAmethyst)
-                .lineLimit(1)
-                .frame(width: Self.dimension, height: Self.dimension)
-                .background(viewModel.backgroundColor.map { Color($0) } ?? .avatarBgAmethyst, in: Circle())
+            DSLetterAvatar(
+                letter: viewModel.text ?? "",
+                background: viewModel.backgroundColor.map { Color($0) } ?? .avatarBgAmethyst,
+                foreground: viewModel.textColor.map { Color($0) } ?? .avatarFgAmethyst,
+                size: .s40
+            )
         }
     }
 }

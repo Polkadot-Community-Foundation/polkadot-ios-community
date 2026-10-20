@@ -1,3 +1,4 @@
+import DesignSystem
 import UIKit
 internal import SnapKit
 
@@ -17,8 +18,8 @@ public struct SearchContactSectionHeaderConfiguration: HashableContentConfigurat
 
 final class SearchContactSectionHeaderView: UIView, UIContentView {
     private let titleLabel: Label = create {
-        $0.style = DSTabBarStyle.SearchTypography.sectionHeader
-        $0.textColor = UIColor(DSTabBarStyle.Palette.sectionHeader)
+        $0.typography = .captionMedium
+        $0.textColor = .fgSecondary
         $0.numberOfLines = 1
     }
 

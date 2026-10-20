@@ -1,3 +1,4 @@
+import DesignSystem
 import ExternalAccessibility
 import UIKit
 internal import SnapKit
@@ -15,20 +16,11 @@ public final class DSSearchRowView: UIView {
 
     let searchImageView: UIImageView = create {
         $0.image = UIImage(resource: .search18).withRenderingMode(.alwaysTemplate)
-        $0.tintColor = UIColor(DSTabBarStyle.Palette.fieldIcon)
+        $0.tintColor = .fgPrimary
         $0.contentMode = .scaleAspectFit
     }
 
     public let searchField: UITextField = create {
-        var defaultTextAttributes = DSTabBarStyle.SearchTypography.query.attributes()
-        defaultTextAttributes[.foregroundColor] = UIColor(DSTabBarStyle.Palette.primaryText)
-
-        $0.defaultTextAttributes = defaultTextAttributes
-        $0.attributedPlaceholder = NSAttributedString(
-            string: String(localized: .searchContactFieldPlaceholder),
-            attributes: LabelStyle.body14Regular().attributes(textColor: UIColor(DSTabBarStyle.Palette.placeholder))
-        )
-
         $0.setContentHuggingPriority(.fittingSizeLevel, for: .horizontal)
         $0.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -41,7 +33,7 @@ public final class DSSearchRowView: UIView {
         $0.smartDashesType = .no
         $0.spellCheckingType = .no
 
-        $0.tintColor = UIColor(DSTabBarStyle.Palette.caret)
+        $0.tintColor = .bgAccent
     }
 
     private let clearButton: UIButton = {
@@ -53,10 +45,10 @@ public final class DSSearchRowView: UIView {
                 withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)
             )
         )
-        circle.backgroundColor = UIColor(DSTabBarStyle.Palette.clearFill)
+        circle.backgroundColor = .bgActionSecondary
         circle.layer.cornerRadius = 11
         circle.isUserInteractionEnabled = false
-        glyph.tintColor = UIColor(DSTabBarStyle.Palette.clearGlyph)
+        glyph.tintColor = .fgPrimary
         button.isHidden = true
         button.addSubview(circle)
         circle.addSubview(glyph)
@@ -76,9 +68,13 @@ public final class DSSearchRowView: UIView {
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
+        applyTextAttributes()
         setupViews()
         setupHandlers()
         applyAccessibilityBindings()
+        registerForTraitChanges([DSThemeTrait.self, DSTypographyTrait.self]) { (view: DSSearchRowView, _) in
+            view.applyTextAttributes()
+        }
     }
 
     @available(*, unavailable)
@@ -181,6 +177,24 @@ private extension DSSearchRowView {
     @objc func updateClearVisibility() {
         let hasText = !(searchField.text ?? "").isEmpty
         clearButton.isHidden = !(searchField.isEditing && hasText)
+    }
+
+    /// Text attributes hold a resolved colour and font, so they are rebuilt when the theme or the typography changes.
+    func applyTextAttributes() {
+        searchField.defaultTextAttributes = Self.labelStyle(.bodyLarge).attributes(
+            textColor: UIColor.fgPrimary.resolvedColor(with: traitCollection)
+        )
+        searchField.attributedPlaceholder = NSAttributedString(
+            string: String(localized: .searchContactFieldPlaceholder),
+            attributes: Self.labelStyle(.bodyMedium).attributes(
+                textColor: UIColor.fgSecondary.resolvedColor(with: traitCollection)
+            )
+        )
+    }
+
+    static func labelStyle(_ typography: TypographyStyle) -> LabelStyle {
+        let spec = typography.resolvedSpec
+        return LabelStyle(font: .app(typography), lineHeight: spec.lineHeight, tracking: spec.tracking)
     }
 
     func setConstraints(_ constraints: [Constraint], active: Bool) {

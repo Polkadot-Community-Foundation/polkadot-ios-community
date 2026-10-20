@@ -1,3 +1,4 @@
+import DesignSystem
 import ExternalAccessibility
 import UIKit
 internal import SnapKit
@@ -22,8 +23,8 @@ final class SearchContactListView: UIView, UIContentView {
     let avatarView = DSSearchAvatarView()
 
     let nameLabel: Label = create {
-        $0.style = DSTabBarStyle.SearchTypography.rowName
-        $0.textColor = UIColor(DSTabBarStyle.Palette.primaryText)
+        $0.typography = .bodyLargeEmphasized
+        $0.textColor = .fgPrimary
         $0.numberOfLines = 1
     }
 

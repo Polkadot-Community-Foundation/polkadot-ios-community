@@ -8,32 +8,6 @@ struct DSTabBarShape: Shape {
     }
 }
 
-/// The notch's edge as an open curve, so it can carry a glint of its own.
-struct DSTabBarCutoutEdge: Shape {
-    func path(in rect: CGRect) -> Path {
-        DSTabBarShape.cutoutEdge(in: rect)
-    }
-}
-
-/// Everything outside the hole, extended past the bar by `DSTabBarStyle.shadowMaskSpread`.
-/// Used as a mask: the bar's shadow is a blurred silhouette behind the bar, so without this
-/// it would blur into the hole and show through it.
-struct DSTabBarShadowMask: Shape {
-    func path(in rect: CGRect) -> Path {
-        let spread = DSTabBarStyle.shadowMaskSpread
-        return Path(rect.insetBy(dx: -spread, dy: -spread)).subtracting(.notchCut(in: rect))
-    }
-}
-
-/// Everything outside the bar's outline, extended by `DSTabBarStyle.shadowMaskSpread`. It keeps a shadow from
-/// showing through the translucent glass.
-struct DSTabBarOutsideMask: Shape {
-    func path(in rect: CGRect) -> Path {
-        let spread = DSTabBarStyle.shadowMaskSpread
-        return Path(rect.insetBy(dx: -spread, dy: -spread)).subtracting(DSTabBarShape().path(in: rect))
-    }
-}
-
 /// The brief's notch outline as offsets from the bar's centre line (x) and down from the bar row's top edge (y).
 /// The bowl's radius and centre come from `DSTabBarStyle`, so the outline stays round when those change.
 /// `blended(roundness:)` moves it toward the bowl circle as the shelf opens.

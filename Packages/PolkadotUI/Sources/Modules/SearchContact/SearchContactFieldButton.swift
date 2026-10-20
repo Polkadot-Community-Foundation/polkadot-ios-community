@@ -1,3 +1,4 @@
+import DesignSystem
 import UIKit
 internal import SnapKit
 internal import UIKit_iOS
@@ -7,7 +8,7 @@ public final class SearchContactFieldButton: UIControl {
 
     private let iconImageView: UIImageView = create {
         $0.image = UIImage(resource: .search18).withRenderingMode(.alwaysTemplate)
-        $0.tintColor = UIColor(DSTabBarStyle.Palette.fieldIcon)
+        $0.tintColor = .fgPrimary
         $0.isUserInteractionEnabled = false
         $0.snp.makeConstraints {
             $0.width.height.equalTo(20)
@@ -15,8 +16,8 @@ public final class SearchContactFieldButton: UIControl {
     }
 
     private let label: Label = create {
-        $0.style = .body14Regular()
-        $0.textColor = UIColor(DSTabBarStyle.Palette.placeholder)
+        $0.typography = .bodyMedium
+        $0.textColor = .fgSecondary
         $0.isUserInteractionEnabled = false
         $0.text = String(localized: .searchContactFieldPlaceholder)
     }

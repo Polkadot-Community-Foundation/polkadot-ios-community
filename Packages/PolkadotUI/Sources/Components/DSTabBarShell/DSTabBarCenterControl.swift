@@ -130,7 +130,7 @@ private extension DSTabBarCenterControl {
     /// notch with an even ring around it.
     var seatInset: CGFloat { DSTabBarStyle.height - bottomFromRowTop + DSTabBarStyle.notchRingGap }
 
-    /// How far the control has moved from the closed button's colours and rim to the open panel's, 0 to 1.
+    /// How far the control has moved from the closed button's colours to the open panel's, 0 to 1.
     var openBlend: CGFloat {
         let blendRange = DSTabBarStyle.centerBlendEnd - DSTabBarStyle.centerBlendStart
         return min(1, max(0, (progress - DSTabBarStyle.centerBlendStart) / blendRange))
@@ -300,7 +300,7 @@ private extension DSTabBarCenterControl {
     var glyph: some View {
         DSTabBarScanFrameShape()
             .stroke(
-                DSTabBarStyle.Palette.centerGlyph,
+                .fgSecondary,
                 style: StrokeStyle(
                     lineWidth: DSTabBarScanFrameShape.strokeWidth * glyphSize / DSTabBarScanFrameShape.gridSide,
                     lineCap: .round,
@@ -718,26 +718,9 @@ private struct PresentedProgressTracker: GeometryEffect {
 // MARK: - Volume
 
 private extension DSTabBarCenterControl {
-    /// Hairline that catches the light along the edge. The closed button and the open panel each have their own
-    /// gradient, which cross-fade with `openBlend`. A border stroke, so the clip leaves its full width.
-    /// Rendered as a drawing group, because SwiftUI rasterises gradient strokes on the CPU on every frame of the morph.
+    /// Hairline along the edge. A border stroke, so the clip leaves its full width.
     var rim: some View {
-        GeometryReader { proxy in
-            DSTabBarMorphShape()
-                .strokeBorder(
-                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.centerRestingRimStops, size: proxy.size),
-                    lineWidth: DSTabBarStyle.strokeWidth
-                )
-                .opacity(1 - openBlend)
-                .overlay {
-                    DSTabBarMorphShape()
-                        .strokeBorder(
-                            DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.barRimStops, size: proxy.size),
-                            lineWidth: DSTabBarStyle.strokeWidth
-                        )
-                        .opacity(openBlend)
-                }
-        }
-        .drawingGroup()
+        DSTabBarMorphShape()
+            .strokeBorder(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth)
     }
 }

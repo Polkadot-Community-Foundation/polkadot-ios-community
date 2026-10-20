@@ -21,21 +21,8 @@ extension EnvironmentValues {
 enum DSTabBarSelectionPill {
     static let matchedGeometryId = "selection"
 
-    static func fill(_ shape: some InsettableShape) -> some View {
+    static func fill(_ shape: some Shape) -> some View {
         shape.fill(DSTabBarStyle.Palette.selectionFill)
-            .overlay {
-                shape.strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: DSTabBarStyle.Palette.selectionTopLine, location: 0),
-                            .init(color: .clear, location: 0.3)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: DSTabBarStyle.strokeWidth
-                )
-            }
     }
 }
 

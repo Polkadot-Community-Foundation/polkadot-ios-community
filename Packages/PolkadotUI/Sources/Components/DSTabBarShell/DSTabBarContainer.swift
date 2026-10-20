@@ -99,9 +99,6 @@ public struct DSTabBarContainer<
         .background(DSTabBarBarMaterial())
         .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
         .overlay(border)
-        .overlay(notchGlint)
-        .background { shadow }
-        .mask { DSTabBarShadowMask().fill(style: FillStyle(eoFill: true)) }
         .offset(y: -DSTabBarStyle.openBarRise * openProgress)
         .opacity(isBarHidden ? 0 : 1)
         .allowsHitTesting(!isBarHidden)
@@ -193,57 +190,11 @@ private extension DSTabBarContainer {
     }
 
     /// Strokes the outline of the bar. The stroke is clipped back to the bar, which keeps only the inner half of
-    /// every line, so its width is doubled first. The notch edge is stroked too, and `notchGlint` draws over it.
+    /// every line, so its width is doubled first. The notch edge is stroked too.
     var border: some View {
-        GeometryReader { proxy in
-            DSTabBarShape()
-                .stroke(
-                    DSTabBarStyle.rimGradient(stops: DSTabBarStyle.Palette.barRimStops, size: proxy.size),
-                    lineWidth: DSTabBarStyle.strokeWidth * 2
-                )
-                .overlay {
-                    DSTabBarShape()
-                        .stroke(DSTabBarStyle.Palette.barRimEnds, lineWidth: DSTabBarStyle.strokeWidth * 2)
-                }
-                .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
-        }
-    }
-
-    /// The glint along the notch's edge. Its colours run across the cutout's width, which is centred on the bar.
-    var notchGlint: some View {
-        GeometryReader { proxy in
-            let halfShoulder = DSTabBarStyle.notchShoulderWidth / 2 / proxy.size.width
-            DSTabBarCutoutEdge()
-                .stroke(
-                    LinearGradient(
-                        colors: DSTabBarStyle.Palette.notchGlintColors,
-                        startPoint: UnitPoint(x: 0.5 - halfShoulder, y: 0.5),
-                        endPoint: UnitPoint(x: 0.5 + halfShoulder, y: 0.5)
-                    ),
-                    lineWidth: DSTabBarStyle.strokeWidth * 2
-                )
-        }
-        .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
-    }
-
-    /// A black silhouette pulled in from the bar's outline, masked to outside the bar so the translucent glass
-    /// never shows it. The silhouette has no notch, so the shadow runs under the whole bar; `DSTabBarShadowMask`
-    /// removes
-    /// the hole. Only the shadow's falloff past the bar's edge is drawn.
-    /// It fades with the centre panel, which hides the bar's shadow while open.
-    var shadow: some View {
-        RoundedRectangle(cornerRadius: DSTabBarStyle.cornerRadius - DSTabBarStyle.barShadowSpread, style: .continuous)
-            .fill(Color.black)
-            .padding(.horizontal, DSTabBarStyle.barShadowSpread)
-            .padding(.bottom, DSTabBarStyle.barShadowSpread)
-            .padding(.top, DSTabBarStyle.barShadowTopInset)
-            .shadow(
-                color: DSTabBarStyle.Palette.barShadow,
-                radius: DSTabBarStyle.barShadowRadius,
-                y: DSTabBarStyle.barShadowY
-            )
-            .mask { DSTabBarOutsideMask().fill(style: FillStyle(eoFill: true)) }
-            .opacity(1 - openProgress)
+        DSTabBarShape()
+            .stroke(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth * 2)
+            .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
     }
 }
 

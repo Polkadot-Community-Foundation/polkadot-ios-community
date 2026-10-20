@@ -18,7 +18,7 @@ public final class ScanPanelViewLayout: UIView {
     /// roughly a second. It sits behind the preview, which fades in over it.
     private let placeholderView: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor(DSTabBarStyle.Palette.cameraBacking)
+        view.backgroundColor = .bgSurfaceContainer
         view.layer.cornerRadius = DSRadii.large
         view.layer.masksToBounds = true
         return view
@@ -28,7 +28,7 @@ public final class ScanPanelViewLayout: UIView {
         let button = UIButton()
         let material = DSTabBarFieldMaterialView(cornerRadius: 24)
         let icon = UIImageView(image: UIImage(resource: .scan18).withRenderingMode(.alwaysTemplate))
-        icon.tintColor = UIColor(DSTabBarStyle.Palette.fieldIcon)
+        icon.tintColor = .fgPrimary
         icon.contentMode = .scaleAspectFit
         icon.isUserInteractionEnabled = false
         button.addSubview(material)
