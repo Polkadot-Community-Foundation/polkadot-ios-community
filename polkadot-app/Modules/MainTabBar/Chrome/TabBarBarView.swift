@@ -31,10 +31,11 @@ struct TabBarBarView: View {
                     onSettled: { model.onCenterPanelOpenChanged?($0) },
                     onCloseRequested: { model.onCenterPanelCloseRequested?($0) },
                     onSwipeOpenBegan: model.onCenterPanelSwipeOpenBegan,
-                    onSwipeOpenLanding: model.onCenterPanelSwipeOpenLanding
-                ) {
-                    TabBarScanPanelContent(makeController: model.makeCenterContent)
-                }
+                    onSwipeOpenLanding: model.onCenterPanelSwipeOpenLanding,
+                    content: {
+                        TabBarScanPanelContent(makeController: model.makeCenterContent)
+                    }
+                )
             },
             shelf: {
                 #if FEATURE_PRODUCTS
