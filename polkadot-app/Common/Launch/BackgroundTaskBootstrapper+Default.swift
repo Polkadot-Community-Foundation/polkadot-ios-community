@@ -3,6 +3,7 @@ import Keystore_iOS
 import KeyDerivation
 
 extension BackgroundTaskBootstrapper {
+    @MainActor
     static func makeDefault() -> BackgroundTaskBootstrapper {
         BackgroundTaskBootstrapper(
             dependencies: BackgroundTaskBootstrapDependencies(

@@ -1,8 +1,9 @@
 import Foundation
-import os
 import ChainRegistry
 
-protocol AppSharedInitializing: AnyObject, Sendable {
+/// Main actor: migrations must finish before any caller opens a store, and the config fetch is not thread-safe.
+@MainActor
+protocol AppSharedInitializing: AnyObject {
     func start()
 
     func refetchConfig()
@@ -15,10 +16,11 @@ struct AppSharedInitializerDependencies {
     let chainRegistryConfigurator: ChainRegistryConfiguring
 }
 
+@MainActor
 final class AppSharedInitializer {
     private let dependencies: AppSharedInitializerDependencies
     private let logger: LoggerProtocol
-    private let didStart = OSAllocatedUnfairLock(initialState: false)
+    private var didStart = false
 
     init(dependencies: AppSharedInitializerDependencies, logger: LoggerProtocol) {
         self.dependencies = dependencies
@@ -26,14 +28,10 @@ final class AppSharedInitializer {
     }
 }
 
-extension AppSharedInitializer: AppSharedInitializing, @unchecked Sendable {
+extension AppSharedInitializer: AppSharedInitializing {
     func start() {
-        let wasStarted = didStart.withLock { started in
-            defer { started = true }
-            return started
-        }
-
-        guard !wasStarted else { return }
+        guard !didStart else { return }
+        didStart = true
 
         runMigrations()
         dependencies.chainRegistryConfigurator.set(chainRegistry: dependencies.chainRegistryClosure())

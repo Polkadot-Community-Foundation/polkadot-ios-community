@@ -264,7 +264,7 @@ extension RootInteractor: RootInteractorInputProtocol {
         initializer.start()
 
         paymentAssetBranding.start()
-        
+
         let chainRegistry = chainRegistryClosure()
         beginSetupAttempt(with: chainRegistry)
 

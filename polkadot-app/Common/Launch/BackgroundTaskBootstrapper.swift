@@ -43,7 +43,7 @@ final class BackgroundTaskBootstrapper {
 
 extension BackgroundTaskBootstrapper: BackgroundTaskBootstrapping, @unchecked Sendable {
     func waitWhenReady(deadline: Duration) async -> BackgroundTaskReadiness {
-        dependencies.initializer.start()
+        await dependencies.initializer.start()
 
         do {
             try await withTimeout(deadline, clock: clock) { [self] in

@@ -3,6 +3,7 @@ import Testing
 
 @testable import polkadot_app
 
+@MainActor
 struct AppSharedInitializerTests {
     @Test func launchStepsRunOnceAcrossStarts() {
         let migrator = MockMigrator()

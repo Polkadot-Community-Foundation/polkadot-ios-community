@@ -4,14 +4,16 @@ import ChainRegistry
 
 @testable import polkadot_app
 
+@MainActor
 struct BackgroundTaskBootstrapperTests {
-    @Test func waitStartsSharedInitializer() async {
+    @Test func waitStartsSharedInitializerOnMainActor() async {
         let migrator = MockMigrator()
         let bootstrapper = makeBootstrapper(migrator: migrator)
 
         _ = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(migrator.migrateCallCount == 1)
+        #expect(migrator.migratedOnMainThread)
     }
 
     @Test func readyForDashboardWhenConfigChainsTldAndUserAreInPlace() async {

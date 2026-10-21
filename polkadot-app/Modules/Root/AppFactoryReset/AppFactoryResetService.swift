@@ -50,7 +50,7 @@
             deleteCoreDataDatabases()
             clearSDKCaches()
             // Last: applying a config syncs the chain registry, which must not write into stores being deleted.
-            initializer.refetchConfig()
+            await initializer.refetchConfig()
 
             logger.debug("App reset performed")
         }
