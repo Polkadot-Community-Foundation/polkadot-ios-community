@@ -39,7 +39,7 @@ extension ServiceCoordinator {
         attachmentDownloadService.setup()
         notificationBadgeSyncService.setup()
         messageExpansionService.start()
-        allowanceRenewalService.setup()
+        statementRenewalLoop.setup()
 
         interactiveStart = Task { [self] in
             await chainStatusProvider.start()
@@ -68,7 +68,7 @@ extension ServiceCoordinator {
         attachmentUploadService.throttle()
         attachmentDownloadService.throttle()
         notificationBadgeSyncService.throttle()
-        allowanceRenewalService.throttle()
+        statementRenewalLoop.throttle()
 
         messageExpansionService.stop()
 

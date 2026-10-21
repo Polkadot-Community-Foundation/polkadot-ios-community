@@ -68,7 +68,7 @@ final class ServiceCoordinator {
     let notificationBadgeSyncService: NotificationBadgeSyncService
     let accountManager: ProductsAccountManaging
     let allowanceManagerFacade: AllowanceManagerFacade
-    let allowanceRenewalService: AllowanceRenewalService
+    let statementRenewalLoop: StatementRenewalLoop
     let durabilityRenewal: StatementDurabilityRenewing
     let turnService: TURNCredentialsProviding
     let deviceSyncService: DeviceSyncServicing
@@ -112,7 +112,7 @@ final class ServiceCoordinator {
         notificationBadgeSyncService: NotificationBadgeSyncService,
         accountManager: ProductsAccountManaging,
         allowanceManagerFacade: AllowanceManagerFacade,
-        allowanceRenewalService: AllowanceRenewalService,
+        statementRenewalLoop: StatementRenewalLoop,
         durabilityRenewal: StatementDurabilityRenewing,
         paymentsSupport: PaymentsSupport,
         turnService: TURNCredentialsProviding,
@@ -145,7 +145,7 @@ final class ServiceCoordinator {
         self.notificationBadgeSyncService = notificationBadgeSyncService
         self.accountManager = accountManager
         self.allowanceManagerFacade = allowanceManagerFacade
-        self.allowanceRenewalService = allowanceRenewalService
+        self.statementRenewalLoop = statementRenewalLoop
         self.durabilityRenewal = durabilityRenewal
         self.deviceSyncService = deviceSyncService
         self.networkStatusService = networkStatusService
@@ -287,10 +287,7 @@ extension ServiceCoordinator {
             sharedRun: SharedRun(cancelledValue: .cancelled),
             logger: logger
         )
-        let chatRequestCoordinator = createChatRequestCoordinator(
-            serviceFactory: chatRequestServiceFactory,
-            durabilityRenewal: durabilityRenewal
-        )
+        let chatRequestCoordinator = createChatRequestCoordinator(serviceFactory: chatRequestServiceFactory)
         let audioSessionManager = AudioSessionManager()
 
         let paymentsSupport = PaymentsSupport(coinageService: coinageServices.coinageService)
@@ -332,9 +329,9 @@ extension ServiceCoordinator {
         let notificationBadgeSyncService = NotificationBadgeSyncService(logger: logger)
 
         let messageExpansionService = createCompactedMessageExpansionService(logger: logger)
-        let allowanceRenewalService = AllowanceRenewalService(
+        let statementRenewalLoop = StatementRenewalLoop(
             durabilityRenewal: durabilityRenewal,
-            appStateStreamFactory: ApplicationStateStreamFactory()
+            backgroundExecutor: ConnectionRetainingExecutor(provider: ChainRegistryFacade.sharedRegistry)
         )
 
         let networkStatusService = NetworkStatusService(
@@ -398,7 +395,7 @@ extension ServiceCoordinator {
             notificationBadgeSyncService: notificationBadgeSyncService,
             accountManager: accountManager,
             allowanceManagerFacade: allowanceManagerFacade,
-            allowanceRenewalService: allowanceRenewalService,
+            statementRenewalLoop: statementRenewalLoop,
             durabilityRenewal: durabilityRenewal,
             paymentsSupport: paymentsSupport,
             turnService: turnService,
@@ -470,8 +467,7 @@ private extension ServiceCoordinator {
     }
 
     static func createChatRequestCoordinator(
-        serviceFactory: ChatRequestServiceFactory,
-        durabilityRenewal: StatementDurabilityRenewing
+        serviceFactory: ChatRequestServiceFactory
     ) -> ChatRequestCoordinatorServicing {
         let storageFacade = UserDataStorageFacade.shared
         let operationQueue = OperationManagerFacade.sharedDefaultQueue
@@ -489,10 +485,6 @@ private extension ServiceCoordinator {
                 logger: logger
             ),
             serviceFactory: serviceFactory,
-            renewalLoop: ChatRequestRenewalLoop(
-                durabilityRenewal: durabilityRenewal,
-                backgroundExecutor: ConnectionRetainingExecutor(provider: ChainRegistryFacade.sharedRegistry)
-            ),
             logger: logger
         )
     }
