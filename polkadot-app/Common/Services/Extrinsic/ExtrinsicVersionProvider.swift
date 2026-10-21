@@ -26,6 +26,14 @@ final class RuntimeTransactionExtensionPipelineProvider: TransactionExtensionPip
 
 protocol ExtrinsicVersionProviding {
     func getExtrinsicVersion(for chainId: ChainId, isSigned: Bool) async throws -> Extrinsic.Version
+
+    /// The format that carries a transaction built against pipeline `extensionVersion`: V4 when it is
+    /// signed and that pipeline cannot verify a general signature, V5 at that version otherwise.
+    func getExtrinsicVersion(
+        for chainId: ChainId,
+        extensionVersion: UInt8,
+        isSigned: Bool
+    ) async throws -> Extrinsic.Version
 }
 
 /// People and Asset Hub take V5 with the remote-config extension version. A *signed* V5
@@ -52,15 +60,29 @@ extension ExtrinsicVersionProvider: ExtrinsicVersionProviding {
         }
 
         let version = extensionVersionProvider.getExtensionVersion(for: .V5, chainId: chainId)
-        guard isSigned, case let .V5(extensionVersion) = version else {
+        guard case let .V5(extensionVersion) = version else {
             return version
+        }
+
+        return try await getExtrinsicVersion(for: chainId, extensionVersion: extensionVersion, isSigned: isSigned)
+    }
+
+    func getExtrinsicVersion(
+        for chainId: ChainId,
+        extensionVersion: UInt8,
+        isSigned: Bool
+    ) async throws -> Extrinsic.Version {
+        guard isSigned else {
+            return .V5(extensionVersion: extensionVersion)
         }
 
         let pipeline = try await pipelineProvider.transactionExtensions(
             for: chainId,
             extensionVersion: extensionVersion
         )
-        return pipeline.contains(Extrinsic.TransactionExtensionId.verifySignature) ? version : .V4
+        return pipeline.contains(Extrinsic.TransactionExtensionId.verifySignature)
+            ? .V5(extensionVersion: extensionVersion)
+            : .V4
     }
 }
 
