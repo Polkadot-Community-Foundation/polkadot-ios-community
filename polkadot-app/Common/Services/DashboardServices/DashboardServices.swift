@@ -4,7 +4,7 @@ enum DashboardServices {
     static let flowStateProvider: SPAFlowStateProviding = SPAFlowStateProvider()
 
     @MainActor static let manager = DashboardServicesManager<ServiceCoordinator>(
-        bootstrapper: LaunchBootstrapper.shared,
+        bootstrapper: BackgroundTaskBootstrapper.makeDefault(),
         coordinatorFactory: ServiceCoordinatorFactory(flowStateProvider: flowStateProvider),
         connectionRetention: ChainRegistryConnectionRetention(),
         headlessBootDeadline: .seconds(20),

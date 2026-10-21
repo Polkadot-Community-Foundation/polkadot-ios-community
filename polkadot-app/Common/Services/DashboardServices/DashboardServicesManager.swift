@@ -10,7 +10,7 @@ protocol DashboardServicesCoordinatorMaking<Coordinator> {
 /// Once no lease is left the coordinator is stopped and dropped, so a stopped instance is never started again.
 @MainActor
 final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating> {
-    private let bootstrapper: LaunchBootstrapping
+    private let bootstrapper: BackgroundTaskBootstrapping
     private let coordinatorFactory: any DashboardServicesCoordinatorMaking<Coordinator>
     private let connectionRetention: BackgroundConnectionRetaining
     private let headlessBootDeadline: Duration
@@ -22,7 +22,7 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
     private var headlessBoot: Task<Coordinator?, Never>?
 
     init(
-        bootstrapper: LaunchBootstrapping,
+        bootstrapper: BackgroundTaskBootstrapping,
         coordinatorFactory: any DashboardServicesCoordinatorMaking<Coordinator>,
         connectionRetention: BackgroundConnectionRetaining,
         headlessBootDeadline: Duration,
@@ -101,9 +101,7 @@ private extension DashboardServicesManager {
     }
 
     func bootHeadless(generation bootGeneration: UInt64) async -> Coordinator? {
-        bootstrapper.start()
-
-        let readiness = await bootstrapper.waitReady(deadline: headlessBootDeadline)
+        let readiness = await bootstrapper.waitWhenReady(deadline: headlessBootDeadline)
 
         guard readiness == .dashboard else {
             logger.info("Headless boot skipped: \(readiness)")

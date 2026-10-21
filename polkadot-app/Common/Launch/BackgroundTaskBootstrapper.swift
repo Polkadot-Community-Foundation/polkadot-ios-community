@@ -1,10 +1,9 @@
 import Foundation
-import os
 import ChainRegistry
 import Products
 import StructuredConcurrency
 
-enum LaunchReadiness: Equatable {
+enum BackgroundTaskReadiness: Equatable {
     case dashboard
     case notOnboarded
     case configUnavailable
@@ -12,58 +11,40 @@ enum LaunchReadiness: Equatable {
     case timedOut
 }
 
-protocol LaunchBootstrapping: AnyObject, Sendable {
-    func start()
-
-    func waitReady(deadline: Duration) async -> LaunchReadiness
+protocol BackgroundTaskBootstrapping: Sendable {
+    func waitWhenReady(deadline: Duration) async -> BackgroundTaskReadiness
 }
 
-struct LaunchBootstrapDependencies {
-    let migrator: Migrating
+struct BackgroundTaskBootstrapDependencies {
+    let initializer: AppSharedInitializing
     let chainRegistryClosure: ChainRegistryLazyClosure
     let remoteConfigManager: RemoteConfigManaging
-    let chainRegistryConfigurator: ChainRegistryConfiguring
-    let paymentAssetBranding: PaymentAssetBranding
     let tldProvider: DotNsTldProviding
     let appliedConfigReader: () -> RemoteAppConfig?
     let destinationResolver: any DecisionResolver<RootDestination>
 }
 
-final class LaunchBootstrapper {
+final class BackgroundTaskBootstrapper {
     private static let durabilityChainIds: Set<ChainModel.Id> = [
         AppConfig.Chains.chatChain,
         AppConfig.Assets.mainAsset.chainId
     ]
 
-    private let dependencies: LaunchBootstrapDependencies
+    private let dependencies: BackgroundTaskBootstrapDependencies
     private let clock: any Clock<Duration>
     private let logger: LoggerProtocol
-    private let didStart = OSAllocatedUnfairLock(initialState: false)
 
-    init(dependencies: LaunchBootstrapDependencies, clock: any Clock<Duration>, logger: LoggerProtocol) {
+    init(dependencies: BackgroundTaskBootstrapDependencies, clock: any Clock<Duration>, logger: LoggerProtocol) {
         self.dependencies = dependencies
         self.clock = clock
         self.logger = logger
     }
 }
 
-extension LaunchBootstrapper: LaunchBootstrapping, @unchecked Sendable {
-    func start() {
-        let wasStarted = didStart.withLock { started in
-            defer { started = true }
-            return started
-        }
+extension BackgroundTaskBootstrapper: BackgroundTaskBootstrapping, @unchecked Sendable {
+    func waitWhenReady(deadline: Duration) async -> BackgroundTaskReadiness {
+        dependencies.initializer.start()
 
-        guard !wasStarted else { return }
-
-        runMigrations()
-        dependencies.chainRegistryConfigurator.set(chainRegistry: dependencies.chainRegistryClosure())
-        dependencies.remoteConfigManager.fetchRemoteConfigValues()
-        // Follows every applied config, so the logos are fetched the moment one names them.
-        dependencies.paymentAssetBranding.start()
-    }
-
-    func waitReady(deadline: Duration) async -> LaunchReadiness {
         do {
             try await withTimeout(deadline, clock: clock) { [self] in
                 _ = try await dependencies.remoteConfigManager.asyncWaitRemoteConfig()
@@ -72,22 +53,14 @@ extension LaunchBootstrapper: LaunchBootstrapping, @unchecked Sendable {
 
             return evaluateReadiness()
         } catch {
-            logger.warning("Launch readiness wait ended: \(error)")
+            logger.warning("Background task readiness wait ended: \(error)")
             return dependencies.appliedConfigReader()?.isValid == true ? .timedOut : .configUnavailable
         }
     }
 }
 
-private extension LaunchBootstrapper {
-    func runMigrations() {
-        do {
-            try dependencies.migrator.migrate()
-        } catch {
-            logger.error("Migration failed: \(error.localizedDescription)")
-        }
-    }
-
-    func evaluateReadiness() -> LaunchReadiness {
+private extension BackgroundTaskBootstrapper {
+    func evaluateReadiness() -> BackgroundTaskReadiness {
         guard dependencies.appliedConfigReader()?.isValid == true else {
             return .configUnavailable
         }

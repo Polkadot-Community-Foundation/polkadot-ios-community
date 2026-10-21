@@ -4,13 +4,12 @@ import ChainRegistry
 
 @testable import polkadot_app
 
-struct LaunchBootstrapperTests {
-    @Test func launchPassRunsOnceAcrossCallers() {
+struct BackgroundTaskBootstrapperTests {
+    @Test func waitStartsSharedInitializer() async {
         let migrator = MockMigrator()
         let bootstrapper = makeBootstrapper(migrator: migrator)
 
-        bootstrapper.start()
-        bootstrapper.start()
+        _ = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(migrator.migrateCallCount == 1)
     }
@@ -18,7 +17,7 @@ struct LaunchBootstrapperTests {
     @Test func readyForDashboardWhenConfigChainsTldAndUserAreInPlace() async {
         let bootstrapper = makeBootstrapper()
 
-        let readiness = await bootstrapper.waitReady(deadline: .seconds(5))
+        let readiness = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(readiness == .dashboard)
     }
@@ -26,7 +25,7 @@ struct LaunchBootstrapperTests {
     @Test func notReadyWithoutCachedTld() async {
         let bootstrapper = makeBootstrapper(tld: nil)
 
-        let readiness = await bootstrapper.waitReady(deadline: .seconds(5))
+        let readiness = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(readiness == .tldUnavailable)
     }
@@ -34,7 +33,7 @@ struct LaunchBootstrapperTests {
     @Test func notReadyBeforeOnboardingFinishes() async {
         let bootstrapper = makeBootstrapper(destination: .usernameCheck)
 
-        let readiness = await bootstrapper.waitReady(deadline: .seconds(5))
+        let readiness = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(readiness == .notOnboarded)
     }
@@ -42,13 +41,13 @@ struct LaunchBootstrapperTests {
     @Test func notReadyWithoutAppliedConfig() async {
         let bootstrapper = makeBootstrapper(appliedConfig: nil)
 
-        let readiness = await bootstrapper.waitReady(deadline: .seconds(5))
+        let readiness = await bootstrapper.waitWhenReady(deadline: .seconds(5))
 
         #expect(readiness == .configUnavailable)
     }
 }
 
-private extension LaunchBootstrapperTests {
+private extension BackgroundTaskBootstrapperTests {
     static let validConfig = RemoteAppConfig(
         identityBackendUrl: URL(string: "https://example.com"),
         ipfsGatewayUrl: URL(string: "https://ipfs.example.com"),
@@ -67,20 +66,29 @@ private extension LaunchBootstrapperTests {
         tld: String? = "dot",
         destination: RootDestination = .dashboard,
         appliedConfig: RemoteAppConfig? = Self.validConfig
-    ) -> LaunchBootstrapper {
+    ) -> BackgroundTaskBootstrapper {
         let chainRegistry = MockChainRegistry()
         chainRegistry.chainsOnSubscribe = [
             makeChain(id: AppConfig.Chains.chatChain),
             makeChain(id: AppConfig.Assets.mainAsset.chainId)
         ]
 
-        return LaunchBootstrapper(
-            dependencies: LaunchBootstrapDependencies(
+        let remoteConfigManager = MockRemoteConfigManager()
+        let initializer = AppSharedInitializer(
+            dependencies: AppSharedInitializerDependencies(
                 migrator: migrator,
                 chainRegistryClosure: { chainRegistry },
-                remoteConfigManager: MockRemoteConfigManager(),
-                chainRegistryConfigurator: MockChainRegistryConfigurator(),
-                paymentAssetBranding: .shared,
+                remoteConfigManager: remoteConfigManager,
+                chainRegistryConfigurator: MockChainRegistryConfigurator()
+            ),
+            logger: StubLogger()
+        )
+
+        return BackgroundTaskBootstrapper(
+            dependencies: BackgroundTaskBootstrapDependencies(
+                initializer: initializer,
+                chainRegistryClosure: { chainRegistry },
+                remoteConfigManager: remoteConfigManager,
                 tldProvider: StubDotNsTldProvider(tld: tld),
                 appliedConfigReader: { appliedConfig },
                 destinationResolver: MockDecisionResolver(destination: destination)

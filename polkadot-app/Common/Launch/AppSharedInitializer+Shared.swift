@@ -3,25 +3,20 @@ import Keystore_iOS
 import KeyDerivation
 import SubstrateSdk
 
-extension LaunchBootstrapper {
+extension AppSharedInitializer {
     /// Shared by the root screen and a headless launch, so migrations run once per process.
-    static let shared = LaunchBootstrapper(
-        dependencies: LaunchBootstrapDependencies(
+    static let shared = AppSharedInitializer(
+        dependencies: AppSharedInitializerDependencies(
             migrator: makeLaunchMigrator(),
             chainRegistryClosure: { ChainRegistryFacade.sharedRegistry },
             remoteConfigManager: FirebaseFacade.shared,
-            chainRegistryConfigurator: FirebaseFacade.shared,
-            paymentAssetBranding: .shared,
-            tldProvider: DotNsTldProviderFacade.shared,
-            appliedConfigReader: { AppConfigProvider.shared.getRemoteConfig() },
-            destinationResolver: makeDestinationResolver()
+            chainRegistryConfigurator: FirebaseFacade.shared
         ),
-        clock: ContinuousClock(),
         logger: Logger.shared
     )
 }
 
-private extension LaunchBootstrapper {
+private extension AppSharedInitializer {
     /// Local launch steps in order: erase a cross-device backup restore before any store is opened, then
     /// migrate the schemas.
     static func makeLaunchMigrator() -> Migrating {
@@ -47,16 +42,5 @@ private extension LaunchBootstrapper {
         )
 
         return SerialMigrator(migrations: [restoredBackupGuard, userStorageMigrator, substrateStorageMigrator])
-    }
-
-    /// Without the theme gate, which only the UI can complete.
-    static func makeDestinationResolver() -> any DecisionResolver<RootDestination> {
-        SequentialDecisionResolver<RootDestination>(
-            gates: [
-                RootGate.Wallet(entropyManager: RootEntropyManager.shared, backupHelper: MnemonicBackupHelper()),
-                RootGate.Username(usernameStorage: UsernameStorage())
-            ],
-            fallback: .dashboard
-        )
     }
 }
