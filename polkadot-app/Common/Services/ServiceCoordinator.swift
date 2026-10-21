@@ -17,6 +17,7 @@ import FoundationExt
 import Individuality
 import UniqueDevice
 import ChainRegistry
+import StructuredConcurrency
 
 protocol ServiceCoordinatorProtocol: DashboardServicesCoordinating {
     var depositService: DepositServiceProtocol { get }
@@ -283,6 +284,7 @@ extension ServiceCoordinator {
             allowances: allowanceManagerFacade,
             renewers: chatRequestServiceFactory,
             issues: StatementRenewalIssueDiagnostics.make(reporter: IssueReportingFacade.shared),
+            sharedRun: SharedRun(cancelledValue: .cancelled),
             logger: logger
         )
         let chatRequestCoordinator = createChatRequestCoordinator(

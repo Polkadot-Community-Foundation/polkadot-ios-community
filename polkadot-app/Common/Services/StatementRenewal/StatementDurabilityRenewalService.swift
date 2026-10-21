@@ -1,4 +1,5 @@
 import Foundation
+import StructuredConcurrency
 import StatementDelivery
 
 protocol StatementDurabilityRenewing: Sendable {
@@ -27,19 +28,20 @@ actor StatementDurabilityRenewalService {
     private let allowances: AllowanceSlotsRenewing
     private let renewers: StatementRenewerProviding
     private let issues: StatementRenewalIssueDiagnostics
+    private let sharedRun: any SharedRunning<StatementDurabilityRenewalReport>
     private let logger: LoggerProtocol
-
-    private var inFlight: Task<StatementDurabilityRenewalReport, Never>?
 
     init(
         allowances: AllowanceSlotsRenewing,
         renewers: StatementRenewerProviding,
         issues: StatementRenewalIssueDiagnostics,
+        sharedRun: any SharedRunning<StatementDurabilityRenewalReport>,
         logger: LoggerProtocol
     ) {
         self.allowances = allowances
         self.renewers = renewers
         self.issues = issues
+        self.sharedRun = sharedRun
         self.logger = logger
     }
 }
@@ -47,34 +49,13 @@ actor StatementDurabilityRenewalService {
 extension StatementDurabilityRenewalService: StatementDurabilityRenewing {
     @discardableResult
     func renewAll() async -> StatementDurabilityRenewalReport {
-        let run = liveRun()
-
-        let report = await withTaskCancellationHandler {
-            await run.value
-        } onCancel: {
-            run.cancel()
+        await sharedRun.run { [self] in
+            await performRun()
         }
-
-        if inFlight == run {
-            inFlight = nil
-        }
-
-        return report
     }
 }
 
 private extension StatementDurabilityRenewalService {
-    /// A cancelled run was expired or torn down, and the next caller still needs a real one.
-    func liveRun() -> Task<StatementDurabilityRenewalReport, Never> {
-        if let inFlight, !inFlight.isCancelled {
-            return inFlight
-        }
-
-        let run = Task { await performRun() }
-        inFlight = run
-        return run
-    }
-
     func performRun() async -> StatementDurabilityRenewalReport {
         await allowances.renewAllowanceSlots()
 
