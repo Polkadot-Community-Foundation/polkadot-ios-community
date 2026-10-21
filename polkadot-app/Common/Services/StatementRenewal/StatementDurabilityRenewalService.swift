@@ -2,12 +2,10 @@ import Foundation
 import StatementDelivery
 
 protocol StatementDurabilityRenewing: Sendable {
-    /// Renews allowances first, then every outgoing statement kind. A caller arriving while a run is live joins it.
     func renewAll() async -> StatementDurabilityRenewalReport
 }
 
 protocol AllowanceSlotsRenewing: Sendable {
-    /// Releases allowances no feature needs any more, then renews every remaining one.
     func renewAllowanceSlots() async
 }
 
@@ -23,8 +21,7 @@ struct StatementDurabilityRenewalReport: Sendable, Equatable {
     static let cancelled = StatementDurabilityRenewalReport(chatRequests: .incomplete, chatAcceptances: .incomplete)
 }
 
-/// The single entry point for keeping statements and their allowances alive: the hourly loop, the foreground hook and
-/// the background task all call it, so concurrent triggers share one run instead of publishing twice.
+/// Every trigger goes through here, so concurrent ones share one run instead of publishing twice.
 actor StatementDurabilityRenewalService {
     private let allowances: AllowanceSlotsRenewing
     private let renewers: StatementRenewerProviding
@@ -65,7 +62,7 @@ extension StatementDurabilityRenewalService: StatementDurabilityRenewing {
 }
 
 private extension StatementDurabilityRenewalService {
-    /// A cancelled run is never handed out: it was expired by the OS or torn down, and the caller still needs one.
+    /// A cancelled run was expired or torn down, and the next caller still needs a real one.
     func liveRun() -> Task<StatementDurabilityRenewalReport, Never> {
         if let inFlight, !inFlight.isCancelled {
             return inFlight

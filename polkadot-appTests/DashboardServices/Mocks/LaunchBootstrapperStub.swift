@@ -3,7 +3,6 @@ import os
 
 @testable import polkadot_app
 
-/// Reports a fixed readiness; with `holdsReadiness` the wait parks until `releaseReadiness()`.
 final class LaunchBootstrapperStub: LaunchBootstrapping, @unchecked Sendable {
     private struct State {
         var startCallCount = 0

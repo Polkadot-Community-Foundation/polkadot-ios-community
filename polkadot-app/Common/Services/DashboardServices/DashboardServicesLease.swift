@@ -6,8 +6,6 @@ enum DashboardServicesDemand: Hashable {
     case durability
 }
 
-/// A caller's claim on the dashboard services: the dashboard holds an interactive one for its lifetime, a background
-/// renewal run a durability one for the run. Releasing twice is a no-op.
 final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: @unchecked Sendable {
     let coordinator: Coordinator
     let demand: DashboardServicesDemand

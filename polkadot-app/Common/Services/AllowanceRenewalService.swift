@@ -2,7 +2,6 @@ import Foundation
 import CommonService
 import FoundationExt
 
-/// Renews on launch and on every return to the foreground, through the shared statement durability run.
 final class AllowanceRenewalService {
     private let durabilityRenewal: StatementDurabilityRenewing
     private let appStateStreamFactory: ApplicationStateStreamFactory

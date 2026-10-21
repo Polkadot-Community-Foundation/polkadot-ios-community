@@ -1,8 +1,7 @@
 import Foundation
 import BackgroundExecution
 
-/// Renews hourly while the dashboard runs. Each pass holds a background-task assertion; the renewal service itself
-/// stays executor-free so the OS background task can drive it under its own expiration.
+/// The executor lives here so the OS background task can drive the renewal service under its own expiration.
 struct ChatRequestRenewalLoop {
     private static let interval: Duration = .seconds(60 * 60)
 

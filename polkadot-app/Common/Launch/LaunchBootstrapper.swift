@@ -12,14 +12,9 @@ enum LaunchReadiness: Equatable {
     case timedOut
 }
 
-/// The UI-free part of app launch, shared by the root screen and a headless background launch.
 protocol LaunchBootstrapping: AnyObject, Sendable {
-    /// Runs the launch pass once per process: migrations before any store opens, chain registry wiring and the
-    /// first remote config fetch. Later calls return at once.
     func start()
 
-    /// Waits until dashboard services can be built without UI: a valid config, the chains they need, a cached TLD
-    /// and an onboarded user.
     func waitReady(deadline: Duration) async -> LaunchReadiness
 }
 
@@ -35,7 +30,6 @@ struct LaunchBootstrapDependencies {
 }
 
 final class LaunchBootstrapper {
-    /// What a background renewal needs connected: the chat chain for statements and the main asset chain for coinage.
     private static let durabilityChainIds: Set<ChainModel.Id> = [
         AppConfig.Chains.chatChain,
         AppConfig.Assets.mainAsset.chainId
@@ -98,7 +92,7 @@ private extension LaunchBootstrapper {
             return .configUnavailable
         }
 
-        // A background launch never resolves the TLD over the network; the root screen does that on first launch.
+        // Not resolved over the network here: the root screen does that on first launch.
         guard dependencies.tldProvider.currentTld() != nil else {
             return .tldUnavailable
         }

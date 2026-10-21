@@ -449,7 +449,6 @@ private extension ServiceCoordinator {
 }
 
 private extension ServiceCoordinator {
-    /// One instance for the coordinator and the renewal service, so renewal shares the cached delivery pipelines.
     static func createChatRequestServiceFactory(
         notificationAllocator: NotificationStatementAccountAllocating,
         signingFallback: NonPrivateSigningFallbacking

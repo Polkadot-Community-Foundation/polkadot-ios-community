@@ -3,7 +3,6 @@ import os
 
 @testable import polkadot_app
 
-/// Counts retains and how many are still held.
 final class ConnectionRetentionSpy: BackgroundConnectionRetaining, @unchecked Sendable {
     private struct State {
         var retainCount = 0

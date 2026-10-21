@@ -275,7 +275,7 @@ extension RootInteractor: RootInteractorInputProtocol {
     }
 
     func setup() {
-        // Migrations, registry wiring and the first config fetch; a headless background launch may have run it already.
+        // A headless background launch may have run the launch pass already.
         launchBootstrapper.start()
         let chainRegistry = chainRegistryClosure()
         beginSetupAttempt(with: chainRegistry)

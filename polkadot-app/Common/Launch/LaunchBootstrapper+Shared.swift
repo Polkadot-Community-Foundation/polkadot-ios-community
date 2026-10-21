@@ -4,7 +4,7 @@ import KeyDerivation
 import SubstrateSdk
 
 extension LaunchBootstrapper {
-    /// One per process: the root screen and a headless background launch must run the launch pass only once.
+    /// Shared by the root screen and a headless launch, so migrations run once per process.
     static let shared = LaunchBootstrapper(
         dependencies: LaunchBootstrapDependencies(
             migrator: makeLaunchMigrator(),
@@ -49,7 +49,7 @@ private extension LaunchBootstrapper {
         return SerialMigrator(migrations: [restoredBackupGuard, userStorageMigrator, substrateStorageMigrator])
     }
 
-    /// The root gates without theme selection, which only the UI can complete.
+    /// Without the theme gate, which only the UI can complete.
     static func makeDestinationResolver() -> any DecisionResolver<RootDestination> {
         SequentialDecisionResolver<RootDestination>(
             gates: [

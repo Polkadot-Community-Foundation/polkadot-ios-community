@@ -6,9 +6,7 @@ protocol DashboardServicesCoordinatorMaking<Coordinator> {
     @MainActor func makeCoordinator() -> Coordinator?
 }
 
-/// The single owner of the dashboard's service coordinator. The dashboard and a background renewal run each take a
-/// lease; the coordinator runs what the live leases need and is stopped and dropped once none are left, so a stopped
-/// instance is never started again.
+/// Once no lease is left the coordinator is stopped and dropped, so a stopped instance is never started again.
 @MainActor
 final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating> {
     private let bootstrapper: LaunchBootstrapping
@@ -36,12 +34,10 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
         self.logger = logger
     }
 
-    /// Whether services are already up, i.e. a background run reuses them instead of booting headless.
     var hasCoordinator: Bool {
         coordinator != nil
     }
 
-    /// Creates the coordinator on first use and starts its interactive part for the first interactive lease.
     func acquireInteractive() -> DashboardServicesLease<Coordinator>? {
         guard let coordinator = existingOrNewCoordinator() else { return nil }
 
@@ -52,13 +48,10 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
         return makeLease(.interactive, for: coordinator, connectionHold: nil)
     }
 
-    /// Reuses the live coordinator or boots one headless, keeps every chain connection awake for the lease, then waits
-    /// for the durability part.
-    /// - Returns: `nil` when the app is not ready for dashboard services or the durability part failed to start.
     func acquireDurability() async -> DashboardServicesLease<Coordinator>? {
         guard let coordinator = await existingOrHeadlessCoordinator() else { return nil }
 
-        // After the boot, never before: reaching the registry opens the chain store, which migrations must precede.
+        // After the boot: reaching the registry opens the chain store, which migrations must precede.
         let connectionHold = connectionRetention.retainAllConnections()
         let lease = makeLease(.durability, for: coordinator, connectionHold: connectionHold)
 
@@ -70,7 +63,6 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
         return lease
     }
 
-    /// Stops and drops everything; leases issued before are ignored when released.
     func reset() {
         generation &+= 1
         headlessBoot?.cancel()

@@ -3,7 +3,6 @@ import os
 
 @testable import polkadot_app
 
-/// Counts allowance renewals; with `holdsRenewal` each call parks until `releaseRenewals()`.
 final class AllowanceSlotsRenewalSpy: AllowanceSlotsRenewing, @unchecked Sendable {
     private struct State {
         var callCount = 0

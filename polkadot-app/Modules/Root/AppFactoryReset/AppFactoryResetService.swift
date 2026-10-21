@@ -32,7 +32,7 @@
         }
 
         func resetAllData() async {
-            // The process survives the reset, so the services must not outlive the data they were built on.
+            // The process survives the reset; the services must not outlive the data they were built on.
             await DashboardServices.manager.reset()
 
             if #available(iOS 26.0, *) {

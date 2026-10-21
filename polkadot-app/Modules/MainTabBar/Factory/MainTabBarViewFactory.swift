@@ -14,7 +14,7 @@ enum MainTabBarViewFactory {
     ) -> MainTabBarViewProtocol? {
         let spaFlowState = flowStateProvider.flowState()
 
-        // Taking the lease starts the dashboard services; the interactor releases it when the dashboard goes away.
+        // Taking the lease starts the services; the interactor releases it.
         guard let servicesLease = DashboardServices.manager.acquireInteractive() else {
             return nil
         }
