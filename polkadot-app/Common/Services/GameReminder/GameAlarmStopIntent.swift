@@ -7,10 +7,10 @@ struct GameAlarmPlayIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Join"
     static var openAppWhenRun: Bool = true
 
-    @Parameter(title: "Alarm ID")
+    @Parameter(title: "Alarm ID") // hardcoded-string:ignore
     var alarmID: String?
 
-    @Parameter(title: "Product ID")
+    @Parameter(title: "Product ID") // hardcoded-string:ignore
     var productId: String?
 
     @MainActor

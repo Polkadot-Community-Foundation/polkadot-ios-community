@@ -28,7 +28,11 @@ struct AssetPinnedPocketCards: PinnedPocketCards {
     private static let definitions: [Definition] = []
     #else
     private static let definitions = [
-        Definition(cardId: "humanity", title: "Humanity", backingProduct: BuiltInProduct.personhood(for:))
+        Definition(
+            cardId: "humanity",
+            title: "Humanity", // hardcoded-string:ignore
+            backingProduct: BuiltInProduct.personhood(for:)
+        )
     ]
     #endif
 

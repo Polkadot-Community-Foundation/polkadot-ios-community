@@ -108,7 +108,7 @@ extension RoomInfo {
 private extension ChatMessageContent {
     var variantName: String {
         switch self {
-        case .text: "text"
+        case .text: "text" // hardcoded-string:ignore
         case .richText: "richText"
         case .custom: "custom"
         case .actions: "actions"
