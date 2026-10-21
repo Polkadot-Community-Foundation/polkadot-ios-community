@@ -41,7 +41,6 @@ enum MainTabBarViewFactory {
             hostProvider: spaFlowState.hostProvider
         )
 
-        let mnemonicBackupHelper = MnemonicBackupHelper()
         let browserCoordinator = createBrowserCoordinator(flowStateProvider: flowStateProvider)
         let interactor = MainTabBarInteractor(
             serviceCoordinator: serviceCoordinator,
@@ -49,18 +48,14 @@ enum MainTabBarViewFactory {
             userNotificationService: userNotificationService,
             urlHandlingService: urlHandler,
             deferredLinkHandler: deepLinkHandling,
-            mnemonicBackupHelper: mnemonicBackupHelper,
             browserCoordinator: browserCoordinator
         )
+        #if !FEATURE_PRODUCTS
+            interactor.settingsAttentionObserver = SettingsBackupAttentionObserver()
+        #endif
 
         let qrHandler = WalletQRScanResultHandler(
             dsfinvkRouter: W3sDsfinvkRouter.createDefault(coinageService: serviceCoordinator.coinageService)
-        )
-
-        let wireframe = MainTabBarWireframe(
-            serviceCoordinator: serviceCoordinator,
-            scanResultHandler: qrHandler,
-            moduleNavigator: moduleNavigator
         )
 
         let chipViewModelFactory = SPATabChipViewModelFactory(
@@ -72,6 +67,12 @@ enum MainTabBarViewFactory {
             scanResultHandler: qrHandler,
             flowStateProvider: flowStateProvider,
             foregroundVisibilityReporter: foregroundVisibilityReporter
+        )
+
+        let wireframe = MainTabBarWireframe(
+            serviceCoordinator: serviceCoordinator,
+            tabFactory: tabFactory,
+            moduleNavigator: moduleNavigator
         )
 
         let presenter = MainTabBarPresenter(

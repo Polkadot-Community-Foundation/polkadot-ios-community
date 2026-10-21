@@ -29,55 +29,60 @@ extension ModuleNavigator: ModuleNavigating {
             return
         }
 
-        let navigate = { [weak view] in
-            guard let view else { return }
-
-            view.select(tab: .chat)
-            let tabNavigation = view.view(for: .chat) as? UINavigationController
-
-            if case let .existingChat(chat) = model {
-                let existing = tabNavigation?.viewControllers
-                    .compactMap { $0 as? ChatViewController }
-                    .first(where: { $0.presenter.chatId == chat })
-                if let existing {
-                    tabNavigation?.popToViewController(existing, animated: true)
-                    return
-                }
-            }
-
-            guard
-                let contactList = tabNavigation?.viewControllers.first as? ContactsListViewController
-            else {
+        PresentedPageDismissal.dismissingPresented(on: view, unless: Self.isPinnedPresentation) { [weak view] in
+            guard let view else {
                 return
             }
-            let contactListPresenter = contactList.presenter as? ContactsListPresenter
-            contactListPresenter?.wireframe.showChat(from: contactList, for: model)
-
-            // removing intermediate chats
-            guard
-                let tabNavigation,
-                tabNavigation.viewControllers.count > 2,
-                let rootViewController = tabNavigation.viewControllers.first,
-                let topViewController = tabNavigation.viewControllers.last
-            else {
-                return
-            }
-            tabNavigation.viewControllers = [rootViewController, topViewController]
+            Self.showChat(model, in: view)
         }
-
-        // Dismiss any presented page first, or the chat opens behind it.
-        ModalDismiss.dismissingPresented(on: view, then: navigate)
     }
 
     func openProduct(page: ProductPage) {
-        guard let tabBar = UIWindow.keyWindow?.rootViewController as? MainTabBarViewController else {
-            return
-        }
-
-        tabBar.openProduct(page: page)
+        UIApplication.shared.mainTabBarController?.openProduct(page: page)
     }
 
     func openScanPanel() {
         UIApplication.shared.mainTabBarController?.openScanPanel()
+    }
+}
+
+@MainActor
+private extension ModuleNavigator {
+    static func isPinnedPresentation(_ controller: UIViewController) -> Bool {
+        controller is any LocalAuthViewProtocol
+    }
+
+    static func showChat(_ model: ChatOpenModel, in view: MainTabBarViewController) {
+        view.select(tab: .chat)
+        let tabNavigation = view.view(for: .chat) as? UINavigationController
+
+        if case let .existingChat(chat) = model {
+            let existing = tabNavigation?.viewControllers
+                .compactMap { $0 as? ChatViewController }
+                .first(where: { $0.presenter.chatId == chat })
+            if let existing {
+                tabNavigation?.popToViewController(existing, animated: true)
+                return
+            }
+        }
+
+        guard
+            let contactList = tabNavigation?.viewControllers.first as? ContactsListViewController
+        else {
+            return
+        }
+        let contactListPresenter = contactList.presenter as? ContactsListPresenter
+        contactListPresenter?.wireframe.showChat(from: contactList, for: model)
+
+        // removing intermediate chats
+        guard
+            let tabNavigation,
+            tabNavigation.viewControllers.count > 2,
+            let rootViewController = tabNavigation.viewControllers.first,
+            let topViewController = tabNavigation.viewControllers.last
+        else {
+            return
+        }
+        tabNavigation.viewControllers = [rootViewController, topViewController]
     }
 }
