@@ -63,11 +63,20 @@ jobs:
           cp "./private_keys/AuthKey_${KEY_ID}.p8" ~/.appstoreconnect/private_keys/
           echo "key_path=$PWD/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_OUTPUT"
 
-      # Isolated venv: the runner's Homebrew python refuses a global pip install.
-      # Hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
+      # The lock holds wheels only, so the interpreter is pinned rather than taken from the image,
+      # whose default python3 moves between image releases.
+      - name: Select Python for the signing tooling
+        id: python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      # Isolated venv, hashed lock, wheels only: nothing unpinned or built from source runs beside the key.
       - name: Install App Store Connect tooling
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
-          python3 -m venv "$RUNNER_TEMP/ascenv"
+          "$PYTHON" -m venv "$RUNNER_TEMP/ascenv"
           "$RUNNER_TEMP/ascenv/bin/pip" install --quiet --require-hashes --no-deps --only-binary :all: \
             -r .github/scripts/requirements-asc.txt
 
@@ -279,8 +288,19 @@ jobs:
       contents: write   # softprops/action-gh-release (release records) — the gate is the environment
     environment:
       name: tester-distribution
-      url: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
+      url: ${{ vars.TESTFLIGHT_JOIN_URL }}
     steps:
+      - name: Check required variables
+        env:
+          VARS: ${{ toJSON(vars) }}
+        run: |
+          required='["TESTFLIGHT_JOIN_URL","TESTFLIGHT_GROUP","BETA_FEEDBACK_EMAIL"]'
+          missing="$(jq -r --argjson required "$required" '$required - (to_entries | map(select(.value != "")) | map(.key)) | join(" ")' <<< "$VARS")"
+          if [ -n "$missing" ]; then
+            echo "::error::Set these variables on the tester-distribution environment: $missing"
+            exit 1
+          fi
+
       - name: Download the signed .ipa
         uses: actions/download-artifact@v4
         with:
@@ -303,8 +323,8 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           # Read from the environment, never interpolated into the script body.
           TAG: ${{ needs.tag.outputs.tag }}
-          TF_GROUP: ${{ vars.TESTFLIGHT_GROUP || 'Polkadot Devnet Testers' }}
-          FEEDBACK_EMAIL: ${{ vars.BETA_FEEDBACK_EMAIL || 'info@pcf.network' }}
+          TF_GROUP: ${{ vars.TESTFLIGHT_GROUP }}
+          FEEDBACK_EMAIL: ${{ vars.BETA_FEEDBACK_EMAIL }}
         run: |
           CHANGELOG="Devnet build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7}): ${TAG}."
           IPA=$(find build -maxdepth 1 -name '*.ipa' | head -1)
@@ -339,7 +359,7 @@ jobs:
 
             Distribution is TestFlight-only:
 
-            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL || 'https://testflight.apple.com/join/HnBX59vz' }}
+            👉 Join and install: ${{ vars.TESTFLIGHT_JOIN_URL }}
 
             This is a **devnet** build for testing only; state may be wiped. Found a
             problem? [Report it](https://github.com/Polkadot-Community-Foundation/products-devnet-issues/issues/new/choose).
