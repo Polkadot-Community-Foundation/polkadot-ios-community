@@ -2,6 +2,7 @@ import Foundation
 import StatementDelivery
 
 protocol StatementDurabilityRenewing: Sendable {
+    @discardableResult
     func renewAll() async -> StatementDurabilityRenewalReport
 }
 
@@ -44,6 +45,7 @@ actor StatementDurabilityRenewalService {
 }
 
 extension StatementDurabilityRenewalService: StatementDurabilityRenewing {
+    @discardableResult
     func renewAll() async -> StatementDurabilityRenewalReport {
         let run = liveRun()
 

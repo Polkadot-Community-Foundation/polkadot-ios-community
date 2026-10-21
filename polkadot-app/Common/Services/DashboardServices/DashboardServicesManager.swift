@@ -1,3 +1,4 @@
+import ChainRegistry
 import Foundation
 
 protocol DashboardServicesCoordinatorMaking<Coordinator> {
@@ -45,15 +46,15 @@ final class DashboardServicesManager<Coordinator: DashboardServicesCoordinating>
             coordinator.startInteractive()
         }
 
-        return makeLease(.interactive, for: coordinator, connectionHold: nil)
+        return makeLease(.interactive, for: coordinator, connectionToken: nil)
     }
 
     func acquireDurability() async -> DashboardServicesLease<Coordinator>? {
         guard let coordinator = await existingOrHeadlessCoordinator() else { return nil }
 
         // After the boot: reaching the registry opens the chain store, which migrations must precede.
-        let connectionHold = connectionRetention.retainAllConnections()
-        let lease = makeLease(.durability, for: coordinator, connectionHold: connectionHold)
+        let connectionToken = connectionRetention.retainAllConnections()
+        let lease = makeLease(.durability, for: coordinator, connectionToken: connectionToken)
 
         guard await coordinator.startDurability() else {
             lease.release()
@@ -122,7 +123,7 @@ private extension DashboardServicesManager {
     func makeLease(
         _ demand: DashboardServicesDemand,
         for coordinator: Coordinator,
-        connectionHold: (any ConnectionHold)?
+        connectionToken: (any ConnectionTokenProtocol)?
     ) -> DashboardServicesLease<Coordinator> {
         leaseCounts[demand, default: 0] += 1
 
@@ -130,7 +131,7 @@ private extension DashboardServicesManager {
             coordinator: coordinator,
             demand: demand,
             generation: generation,
-            connectionHold: connectionHold
+            connectionToken: connectionToken
         ) { [weak self] in
             self?.didRelease($0)
         }

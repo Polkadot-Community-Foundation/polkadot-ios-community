@@ -1,3 +1,4 @@
+import ChainRegistry
 import Foundation
 import os
 
@@ -11,7 +12,7 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
     let demand: DashboardServicesDemand
     let generation: UInt64
 
-    private let connectionHold: (any ConnectionHold)?
+    private let connectionToken: (any ConnectionTokenProtocol)?
     private let onRelease: @MainActor (DashboardServicesLease) -> Void
     private let isReleased = OSAllocatedUnfairLock(initialState: false)
 
@@ -19,13 +20,13 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
         coordinator: Coordinator,
         demand: DashboardServicesDemand,
         generation: UInt64,
-        connectionHold: (any ConnectionHold)?,
+        connectionToken: (any ConnectionTokenProtocol)?,
         onRelease: @escaping @MainActor (DashboardServicesLease) -> Void
     ) {
         self.coordinator = coordinator
         self.demand = demand
         self.generation = generation
-        self.connectionHold = connectionHold
+        self.connectionToken = connectionToken
         self.onRelease = onRelease
     }
 
@@ -37,7 +38,7 @@ final class DashboardServicesLease<Coordinator: DashboardServicesCoordinating>: 
 
         guard !wasReleased else { return }
 
-        connectionHold?.release()
+        connectionToken?.release()
         Task { @MainActor [onRelease] in onRelease(self) }
     }
 }

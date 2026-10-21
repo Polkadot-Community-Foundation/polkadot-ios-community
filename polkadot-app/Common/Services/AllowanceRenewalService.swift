@@ -25,13 +25,13 @@ extension AllowanceRenewalService: ApplicationServiceProtocol {
     func setup() {
         observerTask?.cancel()
         observerTask = Task { [weak self] in
-            _ = await self?.durabilityRenewal.renewAll()
+            await self?.durabilityRenewal.renewAll()
 
             let foregroundStream = self?.appStateStreamFactory.stream(for: .willEnterForeground)
             guard let foregroundStream else { return }
             for await _ in foregroundStream {
                 guard !Task.isCancelled else { return }
-                _ = await self?.durabilityRenewal.renewAll()
+                await self?.durabilityRenewal.renewAll()
             }
         }
     }

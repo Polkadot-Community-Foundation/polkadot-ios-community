@@ -2,7 +2,6 @@ import BackgroundExecution
 import Foundation
 import StatementDelivery
 
-/// No recycling step: coinage setup in the durability part starts the recycling evaluator's own schedule.
 struct StatementRenewalBackgroundWork: Sendable {
     func callAsFunction() async -> BackgroundTaskWorkOutcome {
         let manager = await DashboardServices.manager

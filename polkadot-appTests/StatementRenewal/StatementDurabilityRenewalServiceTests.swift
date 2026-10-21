@@ -58,7 +58,7 @@ struct StatementDurabilityRenewalServiceTests {
         let missedPeriod = RecordingIssueDiagnostic()
         let service = makeService(allowances: AllowanceSlotsRenewalSpy(), missedPeriod: missedPeriod)
 
-        _ = await service.renewAll()
+        await service.renewAll()
 
         #expect(missedPeriod.failureCount == 1)
         #expect(missedPeriod.lastCounters == ["statements": 1, "missedPeriods": 1])
@@ -72,7 +72,7 @@ struct StatementDurabilityRenewalServiceTests {
             requests: Self.acceptances
         )
 
-        _ = await service.renewAll()
+        await service.renewAll()
 
         #expect(missedPeriod.failureCount == 0)
         #expect(missedPeriod.recoveryCount == 1)

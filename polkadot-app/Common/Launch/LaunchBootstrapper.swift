@@ -69,12 +69,12 @@ extension LaunchBootstrapper: LaunchBootstrapping, @unchecked Sendable {
                 _ = try await dependencies.remoteConfigManager.asyncWaitRemoteConfig()
                 await dependencies.chainRegistryClosure().asyncWaitChainsSetup(for: Self.durabilityChainIds)
             }
+
+            return evaluateReadiness()
         } catch {
             logger.warning("Launch readiness wait ended: \(error)")
             return dependencies.appliedConfigReader()?.isValid == true ? .timedOut : .configUnavailable
         }
-
-        return evaluateReadiness()
     }
 }
 
