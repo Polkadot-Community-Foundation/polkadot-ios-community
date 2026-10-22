@@ -186,7 +186,7 @@ jobs:
           binaries=$(
             { echo "$app/$exe"; find "$app/Frameworks" "$app/PlugIns" -type f 2>/dev/null || true; } |
               while IFS= read -r f; do
-                case "$(file -b "$f")" in Mach-O*) echo "$f" ;; esac
+                if [[ "$(file -b "$f")" == Mach-O* ]]; then echo "$f"; fi
               done
           )
           echo "scanning:"; printf '%s\n' "$binaries" | sed 's/^/  /'
