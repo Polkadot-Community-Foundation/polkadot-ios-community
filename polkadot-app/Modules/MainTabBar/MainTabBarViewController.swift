@@ -33,6 +33,7 @@ final class MainTabBarViewController: UIViewController {
     private var tabs: [TabBarItem] = []
     private var controllerByItem: [TabBarItem: UIViewController] = [:]
     var spaChipViewModels: [SPATabChipViewModel] = []
+    var productGamePill: ProductGamePillViewModel?
 
     /// The live scan panel. Nil while the centre control has no content.
     #if FEATURE_INPUT
@@ -127,11 +128,7 @@ final class MainTabBarViewController: UIViewController {
         }
 
         chromeController.onChipTapped = { [weak self] id in
-            guard let self, let tab = browserCoordinator.tabs.first(where: { $0.id == id }) else {
-                return
-            }
-            chromeController.setPanel(nil)
-            mountSPA(for: tab)
+            _ = self?.mountExistingTab { $0.id == id }
         }
 
         chromeController.onChipCloseRequested = { [weak self] id in
@@ -329,6 +326,11 @@ extension MainTabBarViewController: MainTabBarViewProtocol {
         chromeController.setChainStatus(models)
         let width = max(1, ChainConnectionStatusBarView.ringsWidth(count: models.count))
         chainStatusAnchorWidth?.update(offset: width)
+    }
+
+    func showProductGamePill(_ viewModel: ProductGamePillViewModel?) {
+        productGamePill = viewModel
+        applyProductGamePill()
     }
 }
 

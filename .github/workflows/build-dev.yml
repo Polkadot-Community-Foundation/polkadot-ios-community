@@ -1,7 +1,7 @@
 name: Build (Dev, unsigned)
 
-# Builds the Dev configuration unsigned and asserts its identity, and runs the Core Data
-# migration tests on a simulator. Neither job needs signing material.
+# Builds the Dev configuration unsigned and asserts its identity and TrUAPI core, and runs the
+# Core Data migration tests on a simulator. Neither job needs signing material.
 
 on:
   workflow_dispatch:
@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 90
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
+      TRUAPI_CORE_VERSION: '0.25.0'
+      TRUAPI_CORE_REVISION: 24f6fa71c724ea8324fa54ad670e4c5eb8d5736e
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +85,46 @@ jobs:
           if grep -qE "^PRODUCT_BUNDLE_IDENTIFIER = io\.parity\." build-settings.txt; then
             echo "::error::a target on the Dev lane still uses a Parity bundle identifier"
             grep -E "^PRODUCT_BUNDLE_IDENTIFIER = " build-settings.txt
+            fail=1
+          fi
+
+          exit $fail
+
+      # The TrUAPI core is the prebuilt xcframework of the trinity-user-agents SwiftPM tag.
+      # Trinity's Package.swift falls back to an older tag outside its monorepo, and without
+      # -DTRUAPI_RUNTIME_DEFAULT the Dev build quietly defaults to the native runtime.
+      - name: Verify the TrUAPI core pin and runtime default
+        run: |
+          set -o pipefail
+          fail=0
+
+          python3 - \
+            polkadot-app.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
+            Packages/AppDependencies/Package.resolved <<'PY' || fail=1
+          import json, os, sys
+
+          want = {"version": os.environ["TRUAPI_CORE_VERSION"],
+                  "revision": os.environ["TRUAPI_CORE_REVISION"]}
+          status = 0
+          for path in sys.argv[1:]:
+              pins = [p for p in json.load(open(path))["pins"]
+                      if p["identity"] == "trinity-user-agents"]
+              got = {k: pins[0]["state"].get(k) for k in want} if len(pins) == 1 else None
+              if got == want:
+                  print(f"ok: {path} pins trinity-user-agents {want['version']} @ {want['revision']}")
+              else:
+                  print(f"::error::{path} pins trinity-user-agents at {got}, expected {want}")
+                  status = 1
+          sys.exit(status)
+          PY
+
+          app_flags=$(awk '/^Build settings for action [a-z]+ and target /{target=$NF}
+            target == "polkadot-app:" && /^OTHER_SWIFT_FLAGS = /' build-settings.txt)
+          if printf '%s\n' "$app_flags" | grep -qE '(^| )"?-DTRUAPI_RUNTIME_DEFAULT"?( |$)'; then
+            echo "ok: polkadot-app OTHER_SWIFT_FLAGS carries -DTRUAPI_RUNTIME_DEFAULT"
+          else
+            echo "::error::the Dev configuration of polkadot-app does not set -DTRUAPI_RUNTIME_DEFAULT (polkadot-app/Configs/polkadot-app.dev.xcconfig)"
+            echo "  ${app_flags:-OTHER_SWIFT_FLAGS absent}"
             fail=1
           fi
 

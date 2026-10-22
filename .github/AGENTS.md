@@ -23,7 +23,7 @@ Application secrets come from GitHub Actions repository secrets and are passed o
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `pr.yml` | Any `pull_request`; jobs skip `release-*` branches and PRs with `skip-ci` label | Build + unit tests for regular PRs |
-| `firebase_debug_distribution.yml` | `workflow_dispatch` or `pull_request.closed` on `develop` (merged only) | Build DevCI app, upload to Firebase App Distribution |
+| `firebase_debug_distribution.yml` | `workflow_dispatch` or `pull_request.closed` on `develop` (merged only) | Build the DevCI variants and upload the default one to Firebase |
 | `nightly_prepare.yml` | `workflow_dispatch` or weekday schedule at `16:00 UTC` | Prepare a nightly branch/PR (no version bump), trigger nightly distribution; skips when no changes vs `main` |
 | `release_prepare.yml` | `workflow_dispatch` | Prepare a release branch/PR (optional version bump), trigger release distribution; `source_ref: main` dispatches a direct build with no branch/PR (`no-bump` only) |
 | `_prepare_pipeline.yml` | `workflow_call` (reusable) | Shared prepare logic: bump, branch/PR creation, no-changes decision, distribution trigger |
@@ -39,7 +39,7 @@ Application secrets come from GitHub Actions repository secrets and are passed o
 
 | Action | Purpose | Key Detail |
 |--------|---------|------------|
-| `install/` | Setup iOS build environment | Validates and configures Match authentication from a GitHub PAT when requested, installs Xcode and Ruby, restores SPM cache; does not load application secrets |
+| `install/` | Setup iOS build environment | Validates and configures Match authentication from a GitHub PAT when requested, installs Xcode, Ruby and Python; does not load application secrets |
 | `configure-google-services/` | Generate Firebase configuration | Decodes a Base64-encoded plist secret, validates it and its bundle ID, then writes the ignored `GoogleService-Info.plist` immediately before an Xcode build or test |
 | `distribute-testflight/` | Run tests, build, upload to TestFlight | Caller must run `install/` first and provide `build_number`, App Store Connect credentials, signing passwords, and both Google service plist secrets; the action generates Dev config for tests and Release config for the archive |
 | `read-build-version/` | Read Release `MARKETING_VERSION` + compute next TestFlight build number | Caller must run `install/` first and provide App Store Connect credentials; `increment_step` defaults to `1` |
@@ -51,6 +51,7 @@ Application secrets come from GitHub Actions repository secrets and are passed o
 | `read_versions.py` | Read `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` from `project.pbxproj` | `python3 read_versions.py project.pbxproj --config-name Release --output-format env` |
 | `update_build_number.py` | Set `CURRENT_PROJECT_VERSION` in `project.pbxproj` | `python3 update_build_number.py project.pbxproj --config-name DevCI --build-number 42` |
 | `update_marketing_version.py` | Set `MARKETING_VERSION` in `project.pbxproj` | `python3 update_marketing_version.py project.pbxproj 1.2.3 --config-name Release` |
+| `add_swift_flags.py` | Append extra flags to `OTHER_SWIFT_FLAGS` in an xcconfig | `python3 add_swift_flags.py polkadot-app.release.xcconfig -DDISABLE_AUTH` |
 
 ### Fastlane Lanes (`fastlane/`)
 
@@ -68,6 +69,44 @@ Application secrets come from GitHub Actions repository secrets and are passed o
 | `get_testflight_build_number` | `fastlane/lanes/lane_testflight.rb` | Query latest build number from TestFlight |
 | `prepare_code_signing` | `fastlane/lanes/lane_signing.rb` | Fetch certs/profiles via Match in readonly mode |
 | `update_signing_data` | `fastlane/lanes/lane_signing.rb` | Refresh Match-managed certs/profiles in write mode |
+
+---
+
+## Build Variants
+
+Two workflows build matrix variants in parallel:
+- `firebase_debug_distribution.yml`
+- `_build_distribute.yml` (shared by nightly and release distribution)
+
+Both use the same two variant shapes:
+
+```yaml
+variant:
+  - name: "default"
+    extra_swift_flags: ""
+    artifact_suffix: ""
+    upload_to_distribution: true
+  - name: "no-auth"
+    extra_swift_flags: "-DDISABLE_AUTH"
+    artifact_suffix: "-no-auth"
+    upload_to_distribution: false
+```
+
+Only `firebase_debug_distribution.yml` still builds two variants.
+`_build_distribute.yml` builds one: its second leg had no destination once the
+artifact uploads went, so it built and discarded.
+
+Mapping to real workflow keys:
+- Firebase workflow uses `upload_to_firebase`
+- Release TestFlight workflow uses `upload_to_testflight`
+
+Rules:
+- Only one variant may upload to the external distribution service
+- Extra Swift flags are injected into xcconfig via `add_swift_flags.py`, into the leaf
+  config named after `build_configuration`
+- `no-auth` artifacts use the `-no-auth` suffix in the artifact name
+- Release TestFlight flow explicitly shares one build number across both variants via the `prepare_build_metadata` job
+- Firebase flow produces the same build number for both variants because both derive it from the same `github.run_number`
 
 ---
 
@@ -140,7 +179,6 @@ Signing notes:
 
 ---
 
----
 
 ## Release Flow
 
@@ -162,7 +200,7 @@ Signing notes:
 2. nightly_distribution.yml / release_distribution.yml
    └── uses _build_distribute.yml
        (nightly calls it twice — Nightly and Safetynet from the same branch/PR;
-        the configuration is in the job name so each leg's check_default_build
+        the configuration is in the job name so each leg's check_build_result
         resolves its own result)
        ├── prepare_build_metadata
        │     ├── Verify bot-driven trigger / bot-authored PR
@@ -172,9 +210,9 @@ Signing notes:
        │     └── read-build-version: MARKETING_VERSION + shared build_number
        ├── check_and_build
        │     ├── distribute-testflight (tests + build + upload)
-       │     └── comment on PR with build info (if PR)
-       ├── check_default_build -> succeeded output
-       ├── trigger_allure_tests (gated on succeeded)
+       │     ├── comment on PR with build info
+       │     └── set commit status for workflow_dispatch
+       ├── check_build_result -> succeeded output
        └── send_failure_notification (Telegram, on failure)
 
 3. Caller-specific jobs (gated on succeeded)
@@ -201,9 +239,6 @@ Signing notes:
    ├── Query TestFlight and calculate build_number = latest + 1
    ├── Run distribute-testflight action (tests + build + upload)
    └── Upload IPA artifact
-
-2. testflight_distribution.yml / trigger-allure-tests
-   └── Trigger Allure TestOps
 ```
 
 ---
@@ -256,7 +291,7 @@ Signing notes:
 ## Practical Notes for Agents
 
 - Nightly and release share reusable workflows: `_prepare_pipeline.yml` (prepare) and `_build_distribute.yml` (build/distribute). The build mode (`Nightly`/`Release`, external group) is passed by the caller as inputs — do not reintroduce parsing it from PR metadata
-- Reusable workflows need `secrets: inherit` from every caller; the prepare callers also need an explicit `permissions:` write block (env context is unavailable in a reusable-workflow `with:` block)
+- Reusable workflows declare the secrets they read, and every caller passes exactly those; the prepare callers also need an explicit `permissions:` write block (env context is unavailable in a reusable-workflow `with:` block)
 - When editing the build flow, remember that shared build metadata lives in `prepare_build_metadata`
 - When touching `distribute-testflight`, verify both callers still pass `build_number`
 - Every CI Xcode build/test entry point must run `configure-google-services` after its final checkout; the TestFlight composite action owns both its Dev test config and Release archive config

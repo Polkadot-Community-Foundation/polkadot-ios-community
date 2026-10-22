@@ -48,7 +48,8 @@ enum MainTabBarViewFactory {
             userNotificationService: userNotificationService,
             urlHandlingService: urlHandler,
             deferredLinkHandler: deepLinkHandling,
-            browserCoordinator: browserCoordinator
+            browserCoordinator: browserCoordinator,
+            productGamePills: RootDependencyLocator.getDependency()
         )
         #if !FEATURE_PRODUCTS
             interactor.settingsAttentionObserver = SettingsBackupAttentionObserver()
@@ -138,7 +139,7 @@ enum MainTabBarViewFactory {
         polkadotSignInService: PolkadotSignInService,
         storageFacade: StorageFacadeProtocol,
         serviceCoordinator: ServiceCoordinatorProtocol,
-        flowState _: ChatFlowState,
+        flowState: ChatFlowState,
         moduleNavigator: ModuleNavigating,
         hostProvider: any ProductHostProviding
     ) -> URLHandlingService {
@@ -163,7 +164,13 @@ enum MainTabBarViewFactory {
             moduleNavigator: moduleNavigator
         )
         #if FEATURE_PRODUCTS
+            // The Pocket handler goes first: it owns the reserved `-` target,
+            // which the SPA handler would otherwise open as a product page.
             let productHandlers: [URLHandlingServiceProtocol] = [
+                PocketOpenService.makeDefault(
+                    flowState: flowState.flowState,
+                    moduleNavigator: moduleNavigator
+                ),
                 ProductSPAOpenService(
                     moduleNavigator: moduleNavigator,
                     hostProvider: hostProvider

@@ -18,10 +18,12 @@ final class MainTabBarInteractor {
     private let urlHandlingService: URLHandlingServiceProtocol
     private let deferredLinkHandler: DeferredLinkHandling
     private let extensionWidgetStreamProvider: ChatExtensionWidgetStreaming
+    private let productGamePills: ProductGamePillProviding?
     private let browserCoordinator: SPABrowserCoordinating
     private let tabBarLabelsStore: any TabBarLabelsProviding
 
     private var extensionWidgetSubscription: Task<Void, Never>?
+    private var productGamePillSubscription: Task<Void, Never>?
     private var chainStatusSubscription: Task<Void, Never>?
     private var tabBarLabelsSubscription: Task<Void, Never>?
 
@@ -32,6 +34,7 @@ final class MainTabBarInteractor {
         urlHandlingService: URLHandlingServiceProtocol,
         deferredLinkHandler: DeferredLinkHandling,
         browserCoordinator: SPABrowserCoordinating,
+        productGamePills: ProductGamePillProviding?,
         logger: LoggerProtocol = Logger.shared,
         extensionWidgetStreamProvider: ChatExtensionWidgetStreaming? = nil,
         tabBarLabelsStore: any TabBarLabelsProviding = TabBarLabelsStore.shared
@@ -43,6 +46,7 @@ final class MainTabBarInteractor {
         self.urlHandlingService = urlHandlingService
         self.deferredLinkHandler = deferredLinkHandler
         self.browserCoordinator = browserCoordinator
+        self.productGamePills = productGamePills
         self.extensionWidgetStreamProvider = extensionWidgetStreamProvider ?? ChatExtensionWidgetStreamProvider(
             registry: serviceCoordinator.chatExtensionsRegistry,
             logger: logger
@@ -52,6 +56,7 @@ final class MainTabBarInteractor {
 
     deinit {
         unsubscribeFromExtensionWidgets()
+        productGamePillSubscription?.cancel()
         serviceCoordinator.throttle()
         chainStatusSubscription?.cancel()
         tabBarLabelsSubscription?.cancel()
@@ -63,6 +68,7 @@ extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
         serviceCoordinator.setup()
         requestNotificationsAuthorization()
         subscribeToExtensionWidgets()
+        subscribeToProductGamePill()
         #if !FEATURE_PRODUCTS
             settingsAttentionObserver?.start { [weak self] isVisible in
                 self?.presenter?.didUpdateSettingsAttention(isVisible: isVisible)
@@ -114,6 +120,25 @@ private extension MainTabBarInteractor {
                 }
             } catch {
                 self?.logger.error("Extension widget stream failed: \(error)")
+            }
+        }
+    }
+
+    func subscribeToProductGamePill() {
+        guard let productGamePills, productGamePillSubscription == nil else {
+            return
+        }
+
+        productGamePillSubscription = Task { @MainActor [weak self, productGamePills, logger] in
+            do {
+                let pillStream = productGamePills.pillStream()
+                productGamePills.start()
+
+                for try await pill in pillStream {
+                    self?.presenter?.didReceiveProductGamePill(pill)
+                }
+            } catch {
+                logger.error("Product game pill stream failed: \(error)")
             }
         }
     }

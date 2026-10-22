@@ -76,7 +76,9 @@ extension ChatViewModelFactory: ChatViewModelMaking {
         actions: ChatViewModelActions,
         footerConfiguration: (any HashableContentConfiguration)?
     ) -> ChatViewLayout.ViewModel {
-        let headerConfiguration = metadata.chatMetadata.chatContactInfo
+        let headerConfiguration = metadata.chatMetadata.chatContactInfo(
+            iconViewModelFactory: flowState.iconViewModelFactory
+        )
 
         let inputConfiguration = makeInputConfiguration(for: metadata.chatMetadata, actions: actions)
 
@@ -158,6 +160,7 @@ extension ChatViewModelFactory: ChatViewModelMaking {
 
             let decodingContext = ChatMessageDecodingContext(
                 messageId: message.messageId,
+                roomId: message.chatId.roomId,
                 identifier: content.identifier,
                 processAction: { _ in }
             )
@@ -322,6 +325,7 @@ private extension ChatViewModelFactory {
         case let .customRendered(content):
             let decodingContext = ChatMessageDecodingContext(
                 messageId: message.messageId,
+                roomId: message.chatId.roomId,
                 identifier: content.identifier,
                 processAction: actions.processAction
             )

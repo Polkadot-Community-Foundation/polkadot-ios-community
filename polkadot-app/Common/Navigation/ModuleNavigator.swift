@@ -5,7 +5,9 @@ import Products
 protocol ModuleNavigating: AnyObject {
     func openChat(_ model: ChatOpenModel)
     func presentModally(_ viewController: UIViewController)
+    func presentFullScreen(_ viewController: UIViewController)
     func openProduct(page: ProductPage)
+    func openPocket()
     func openScanPanel()
 }
 
@@ -24,6 +26,13 @@ extension ModuleNavigator: ModuleNavigating {
         UIWindow.topWindow?.topmostViewController?.present(navigationController, animated: true)
     }
 
+    func presentFullScreen(_ viewController: UIViewController) {
+        let navigationController = AppNavigationController(rootViewController: viewController)
+        navigationController.modalPresentationStyle = .fullScreen
+
+        UIWindow.topWindow?.topmostViewController?.present(navigationController, animated: true)
+    }
+
     func openChat(_ model: ChatOpenModel) {
         guard let view = UIApplication.shared.mainTabBarController else {
             return
@@ -39,6 +48,16 @@ extension ModuleNavigator: ModuleNavigating {
 
     func openProduct(page: ProductPage) {
         UIApplication.shared.mainTabBarController?.openProduct(page: page)
+    }
+
+    func openPocket() {
+        guard let view = UIApplication.shared.mainTabBarController else {
+            return
+        }
+
+        // A card is a modal over the tabs, so the Pocket would be selected unseen.
+        view.presentedViewController?.dismiss(animated: true)
+        view.select(tab: .wallet)
     }
 
     func openScanPanel() {

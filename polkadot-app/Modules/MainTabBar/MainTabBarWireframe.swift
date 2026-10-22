@@ -33,6 +33,10 @@ final class MainTabBarWireframe: MainTabBarWireframeProtocol {
         view?.controller.present(signInView.controller, animated: true)
     }
 
+    func openProduct(productId: ProductId) {
+        ProductOpener(navigator: moduleNavigator).open(productId: productId)
+    }
+
     #if FEATURE_INPUT
         func openChat(_ model: ChatOpenModel) {
             moduleNavigator.openChat(model)
