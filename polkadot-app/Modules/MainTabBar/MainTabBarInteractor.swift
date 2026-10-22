@@ -79,9 +79,10 @@ extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
 
 private extension MainTabBarInteractor {
     func subscribeToPaymentsSetup() {
-        paymentsSetupSubscription = Task { [weak self, serviceCoordinator, logger] in
+        let coinageService = servicesLease.coordinator.coinageService
+        paymentsSetupSubscription = Task { [weak self, coinageService, logger] in
             do {
-                for try await isWaiting in serviceCoordinator.coinageService.subscribeAwaitingInstallationBackup() {
+                for try await isWaiting in coinageService.subscribeAwaitingInstallationBackup() {
                     await self?.presenter?.didReceivePaymentsSetupWaiting(isWaiting)
                 }
             } catch {
