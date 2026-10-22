@@ -2,6 +2,7 @@ import Clocks
 import Foundation
 import StatementDelivery
 import Testing
+import FoundationExtTestSupport
 
 @Suite(.timeLimit(.minutes(10)))
 struct OutgoingStatementRenewerTests {
@@ -14,7 +15,7 @@ struct OutgoingStatementRenewerTests {
         store.setCandidates([candidate("A", period: 9)])
         store.acknowledge("A")
 
-        await makeRenewer().renew()
+        _ = await makeRenewer().renew()
 
         #expect(store.markedAcknowledged == ["A"])
         #expect(service.publishes.isEmpty)
@@ -23,7 +24,7 @@ struct OutgoingStatementRenewerTests {
     @Test func staleStatementsAreResolvedInOneBatchAndRepublishedIntoCurrentPeriod() async {
         store.setCandidates([candidate("newer", period: 9), candidate("older", period: 8)])
 
-        await makeRenewer().renew()
+        _ = await makeRenewer().renew()
 
         #expect(resolver.calls == [["newer", "older"]])
         #expect(Set(store.published.map(\.id)) == ["newer", "older"])
@@ -34,7 +35,7 @@ struct OutgoingStatementRenewerTests {
         store.setCandidates([candidate("A", period: 10)])
         service.markStored("A")
 
-        await makeRenewer().renew()
+        _ = await makeRenewer().renew()
 
         #expect(resolver.calls.isEmpty)
         #expect(service.publishes.isEmpty)
@@ -43,7 +44,7 @@ struct OutgoingStatementRenewerTests {
     @Test func missingCurrentCopyIsRepublished() async {
         store.setCandidates([candidate("A", period: 10)])
 
-        await makeRenewer().renew()
+        _ = await makeRenewer().renew()
 
         #expect(store.published.map(\.period) == [10])
     }
@@ -51,7 +52,7 @@ struct OutgoingStatementRenewerTests {
     @Test func boundPassedAbandonsStatement() async {
         store.setCandidates([candidate("A", period: 9, age: 8 * 86_400)])
 
-        await makeRenewer(bound: 7 * 86_400).renew()
+        _ = await makeRenewer(bound: 7 * 86_400).renew()
 
         #expect(store.abandoned == ["A"])
         #expect(service.publishes.isEmpty)
@@ -60,17 +61,34 @@ struct OutgoingStatementRenewerTests {
     @Test func withoutBoundOldStatementsKeepRenewing() async {
         store.setCandidates([candidate("A", period: 9, age: 30 * 86_400)])
 
-        await makeRenewer(bound: nil).renew()
+        _ = await makeRenewer(bound: nil).renew()
 
         #expect(store.abandoned.isEmpty)
         #expect(store.published.map(\.id) == ["A"])
+    }
+
+    @Test func summaryCountsRepublishedStatementsAndWholeMissedPeriods() async {
+        store.setCandidates([candidate("lapsed", period: 7), candidate("rollover", period: 9)])
+
+        let summary = await makeRenewer().renew()
+
+        let expected = OutgoingStatementRenewalSummary(
+            isComplete: true,
+            candidates: 2,
+            due: 2,
+            republished: 2,
+            failed: 0,
+            statementsWithMissedPeriods: 1,
+            missedPeriods: 2
+        )
+        #expect(summary == expected)
     }
 
     @Test func terminalResolutionMarksStatementFailed() async {
         store.setCandidates([candidate("A", period: 9)])
         resolver.fail("A", with: TestTerminalError())
 
-        await makeRenewer().renew()
+        _ = await makeRenewer().renew()
 
         #expect(store.failed == ["A"])
         #expect(service.publishes.isEmpty)
@@ -106,7 +124,7 @@ private extension OutgoingStatementRenewerTests {
                 delivery: delivery
             ),
             bound: bound,
-            dateProvider: FixedDateProvider(now: now),
+            dateProvider: FixedDateProvider(now),
             diagnostics: .silent
         )
     }

@@ -20,8 +20,6 @@ protocol ChatRequestServiceMaking {
 
     func makeChatRequestDeliveryService() async throws -> any OutgoingStatementDelivering<OutgoingChatRequestInput>
 
-    func makeChatRequestRenewer() async throws -> OutgoingStatementRenewing
-
     func makeIncomingChatRequestContext() async throws -> IncomingChatRequestCoordinationContext
 
     func makeOutgoingChatRequestContext() async throws -> OutgoingChatRequestCoordinationContext
@@ -30,8 +28,6 @@ protocol ChatRequestServiceMaking {
 
     func makeChatAcceptanceDeliveryService() async throws
         -> any OutgoingStatementDelivering<OutgoingChatAcceptanceInput>
-
-    func makeChatAcceptanceRenewer() async throws -> OutgoingStatementRenewing
 
     func makeIncomingChatAcceptanceService() async throws -> IncomingChatAcceptanceService
 
@@ -189,7 +185,10 @@ extension ChatRequestServiceFactory: ChatRequestServiceMaking {
             logger: logger
         )
     }
+}
 
+/// Same cached pipelines as first delivery, so renewal and delivery share one delivery actor per kind.
+extension ChatRequestServiceFactory: StatementRenewerProviding {
     func makeChatAcceptanceRenewer() async throws -> OutgoingStatementRenewing {
         try await makeAcceptancePipeline().makeRenewer()
     }

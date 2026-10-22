@@ -1,6 +1,4 @@
 import Foundation
-import IssueMonitoring
-import os
 import SubstrateSdk
 @testable import polkadot_app
 
@@ -57,16 +55,4 @@ struct ChatAcceptanceFixture {
             pendingDevicesFanOut: false
         )
     }
-}
-
-final class RecordingIssueDiagnostic: IssueDiagnostic, @unchecked Sendable {
-    private let failures = OSAllocatedUnfairLock(initialState: 0)
-
-    var failureCount: Int { failures.withLock { $0 } }
-
-    func recordFailure(for _: String, error _: Error?, counters _: [String: Int]) {
-        failures.withLock { $0 += 1 }
-    }
-
-    func recordRecovery(for _: String) {}
 }

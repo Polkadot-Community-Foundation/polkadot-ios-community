@@ -4,7 +4,8 @@ import ChainRegistry
 import KeyDerivation
 import Products
 
-struct AllowanceManagerFacade {
+// Immutable references to managers that guard their own state.
+struct AllowanceManagerFacade: @unchecked Sendable {
     let bulletInManager: AllowanceManaging
     let sssManager: AllowanceManaging & StatementAccountFunding
     let smartContractManager: AllowanceManaging
