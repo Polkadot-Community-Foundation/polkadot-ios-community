@@ -10,7 +10,7 @@ final class MainTabBarInteractor {
         var settingsAttentionObserver: SettingsBackupAttentionObserving?
     #endif
 
-    private let serviceCoordinator: ServiceCoordinatorProtocol
+    private let servicesLease: DashboardServicesLease<ServiceCoordinator>
     private let chainStatusProvider: ChainStatusProviding
 
     private let userNotificationService: UserNotificationServicing
@@ -27,7 +27,7 @@ final class MainTabBarInteractor {
     private var paymentsSetupSubscription: Task<Void, Never>?
 
     init(
-        serviceCoordinator: ServiceCoordinatorProtocol,
+        servicesLease: DashboardServicesLease<ServiceCoordinator>,
         chainStatusProvider: ChainStatusProviding,
         userNotificationService: UserNotificationServicing,
         urlHandlingService: URLHandlingServiceProtocol,
@@ -37,7 +37,7 @@ final class MainTabBarInteractor {
         extensionWidgetStreamProvider: ChatExtensionWidgetStreaming? = nil,
         tabBarLabelsStore: any TabBarLabelsProviding = TabBarLabelsStore.shared
     ) {
-        self.serviceCoordinator = serviceCoordinator
+        self.servicesLease = servicesLease
         self.chainStatusProvider = chainStatusProvider
         self.userNotificationService = userNotificationService
         self.logger = logger
@@ -45,7 +45,7 @@ final class MainTabBarInteractor {
         self.deferredLinkHandler = deferredLinkHandler
         self.browserCoordinator = browserCoordinator
         self.extensionWidgetStreamProvider = extensionWidgetStreamProvider ?? ChatExtensionWidgetStreamProvider(
-            registry: serviceCoordinator.chatExtensionsRegistry,
+            registry: servicesLease.coordinator.chatExtensionsRegistry,
             logger: logger
         )
         self.tabBarLabelsStore = tabBarLabelsStore
@@ -53,7 +53,7 @@ final class MainTabBarInteractor {
 
     deinit {
         unsubscribeFromExtensionWidgets()
-        serviceCoordinator.throttle()
+        servicesLease.release()
         chainStatusSubscription?.cancel()
         tabBarLabelsSubscription?.cancel()
         paymentsSetupSubscription?.cancel()
@@ -62,7 +62,6 @@ final class MainTabBarInteractor {
 
 extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
     func setup() {
-        serviceCoordinator.setup()
         requestNotificationsAuthorization()
         subscribeToExtensionWidgets()
         #if !FEATURE_PRODUCTS
