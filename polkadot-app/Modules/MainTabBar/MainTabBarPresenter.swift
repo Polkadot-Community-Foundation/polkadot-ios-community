@@ -64,7 +64,7 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
 
 extension MainTabBarPresenter: MainTabBarInteractorOutputProtocol {
     func didReceivePaymentsSetupWaiting(_ isWaiting: Bool) {
-        wireframe.showPaymentsSetupNotice(isVisible: isWaiting, from: view)
+        wireframe.showPaymentsSetupNotice(isVisible: isWaiting)
     }
 
     #if !FEATURE_PRODUCTS

@@ -52,7 +52,7 @@ protocol MainTabBarInteractorOutputProtocol: AnyObject {
 @MainActor
 protocol MainTabBarWireframeProtocol: AnyObject {
     func showPolkadotSignIn(with url: URL, view: MainTabBarViewProtocol?)
-    func showPaymentsSetupNotice(isVisible: Bool, from view: MainTabBarViewProtocol?)
+    func showPaymentsSetupNotice(isVisible: Bool)
     #if FEATURE_INPUT
         func openChat(_ model: ChatOpenModel)
     #else
