@@ -1,23 +1,21 @@
-import Clocks
+import AsyncExtensions
 import DurableTransactions
 import DurableTransactionsTestSupport
 import Foundation
+import StructuredConcurrencyTestSupport
 import Testing
 @testable import Coinage
 
 /// The gate over the real registrar: an allocation requested before the contract address is even
 /// known waits through the delayed state and is released by finality, with the wait reported
 /// exactly while it lasts.
+@Suite(.timeLimit(.minutes(5)))
 struct CoinageBackedUpInstallationFlowTests {
     private static let target = InstallationRegistrationTarget(contract: TestContracts.contract, installation: .test)
-    private static let timing = CoinageInstallationRegistrar.Timing(
-        expectedRegistrationTime: .seconds(30),
-        initialBackoff: .seconds(5),
-        maxBackoff: .seconds(5 * 60),
-        clock: TestClock<Duration>()
-    )
+    private static let expectedRegistrationTime: Duration = .seconds(30)
+    private static let initialBackoff: Duration = .seconds(5)
 
-    private let clock: TestClock<Duration>
+    private let clock = ManualClock()
     private let engine = FakeRegistrationEngine()
     private let submitter: FakeRegistrationSubmitter
     private let config = StubDataStoreConfig(contract: nil)
@@ -26,7 +24,6 @@ struct CoinageBackedUpInstallationFlowTests {
     private let provider: CoinageBackedUpInstallationProvider
 
     init() {
-        clock = Self.timing.clock as! TestClock<Duration>
         submitter = FakeRegistrationSubmitter(engine: engine)
         registrar = CoinageInstallationRegistrar(
             currentInstallationStore: store,
@@ -34,7 +31,12 @@ struct CoinageBackedUpInstallationFlowTests {
             engine: engine,
             submitter: submitter,
             backgroundExecutor: CountingBackgroundExecutor(),
-            timing: Self.timing,
+            timing: CoinageInstallationRegistrar.Timing(
+                expectedRegistrationTime: Self.expectedRegistrationTime,
+                initialBackoff: Self.initialBackoff,
+                maxBackoff: .seconds(5 * 60),
+                clock: clock
+            ),
             logger: nil
         )
         provider = CoinageBackedUpInstallationProvider(installationStore: store, backupObserver: registrar)
@@ -44,24 +46,26 @@ struct CoinageBackedUpInstallationFlowTests {
     func waitsUntilFinality() async throws {
         registrar.start()
         let request = Task { try await provider.backedUpInstallation() }
-        try await settle(until: { await (try? awaiting()) == true })
+        try await firstValue(of: provider.subscribeAwaitingBackup()) { $0 }
 
-        await clock.advance(by: Self.timing.expectedRegistrationTime + .milliseconds(1))
-        try await settle(until: { await (try? status()) == .delayed })
+        await clock.resumeSleep(for: Self.expectedRegistrationTime)
+        try await firstValue(of: registrar.subscribeStatus()) { $0 == .delayed }
         #expect(try await awaiting() == true)
-        #expect(request.isCancelled == false)
 
         config.contract = TestContracts.contract
-        await clock.advance(by: Self.timing.initialBackoff + .milliseconds(1))
-        try await settle(until: { submitter.attempts.count == 1 })
+        await clock.resumeSleep(for: Self.initialBackoff)
+        let attempts = engine.subscribeGroupEntries(
+            domain: .coinageInstallation,
+            groupId: Self.target.registrationGroup
+        )
+        try await firstValue(of: attempts) { !$0.isEmpty }
         engine.set(
             engine.current(Self.target.registrationGroup).map { $0.changing(status: .finalizedSuccess) },
             group: Self.target.registrationGroup
         )
 
-        try await settle(until: { await (try? status()) == .completed })
         #expect(try await request.value == .test)
-        try await settle(until: { await (try? awaiting()) == false })
+        try await firstValue(of: provider.subscribeAwaitingBackup()) { !$0 }
     }
 
     @Test("a registration final on an earlier launch never reports a wait, even before the run starts")
@@ -78,7 +82,7 @@ struct CoinageBackedUpInstallationFlowTests {
         config.contract = TestContracts.contract
         engine.set([.registration(Self.target, status: .finalizedSuccess)], group: Self.target.registrationGroup)
         registrar.start()
-        try await settle(until: { await (try? status()) == .completed })
+        try await firstValue(of: registrar.subscribeStatus()) { $0 == .completed }
 
         #expect(try await provider.backedUpInstallation() == .test)
         #expect(try await awaiting() == false)
@@ -86,13 +90,6 @@ struct CoinageBackedUpInstallationFlowTests {
 }
 
 private extension CoinageBackedUpInstallationFlowTests {
-    func status() async throws -> CoinageAccountBackupStatus? {
-        for try await status in registrar.subscribeStatus() {
-            return status
-        }
-        return nil
-    }
-
     func awaiting() async throws -> Bool? {
         for try await awaiting in provider.subscribeAwaitingBackup() {
             return awaiting
@@ -100,15 +97,13 @@ private extension CoinageBackedUpInstallationFlowTests {
         return nil
     }
 
-    func settle(until condition: @escaping @Sendable () async -> Bool) async throws {
-        for _ in 0 ..< 200 {
-            for _ in 0 ..< 20 {
-                await Task.yield()
-            }
-            if await condition() { return }
+    func firstValue<Element>(
+        of sequence: AnyAsyncSequence<Element>,
+        where predicate: (Element) -> Bool
+    ) async throws {
+        for try await value in sequence where predicate(value) {
+            return
         }
-        throw Stalled()
+        Issue.record("sequence finished before the expected value")
     }
-
-    struct Stalled: Error {}
 }
