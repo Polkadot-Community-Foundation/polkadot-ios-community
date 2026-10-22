@@ -81,7 +81,7 @@ final class CoinageInstallationRegistrar: CoinageInstallationRegistering, @unche
     }
 
     func subscribeStatus() -> AnyAsyncSequence<CoinageAccountBackupStatus> {
-        _ = resolveEarlierRegistration()
+        resolveEarlierRegistration()
         return status.compactMap { $0 }.eraseToAnyAsyncSequence()
     }
 
@@ -117,6 +117,7 @@ private extension CoinageInstallationRegistrar {
 
     /// Read on the first subscription rather than at `start()`, which waits for the chain context, so a
     /// registration that already finalized never holds an allocation until then.
+    @discardableResult
     func resolveEarlierRegistration() -> Task<InstallationRegistrationTarget?, Never> {
         earlierRegistration.withLock { task in
             if let task { return task }
