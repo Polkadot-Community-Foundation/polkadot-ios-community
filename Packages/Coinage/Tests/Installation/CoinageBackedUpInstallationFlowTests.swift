@@ -64,6 +64,15 @@ struct CoinageBackedUpInstallationFlowTests {
         try await settle(until: { await (try? awaiting()) == false })
     }
 
+    @Test("a registration final on an earlier launch never reports a wait, even before the run starts")
+    func noWaitBeforeStart() async throws {
+        config.contract = TestContracts.contract
+        engine.set([.registration(Self.target, status: .finalizedSuccess)], group: Self.target.registrationGroup)
+
+        #expect(try await provider.backedUpInstallation() == .test)
+        #expect(try await awaiting() == false)
+    }
+
     @Test("once final, later allocations never wait")
     func noWaitAfterFinality() async throws {
         config.contract = TestContracts.contract

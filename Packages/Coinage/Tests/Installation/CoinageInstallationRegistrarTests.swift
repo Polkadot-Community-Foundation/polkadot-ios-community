@@ -46,6 +46,30 @@ struct CoinageInstallationRegistrarTests {
         #expect(submitter.attempts.isEmpty)
     }
 
+    @Test("a registration already final reads completed first, before the run starts")
+    func alreadyFinalBeforeStart() async throws {
+        engine.set([.registration(Self.target, status: .finalizedSuccess)], group: Self.target.registrationGroup)
+
+        #expect(try await status() == .completed)
+    }
+
+    @Test("nothing registered yet reads registering before the run starts")
+    func nothingRegisteredBeforeStart() async throws {
+        #expect(try await status() == .registering)
+    }
+
+    @Test("a registration final under a contract that then changes registers again")
+    func contractChangedAfterEarlierRead() async throws {
+        engine.set([.registration(Self.target, status: .finalizedSuccess)], group: Self.target.registrationGroup)
+        #expect(try await status() == .completed)
+
+        config.contract = TestContracts.otherContract
+        registrar.start()
+        try await settle(until: { submitter.attempts.count == 1 })
+
+        #expect(try await status() == .registering)
+    }
+
     @Test("nothing registered yet submits exactly one attempt for this installation")
     func firstAttempt() async throws {
         registrar.start()
