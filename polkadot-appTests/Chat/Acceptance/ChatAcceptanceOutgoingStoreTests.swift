@@ -80,9 +80,9 @@ struct ChatAcceptanceOutgoingStoreTests {
         #expect(try await isAcknowledged())
     }
 
+    // Stored before the acceptance, so a peer clock ahead of ours must not make it an acknowledgement.
     @Test func earlierOrUnconfirmedTrafficDoesNotAcknowledge() async throws {
-        try await insertAcceptance()
-        try await insertMessage(status: .incoming(.seen), timestamp: acceptanceTimestamp - 1)
+        try await insertAcceptance(storingFirst: message(status: .incoming(.seen), timestamp: acceptanceTimestamp + 1))
         try await insertMessage(status: .outgoing(.sent), timestamp: acceptanceTimestamp + 1)
 
         #expect(try await !isAcknowledged())
@@ -129,7 +129,7 @@ private extension ChatAcceptanceOutgoingStoreTests {
         )
     }
 
-    func insertAcceptance() async throws {
+    func insertAcceptance(storingFirst earlierMessage: Chat.LocalMessage? = nil) async throws {
         let acceptance = acceptanceMessage()
 
         try await facade.databaseService.performWrite { [peer, chatId, requestId, orderAllocator] context in
@@ -148,16 +148,18 @@ private extension ChatAcceptanceOutgoingStoreTests {
             request.identifier = requestId
             request.status = Chat.RequestStatus.incoming(.accepted).rawValue
 
-            try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(
-                entity: CDChatMessage(context: context),
-                from: acceptance,
-                using: context
-            )
+            for message in [earlierMessage, acceptance].compactMap({ $0 }) {
+                try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(
+                    entity: CDChatMessage(context: context),
+                    from: message,
+                    using: context
+                )
+            }
         }
     }
 
-    func insertMessage(status: Chat.LocalMessage.Status, timestamp: UInt64) async throws {
-        let message = Chat.LocalMessage(
+    func message(status: Chat.LocalMessage.Status, timestamp: UInt64) -> Chat.LocalMessage {
+        Chat.LocalMessage(
             messageId: UUID().uuidString,
             chatId: chatId,
             origin: .user,
@@ -169,6 +171,10 @@ private extension ChatAcceptanceOutgoingStoreTests {
             compactionId: nil,
             relatedMessages: []
         )
+    }
+
+    func insertMessage(status: Chat.LocalMessage.Status, timestamp: UInt64) async throws {
+        let message = message(status: status, timestamp: timestamp)
 
         try await facade.databaseService.performWrite { [orderAllocator] context in
             try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(

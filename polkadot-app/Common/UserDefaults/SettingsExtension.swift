@@ -17,9 +17,7 @@ enum SettingsKey: String {
     case gameAlarmId
     case gameAlarmFireDate
     case gameAlarmTimingSeconds
-    // Balance restored notification
     case deviceEncryptId = "deviceEncryptId.v3"
-    // App Group suite; indexes the Keychain items, so a suffix bump starts a new wallet.
     case installationKeyId = "io.polkadot.app.entropy.id.v3"
     case nextSyncUpdateId = "nextSyncUpdateId.v3"
     case themeSelected = "themeSelected.v3"
