@@ -45,6 +45,22 @@ struct ChatAcceptanceOutgoingStoreTests {
         #expect(try await store.renewalCandidates().map(\.period) == [43])
     }
 
+    @Test func sessionSyncResetsSentMessagesButNotThePublishedAcceptance() async throws {
+        try await insertAcceptance()
+        let store = makeStore()
+        _ = try await store.markPublished(input(), period: 42)
+        let sentMessage = message(status: .outgoing(.sent), timestamp: acceptanceTimestamp + 1)
+        try await insert(sentMessage)
+
+        try await makeMessagesStorage()
+            .markSentAsNewIfMissingIn(messageIds: [], contactId: peer)
+            .asyncExecute()
+
+        #expect(try await store.renewalCandidates().map(\.input.statementId) == [acceptanceId])
+        #expect(try await !store.isAwaitingFirstDelivery(input()))
+        #expect(try await status(of: sentMessage.messageId) == .outgoing(.new))
+    }
+
     @Test func markAcknowledgedEndsRenewal() async throws {
         try await insertAcceptance()
         let store = makeStore()
@@ -94,6 +110,23 @@ private extension ChatAcceptanceOutgoingStoreTests {
 
     func makeStore() -> ChatAcceptanceOutgoingStore {
         ChatAcceptanceOutgoingStore(storageFacade: facade)
+    }
+
+    func makeMessagesStorage() -> MessagesLocalStorageService {
+        MessagesLocalStorageService(
+            repositoryFactory: ChatMessageRepositoryFactory(storageFacade: facade),
+            statusUpdateRepositoryFactory: ChatMessageStatusUpdateRepositoryFactory(storageFacade: facade),
+            storageFacade: facade
+        )
+    }
+
+    func status(of messageId: String) async throws -> Chat.LocalMessage.Status? {
+        try await facade.databaseService.performRead { context in
+            let fetchRequest = CDChatMessage.fetchRequest()
+            fetchRequest.predicate = .messages(withIds: [messageId])
+
+            return try context.fetch(fetchRequest).first.flatMap { Chat.LocalMessage.Status(rawValue: $0.status) }
+        }
     }
 
     func isAcknowledged() async throws -> Bool {
@@ -174,8 +207,10 @@ private extension ChatAcceptanceOutgoingStoreTests {
     }
 
     func insertMessage(status: Chat.LocalMessage.Status, timestamp: UInt64) async throws {
-        let message = message(status: status, timestamp: timestamp)
+        try await insert(message(status: status, timestamp: timestamp))
+    }
 
+    func insert(_ message: Chat.LocalMessage) async throws {
         try await facade.databaseService.performWrite { [orderAllocator] context in
             try ChatMessageEntityMapper(orderAllocator: orderAllocator).populate(
                 entity: CDChatMessage(context: context),
