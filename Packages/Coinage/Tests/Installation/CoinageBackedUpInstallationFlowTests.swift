@@ -52,6 +52,8 @@ struct CoinageBackedUpInstallationFlowTests {
         try await firstValue(of: registrar.subscribeStatus()) { $0 == .delayed }
         #expect(try await awaiting() == true)
 
+        // The overdue timer runs apart from the run, so only a pending retry proves the address was read as missing.
+        await clock.waitForSleep(for: Self.initialBackoff)
         config.contract = TestContracts.contract
         await clock.resumeSleep(for: Self.initialBackoff)
         let attempts = engine.subscribeGroupEntries(
