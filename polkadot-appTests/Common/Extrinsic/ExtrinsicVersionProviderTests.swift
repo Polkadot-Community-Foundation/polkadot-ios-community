@@ -65,6 +65,40 @@ struct ExtrinsicVersionProviderTests {
         #expect(try await isV5(provider.getExtrinsicVersion(for: chain, isSigned: false), extensionVersion: 2))
     }
 
+    @Test("a signed transaction on a pipeline without VerifySignature is carried by V4")
+    func explicitPipelineWithoutVerifySignature() async throws {
+        let chain = AppConfig.Chains.usernameChain
+        pipelines.pipeline = ["CheckNonce", "ChargeAssetTxPayment"]
+        let provider = makeProvider(versions: [chain: 1])
+
+        #expect(try await isV4(provider.getExtrinsicVersion(for: chain, extensionVersion: 0, isSigned: true)))
+        #expect(pipelines.reads == [StubPipelineProvider.Read(chainId: chain, extensionVersion: 0)])
+    }
+
+    @Test("a signed transaction on a pipeline with VerifySignature is V5 at that version")
+    func explicitPipelineWithVerifySignature() async throws {
+        let chain = AppConfig.Chains.usernameChain
+        pipelines.pipeline = ["CheckNonce", Self.verifySignature]
+        let provider = makeProvider(versions: [chain: 1])
+
+        #expect(try await isV5(
+            provider.getExtrinsicVersion(for: chain, extensionVersion: 0, isSigned: true),
+            extensionVersion: 0
+        ))
+    }
+
+    @Test("an unsigned transaction is V5 at the requested version without reading the runtime")
+    func explicitPipelineUnsigned() async throws {
+        let chain = AppConfig.Chains.assethubChain
+        let provider = makeProvider()
+
+        #expect(try await isV5(
+            provider.getExtrinsicVersion(for: chain, extensionVersion: 1, isSigned: false),
+            extensionVersion: 1
+        ))
+        #expect(pipelines.reads.isEmpty)
+    }
+
     @Test("a pipeline that cannot be read fails the decision instead of guessing a format")
     func pipelineReadFailure() async {
         pipelines.error = StubPipelineProvider.Error.unavailable

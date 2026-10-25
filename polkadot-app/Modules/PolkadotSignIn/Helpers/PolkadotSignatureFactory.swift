@@ -83,12 +83,13 @@ private extension PolkadotSignatureFactory {
         result: PolkadotParsedSigningRequestResult,
         chainRegistry: ChainRegistryProtocol
     ) async throws -> (ExtrinsicBuilderProtocol, RuntimeCoderFactoryProtocol) {
-        let extrinsicVersion = legacyExtrinsicVersion(for: transaction.version)
         let genesisHash = transaction.genesisHash.withoutHexPrefix()
 
         guard let chain = chainRegistry.getChainByGenesis(for: genesisHash) else {
             throw PolkadotSigningError.missingChain
         }
+
+        let extrinsicVersion = try await legacyExtrinsicVersion(for: transaction.version, chainId: chain.chainId)
 
         let codingFactory = try await chainRegistry
             .getRuntimeProviderOrError(for: chain.chainId)
@@ -159,9 +160,9 @@ private extension PolkadotSignatureFactory {
                 // dApp-supplied extension version wins for v5 create-transaction requests
                 .V5(extensionVersion: createTransaction.txExtVersion)
             } else {
-                // fall back to the per-chain default, resolved from the runtime (V4 when it cannot verify
-                // a general-transaction signature)
-                try await extrinsicVersionProvider.getExtrinsicVersion(for: chain.chainId, isSigned: true)
+                // the extensions were resolved against pipeline 0, so build that pipeline: V4 when it cannot
+                // verify a general-transaction signature, and on chains that default to V4
+                try await pipelineZeroExtrinsicVersion(for: chain.chainId)
             }
 
         var builder: ExtrinsicBuilderProtocol = ExtrinsicBuilder(
@@ -214,11 +215,26 @@ private extension PolkadotSignatureFactory {
 // MARK: - Version & Address Helpers
 
 private extension PolkadotSignatureFactory {
-    func legacyExtrinsicVersion(for version: PolkadotLegacyTransaction.Version) -> Extrinsic.Version {
-        // signPayload carries the extrinsic format version; v5 uses base extension version 0.
+    func legacyExtrinsicVersion(
+        for version: PolkadotLegacyTransaction.Version,
+        chainId: ChainModel.Id
+    ) async throws -> Extrinsic.Version {
+        // signPayload carries the extrinsic format version; v5 uses base extension version 0, which V4 also
+        // runs when that pipeline cannot verify a general-transaction signature.
         switch version {
-        case .version4: .V4
-        case .version5: .V5(extensionVersion: 0)
+        case .version4:
+            .V4
+        case .version5:
+            try await extrinsicVersionProvider.getExtrinsicVersion(for: chainId, extensionVersion: 0, isSigned: true)
+        }
+    }
+
+    func pipelineZeroExtrinsicVersion(for chainId: ChainModel.Id) async throws -> Extrinsic.Version {
+        switch try await extrinsicVersionProvider.getExtrinsicVersion(for: chainId, isSigned: true) {
+        case .V4:
+            .V4
+        case .V5:
+            try await extrinsicVersionProvider.getExtrinsicVersion(for: chainId, extensionVersion: 0, isSigned: true)
         }
     }
 
