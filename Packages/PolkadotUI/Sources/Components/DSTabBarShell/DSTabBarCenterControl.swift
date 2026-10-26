@@ -718,9 +718,14 @@ private struct PresentedProgressTracker: GeometryEffect {
 // MARK: - Volume
 
 private extension DSTabBarCenterControl {
-    /// Hairline along the edge. A border stroke, so the clip leaves its full width.
+    /// Hairline along the edge. A border stroke, so the clip leaves its full width. iOS 26 and later has none.
+    @ViewBuilder
     var rim: some View {
-        DSTabBarMorphShape()
-            .strokeBorder(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth)
+        if #available(iOS 26, *) {
+            EmptyView()
+        } else {
+            DSTabBarMorphShape()
+                .strokeBorder(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth)
+        }
     }
 }
