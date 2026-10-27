@@ -59,16 +59,19 @@ struct DSTabBarCenterMaterial: View {
 }
 
 /// The scrim behind the bar while the centre panel is open. The caller fades it with the panel's progress.
-/// On iOS 26 and later there is no dim.
 public struct DSTabBarDimLayer: View {
     public init() {}
 
     public var body: some View {
+        DSTabBarVariableBlur(intensity: blurIntensity)
+            .overlay(DSTabBarStyle.Palette.dimWash)
+    }
+
+    private var blurIntensity: Double {
         if #available(iOS 26, *) {
-            Color.clear
+            DSTabBarStyle.dimBlurIntensityGlass
         } else {
-            DSTabBarVariableBlur(intensity: DSTabBarStyle.dimBlurIntensity)
-                .overlay(DSTabBarStyle.Palette.dimWash)
+            DSTabBarStyle.dimBlurIntensity
         }
     }
 }
