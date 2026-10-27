@@ -190,16 +190,11 @@ private extension DSTabBarContainer {
     }
 
     /// Strokes the outline of the bar. The stroke is clipped back to the bar, which keeps only the inner half of
-    /// every line, so its width is doubled first. The notch edge is stroked too. iOS 26 and later has none.
-    @ViewBuilder
+    /// every line, so its width is doubled first. The notch edge is stroked too.
     var border: some View {
-        if #available(iOS 26, *) {
-            EmptyView()
-        } else {
-            DSTabBarShape()
-                .stroke(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth * 2)
-                .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
-        }
+        DSTabBarShape()
+            .stroke(DSTabBarStyle.Palette.strokeGlass, lineWidth: DSTabBarStyle.strokeWidth * 2)
+            .clipShape(DSTabBarShape(), style: FillStyle(eoFill: true))
     }
 }
 
