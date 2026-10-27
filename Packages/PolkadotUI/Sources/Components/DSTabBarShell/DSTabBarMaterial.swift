@@ -1,13 +1,17 @@
 import SwiftUI
+import DesignSystem
 
 /// The bar's glass: the variable blur, under an elliptical wash lightest at the top centre in dark themes.
-/// On iOS 26 and later, Liquid Glass in the surface's shape.
+/// On iOS 27 and later, Liquid Glass in the surface's shape.
+/// On iOS 26, Liquid Glass tinted with the theme's main surface.
 struct DSTabBarBarMaterial: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 27, *) {
             Color.clear.glassEffect(.regular, in: DSTabBarShape())
+        } else if #available(iOS 26, *) {
+            Color.clear.glassEffect(.regular.tint(Color.bgSurfaceMain.opacity(0.5)), in: DSTabBarShape())
         } else {
             DSTabBarVariableBlur(
                 intensity: isDark ? DSTabBarStyle.barBlurIntensity : DSTabBarStyle.barBlurIntensityLight
@@ -25,15 +29,18 @@ struct DSTabBarBarMaterial: View {
 
 /// The centre control's glass: the variable blur, under a vertical wash that settles to black as the panel opens
 /// in dark themes.
-/// On iOS 26 and later, Liquid Glass in the surface's shape.
+/// On iOS 27 and later, Liquid Glass in the surface's shape.
+/// On iOS 26, Liquid Glass tinted with the theme's main surface.
 struct DSTabBarCenterMaterial: View {
     /// 0 for the closed button, 1 for the open panel.
     let openBlend: CGFloat
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 27, *) {
             Color.clear.glassEffect(.regular, in: DSTabBarMorphShape())
+        } else if #available(iOS 26, *) {
+            Color.clear.glassEffect(.regular.tint(Color.bgSurfaceMain.opacity(0.5)), in: DSTabBarMorphShape())
         } else {
             DSTabBarVariableBlur(
                 intensity: isDark ? DSTabBarStyle.centerBlurIntensity : DSTabBarStyle.centerBlurIntensityLight
