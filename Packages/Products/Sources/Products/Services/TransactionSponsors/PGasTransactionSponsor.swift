@@ -4,7 +4,6 @@ import ChainStore
 import Foundation
 import Individuality
 import Operation_iOS
-import Revive
 import SubstrateSdk
 import SubstrateStorageQuery
 import StructuredConcurrency
@@ -61,18 +60,7 @@ extension PGasTransactionSponsor: PGasTransactionSponsoring {
     ) async throws {
         guard chainId == pgasChainAssetId.chainId else { return }
 
-        let runtimeCodingService = try chainResource.getRuntimeCodingServiceOrError(for: chainId)
-
-        let hasReviveCall = try? await NestedCallMapper().hasMachingCall(
-            in: callData,
-            runtimeCodingService: runtimeCodingService
-        ) { call, _ in
-            call.moduleName == RevivePallet.name
-        }
-
-        guard hasReviveCall == true else { return }
-
-        logger.debug("Revive call found. Checking PGas balance...")
+        logger.debug("Checking PGas balance...")
 
         let chain = try chainResource.getChainInterfaceOrError(for: chainId)
 
