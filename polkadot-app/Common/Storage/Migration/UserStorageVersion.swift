@@ -30,6 +30,7 @@ enum UserStorageVersion: String, CaseIterable {
     /// this name and differing in what they hold leave a migrated device with
     /// no model it matches, which ends in the migrator's `fatalError`.
     case version55 = "UserDataModel55"
+    case version56 = "UserDataModel56"
 
     // swiftlint:disable:next cyclomatic_complexity
     func nextVersion() -> UserStorageVersion? {
@@ -65,6 +66,8 @@ enum UserStorageVersion: String, CaseIterable {
         case .version54:
             .version55
         case .version55:
+            .version56
+        case .version56:
             nil
         }
     }
