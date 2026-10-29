@@ -10,7 +10,7 @@ final class MainTabBarInteractor {
         var settingsAttentionObserver: SettingsBackupAttentionObserving?
     #endif
 
-    private let serviceCoordinator: ServiceCoordinatorProtocol
+    private let servicesLease: DashboardServicesLease<ServiceCoordinator>
     private let chainStatusProvider: ChainStatusProviding
 
     private let userNotificationService: UserNotificationServicing
@@ -26,9 +26,10 @@ final class MainTabBarInteractor {
     private var productGamePillSubscription: Task<Void, Never>?
     private var chainStatusSubscription: Task<Void, Never>?
     private var tabBarLabelsSubscription: Task<Void, Never>?
+    private var paymentsSetupSubscription: Task<Void, Never>?
 
     init(
-        serviceCoordinator: ServiceCoordinatorProtocol,
+        servicesLease: DashboardServicesLease<ServiceCoordinator>,
         chainStatusProvider: ChainStatusProviding,
         userNotificationService: UserNotificationServicing,
         urlHandlingService: URLHandlingServiceProtocol,
@@ -39,7 +40,7 @@ final class MainTabBarInteractor {
         extensionWidgetStreamProvider: ChatExtensionWidgetStreaming? = nil,
         tabBarLabelsStore: any TabBarLabelsProviding = TabBarLabelsStore.shared
     ) {
-        self.serviceCoordinator = serviceCoordinator
+        self.servicesLease = servicesLease
         self.chainStatusProvider = chainStatusProvider
         self.userNotificationService = userNotificationService
         self.logger = logger
@@ -48,7 +49,7 @@ final class MainTabBarInteractor {
         self.browserCoordinator = browserCoordinator
         self.productGamePills = productGamePills
         self.extensionWidgetStreamProvider = extensionWidgetStreamProvider ?? ChatExtensionWidgetStreamProvider(
-            registry: serviceCoordinator.chatExtensionsRegistry,
+            registry: servicesLease.coordinator.chatExtensionsRegistry,
             logger: logger
         )
         self.tabBarLabelsStore = tabBarLabelsStore
@@ -57,15 +58,15 @@ final class MainTabBarInteractor {
     deinit {
         unsubscribeFromExtensionWidgets()
         productGamePillSubscription?.cancel()
-        serviceCoordinator.throttle()
+        servicesLease.release()
         chainStatusSubscription?.cancel()
         tabBarLabelsSubscription?.cancel()
+        paymentsSetupSubscription?.cancel()
     }
 }
 
 extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
     func setup() {
-        serviceCoordinator.setup()
         requestNotificationsAuthorization()
         subscribeToExtensionWidgets()
         subscribeToProductGamePill()
@@ -78,10 +79,24 @@ extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
         subscribeToSPATabs()
         subscribeToChainStatus()
         subscribeToTabBarLabels()
+        subscribeToPaymentsSetup()
     }
 }
 
 private extension MainTabBarInteractor {
+    func subscribeToPaymentsSetup() {
+        let coinageService = servicesLease.coordinator.coinageService
+        paymentsSetupSubscription = Task { [weak self, coinageService, logger] in
+            do {
+                for try await isWaiting in coinageService.subscribeAwaitingInstallationBackup() {
+                    await self?.presenter?.didReceivePaymentsSetupWaiting(isWaiting)
+                }
+            } catch {
+                logger.error("Payments setup stream failed: \(error)")
+            }
+        }
+    }
+
     func subscribeToChainStatus() {
         chainStatusSubscription = Task { [weak self, chainStatusProvider, logger] in
             do {
