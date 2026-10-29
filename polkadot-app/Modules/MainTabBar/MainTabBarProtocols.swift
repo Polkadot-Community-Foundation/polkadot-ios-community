@@ -46,11 +46,13 @@ protocol MainTabBarInteractorOutputProtocol: AnyObject {
     func didReceiveSPATabs(_ tabs: [SPATab])
     func didReceiveChainStatus(_ rows: [ChainConnectionStatusViewModel])
     func didReceiveTabBarLabelsEnabled(_ isEnabled: Bool)
+    func didReceivePaymentsSetupWaiting(_ isWaiting: Bool)
 }
 
 @MainActor
 protocol MainTabBarWireframeProtocol: AnyObject {
     func showPolkadotSignIn(with url: URL, view: MainTabBarViewProtocol?)
+    func showPaymentsSetupNotice(isVisible: Bool)
     #if FEATURE_INPUT
         func openChat(_ model: ChatOpenModel)
     #else
