@@ -21,8 +21,8 @@ jobs:
     timeout-minutes: 90
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
-      TRUAPI_CORE_VERSION: '0.25.0'
-      TRUAPI_CORE_REVISION: 24f6fa71c724ea8324fa54ad670e4c5eb8d5736e
+      TRUAPI_CORE_VERSION: '0.26.0'
+      TRUAPI_CORE_REVISION: e7ce413f6e851439b8d82767aebcfe3c33f2ebe8
     steps:
       - uses: actions/checkout@v4
 

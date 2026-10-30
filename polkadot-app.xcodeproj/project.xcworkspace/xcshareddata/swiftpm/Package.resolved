@@ -537,8 +537,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/paritytech/trinity-user-agents",
       "state" : {
-        "revision" : "24f6fa71c724ea8324fa54ad670e4c5eb8d5736e",
-        "version" : "0.25.0"
+        "revision" : "e7ce413f6e851439b8d82767aebcfe3c33f2ebe8",
+        "version" : "0.26.0"
       }
     },
     {
