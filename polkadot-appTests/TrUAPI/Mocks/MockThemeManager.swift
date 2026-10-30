@@ -9,7 +9,7 @@ final class MockThemeManager: ThemeManagerProtocol {
 
     private var observers: [UUID: AsyncStream<Theme>.Continuation] = [:]
 
-    init(selection: ThemeSelection = ThemesRegistry.default) {
+    nonisolated init(selection: ThemeSelection = ThemesRegistry.default) {
         mode = .app(selection)
         theme = ThemesRegistry.makeTheme(selection)
     }

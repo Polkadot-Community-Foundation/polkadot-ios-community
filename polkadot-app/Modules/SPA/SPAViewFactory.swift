@@ -141,7 +141,7 @@ enum SPAViewFactory {
     static func createView(
         page: ProductPage,
         flowState: SPAFlowState,
-        isBrowserTab: Bool = false,
+        presentation: SPAPresentation = .pushed,
         browserTabId: UUID? = nil
     ) -> SPAViewProtocol? {
         let configuration = SPAConfiguration(
@@ -149,7 +149,7 @@ enum SPAViewFactory {
             isRootScreen: false,
             showMoreButton: true,
             page: page,
-            isBrowserTab: isBrowserTab,
+            presentation: presentation,
             browserTabId: browserTabId
         )
 
@@ -163,7 +163,8 @@ enum SPAViewFactory {
 // MARK: - Rust runtime assembly
 
 extension SPAViewFactory {
-    /// Internal so the debug playground launcher can assemble a rust SPA view.
+    /// Internal for the pages that only the rust runtime can load by address:
+    /// the debug playground and a debug Pocket card's widget URL.
     /// The shared ``TrUAPIHostRuntime`` is sourced from the process-wide
     /// provider registered by `ServiceCoordinator`.
     @MainActor
@@ -248,8 +249,7 @@ extension SPAViewFactory {
 // MARK: - Private
 
 private extension SPAViewFactory {
-    /// The browser chrome — floating pills, chrome collapse, minimize — only makes sense where
-    /// products live on as tabs, so builds without the browse tab get the simplified screen.
+    /// Sheets get the simplified screen, since browser chrome (pills, collapse, minimize) only suits a mounted tab.
     @MainActor
     static func createViewController(
         presenter: SPAPresenterProtocol,
@@ -257,15 +257,7 @@ private extension SPAViewFactory {
         schemeHandlerProxy: SchemeHandlerProxy,
         hostProvider: ProductHostProviding
     ) -> SPAViewProtocol {
-        #if FEATURE_PRODUCTS
-            return SPAViewController(
-                presenter: presenter,
-                configuration: configuration,
-                schemeHandlerProxy: schemeHandlerProxy,
-                logger: Logger.shared,
-                hostProvider: hostProvider
-            )
-        #else
+        if configuration.presentation == .sheet {
             return SPASimplifiedViewController(
                 presenter: presenter,
                 configuration: configuration,
@@ -273,6 +265,13 @@ private extension SPAViewFactory {
                 logger: Logger.shared,
                 hostProvider: hostProvider
             )
-        #endif
+        }
+        return SPAViewController(
+            presenter: presenter,
+            configuration: configuration,
+            schemeHandlerProxy: schemeHandlerProxy,
+            logger: Logger.shared,
+            hostProvider: hostProvider
+        )
     }
 }
