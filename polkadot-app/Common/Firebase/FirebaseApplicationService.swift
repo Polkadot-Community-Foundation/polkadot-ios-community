@@ -81,6 +81,10 @@ final class FirebaseApplicationService: RemoteConfigManaging {
         asyncWaitForRemoteConfigValues(for: .w3sMerchants)
     }
 
+    func syncedCollectiblesEnabled() -> Bool {
+        remoteConfig[.collectiblesEnabled].boolValue
+    }
+
     func syncedTxExtensionVersions() -> [ChainModel.Id: UInt8] {
         guard let json = remoteConfig[.txExtensionVersions].jsonValue as? [String: Any] else {
             return [:]
@@ -285,6 +289,7 @@ private extension String {
     static let xcmTransfers = "cross_chain_transfers"
     static let generalXcmConfig = "xcm_general_config"
     static let w3sMerchants = "w3s_merchants"
+    static let collectiblesEnabled = "collectibles_enabled"
     static let txExtensionVersions = "transaction_extension_versions"
     static let identityBackendUrl = "identity_backend_url"
     static let ipfsGatewayUrl = "ipfs_gateway_url"

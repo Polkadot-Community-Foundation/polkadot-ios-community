@@ -88,6 +88,6 @@ extension ExtrinsicVersionProvider: ExtrinsicVersionProviding {
 
 private extension ExtrinsicVersionProvider {
     static var generalTransactionChains: Set<ChainId> {
-        [AppConfig.Chains.usernameChain, AppConfig.Chains.assethubChain]
+        [AppConfig.Chains.peopleChain, AppConfig.Chains.assethubChain]
     }
 }
