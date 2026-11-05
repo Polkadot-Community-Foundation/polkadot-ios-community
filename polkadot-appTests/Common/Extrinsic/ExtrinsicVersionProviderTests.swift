@@ -29,9 +29,9 @@ struct ExtrinsicVersionProviderTests {
         if case let .V5(value) = version { value == extensionVersion } else { false }
     }
 
-    @Test("a general transaction on the username chain is V5 with the remote-config extension version")
-    func usernameChainUnsigned() async throws {
-        let chain = AppConfig.Chains.usernameChain
+    @Test("a general transaction on the people chain is V5 with the remote-config extension version")
+    func peopleChainUnsigned() async throws {
+        let chain = AppConfig.Chains.peopleChain
         let provider = makeProvider(versions: [chain: 3])
 
         #expect(try await isV5(provider.getExtrinsicVersion(for: chain, isSigned: false), extensionVersion: 3))
@@ -40,7 +40,7 @@ struct ExtrinsicVersionProviderTests {
 
     @Test("the extension version defaults to 0 when absent from remote config")
     func defaultsToZero() async throws {
-        let chain = AppConfig.Chains.usernameChain
+        let chain = AppConfig.Chains.peopleChain
 
         #expect(try await isV5(makeProvider().getExtrinsicVersion(for: chain, isSigned: false), extensionVersion: 0))
     }
@@ -67,7 +67,7 @@ struct ExtrinsicVersionProviderTests {
 
     @Test("a signed transaction on a pipeline without VerifySignature is carried by V4")
     func explicitPipelineWithoutVerifySignature() async throws {
-        let chain = AppConfig.Chains.usernameChain
+        let chain = AppConfig.Chains.peopleChain
         pipelines.pipeline = ["CheckNonce", "ChargeAssetTxPayment"]
         let provider = makeProvider(versions: [chain: 1])
 
@@ -77,7 +77,7 @@ struct ExtrinsicVersionProviderTests {
 
     @Test("a signed transaction on a pipeline with VerifySignature is V5 at that version")
     func explicitPipelineWithVerifySignature() async throws {
-        let chain = AppConfig.Chains.usernameChain
+        let chain = AppConfig.Chains.peopleChain
         pipelines.pipeline = ["CheckNonce", Self.verifySignature]
         let provider = makeProvider(versions: [chain: 1])
 

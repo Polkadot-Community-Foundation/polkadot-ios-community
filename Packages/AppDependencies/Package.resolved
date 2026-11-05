@@ -195,8 +195,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/onevcat/Kingfisher",
       "state" : {
-        "revision" : "3db26ab625d194c38e68c1a40e43d1bc12743fe0",
-        "version" : "8.2.0"
+        "revision" : "3feb743b5c92c2b443614d10a00e605212a2b4b1",
+        "version" : "8.14.0"
       }
     },
     {
@@ -519,8 +519,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/paritytech/trinity-user-agents",
       "state" : {
-        "revision" : "24f6fa71c724ea8324fa54ad670e4c5eb8d5736e",
-        "version" : "0.25.0"
+        "revision" : "e7ce413f6e851439b8d82767aebcfe3c33f2ebe8",
+        "version" : "0.26.0"
       }
     },
     {

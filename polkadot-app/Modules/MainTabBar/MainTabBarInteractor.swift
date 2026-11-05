@@ -6,9 +6,6 @@ import PolkadotUI
 
 final class MainTabBarInteractor {
     weak var presenter: MainTabBarInteractorOutputProtocol?
-    #if !FEATURE_PRODUCTS
-        var settingsAttentionObserver: SettingsBackupAttentionObserving?
-    #endif
 
     private let servicesLease: DashboardServicesLease<ServiceCoordinator>
     private let chainStatusProvider: ChainStatusProviding
@@ -70,11 +67,6 @@ extension MainTabBarInteractor: MainTabBarInteractorInputProtocol {
         requestNotificationsAuthorization()
         subscribeToExtensionWidgets()
         subscribeToProductGamePill()
-        #if !FEATURE_PRODUCTS
-            settingsAttentionObserver?.start { [weak self] isVisible in
-                self?.presenter?.didUpdateSettingsAttention(isVisible: isVisible)
-            }
-        #endif
         deferredLinkHandler.register(urlHandlingService)
         subscribeToSPATabs()
         subscribeToChainStatus()

@@ -57,7 +57,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "Kingfisher",
         url: "https://github.com/onevcat/Kingfisher",
-        version: .exact("8.2.0"),
+        version: .exact("8.14.0"),
         products: ["Kingfisher"]
     ),
     .init(
@@ -144,7 +144,7 @@ let dependencyConfigs: [DependencyConfig] = [
     .init(
         name: "trinity-user-agents",
         url: coreIsInTree ? corePath : "https://github.com/paritytech/trinity-user-agents",
-        version: coreIsInTree ? .local : .exact("0.25.0"),
+        version: coreIsInTree ? .local : .exact("0.26.0"),
         products: ["TrUAPIHost"]
     ),
     .init(
