@@ -27,11 +27,11 @@
     },
     "NSAlarmKitUsageDescription" : {
       "comment" : "Privacy - AlarmKit Usage Description",
-      "extractionState" : "manual",
+      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "translated",
+            "state" : "new",
             "value" : "Polkadot sets an alarm to remind you 5 minutes before a game you joined starts."
           }
         }
@@ -44,7 +44,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The app will add upcoming game to your calendar and remind you 5 minutes before the game starts."
+            "value" : "Polkadot adds games you join to your calendar with a reminder 5 minutes before they start."
           }
         }
       }
