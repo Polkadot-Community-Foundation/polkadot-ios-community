@@ -27,8 +27,8 @@ jobs:
     environment: devnet
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
-      TRUAPI_CORE_VERSION: '0.25.0'
-      TRUAPI_CORE_REVISION: 24f6fa71c724ea8324fa54ad670e4c5eb8d5736e
+      TRUAPI_CORE_VERSION: '0.26.0'
+      TRUAPI_CORE_REVISION: e7ce413f6e851439b8d82767aebcfe3c33f2ebe8
     steps:
       - name: Record the signing start
         run: echo "SIGN_STARTED=$(date -u +%s)" >> "$GITHUB_ENV"
@@ -166,17 +166,17 @@ jobs:
             archive
 
       # Package.resolved proves what SwiftPM fetched; this proves what was linked. The core
-      # markers are tracing span literals that first appear in the 0.25 core (trinity 0.25.0
-      # rust/crates/truapi/src: runtime.rs, host_core.rs, runtime/capabilities/expanded_card.rs).
+      # markers are tracing span literals that first appear in the 0.26 core (truapi 0.26.0
+      # rust/crates/truapi/src/host_core.rs).
       # The baseline marker is in every core since 0.16, so its absence means the scan itself is
       # broken, not the core old.
       # The wire schema hash is reported only: the core embeds it solely in the loopback debugger
       # sink, which no mobile FFI entry point reaches, so link-time optimisation may drop it.
       - name: Fingerprint the TrUAPI core in the archived app
         env:
-          CORE_MARKERS: chat.set_room_footer expanded_card.set_face_shown signing_host_runtime.set_scanner_platform
+          CORE_MARKERS: signing_host_runtime.set_payment_platform signing_host_runtime.set_balance_platform signing_host_runtime.set_top_up_platform
           BASELINE_MARKER: chain_runtime.follow
-          SCHEMA_HASH: 3c45e49b26c1ab97
+          SCHEMA_HASH: 5f68beddf80f7b9a
         run: |
           set -euo pipefail
           app=$(find build/polkadot-app.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d | head -1)
