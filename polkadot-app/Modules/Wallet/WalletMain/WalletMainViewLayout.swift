@@ -19,9 +19,7 @@ struct WalletView: View {
             ScrollViewReader { scrollProxy in
                 ScrollView {
                     VStack(spacing: -cardOverlap) {
-                        // The Humanity card the Pocket pins replaces the identity card,
-                        // so only the asset card is drawn here.
-                        assetCard
+                        nativeCards
                             .pocketMotion(viewModel.isPocketCleared ? .shrunkAway : .resting)
                         pocketCards
                     }
@@ -91,6 +89,40 @@ struct WalletView: View {
         }
     }
 
+    /// The Humanity card the Pocket pins replaces the identity card. A build that
+    /// pins no Humanity card draws the identity card a peek below the asset card.
+    @ViewBuilder
+    private var nativeCards: some View {
+        if AssetPinnedPocketCards.pinsHumanity {
+            assetCard
+        } else {
+            ZStack(alignment: .top) {
+                assetCard
+                identityCard
+            }
+            // The identity card is drawn offset down by the peek, which
+            // the stack's own height does not account for, so without
+            // this the product cards would start a peek too high.
+            .padding(.bottom, viewModel.expandedSection == .none ? peekHeight : 0)
+        }
+    }
+
+    @ViewBuilder
+    private var identityCard: some View {
+        IdentityDetailsViewLayout(
+            viewModel: viewModel.identityDetailsViewModel,
+            isExpanded: viewModel.expandedSection == .identityDetails,
+            onCardTapped: { viewModel.onUsername?() },
+            overscroll: overscroll,
+            onCollapse: { viewModel.onCollapse?() }
+        )
+        .matchedGeometryEffect(id: "identity", in: cardNamespace)
+        .opacity(identityOpacity)
+        .offset(y: identityOffsetY)
+        .zIndex(identityZIndex)
+        .allowsHitTesting(identityHitTest)
+    }
+
     @ViewBuilder
     private var assetCard: some View {
         AssetDetailsView(
@@ -112,6 +144,52 @@ struct WalletView: View {
 
     private var offScreenOffset: CGFloat {
         max(viewHeight, 1_000)
+    }
+
+    private var identityOpacity: Double {
+        switch viewModel.expandedSection {
+        case .none,
+             .identityDetails:
+            1
+        case .assetDetails,
+             .collectiblesDetails:
+            0
+        }
+    }
+
+    private var identityOffsetY: CGFloat {
+        switch viewModel.expandedSection {
+        case .none:
+            peekHeight
+        case .identityDetails:
+            0
+        case .assetDetails:
+            offScreenOffset
+        case .collectiblesDetails:
+            -offScreenOffset
+        }
+    }
+
+    private var identityZIndex: Double {
+        switch viewModel.expandedSection {
+        case .none,
+             .identityDetails:
+            1
+        case .assetDetails,
+             .collectiblesDetails:
+            0
+        }
+    }
+
+    private var identityHitTest: Bool {
+        switch viewModel.expandedSection {
+        case .none,
+             .identityDetails:
+            true
+        case .assetDetails,
+             .collectiblesDetails:
+            false
+        }
     }
 
     private var assetScale: CGFloat {

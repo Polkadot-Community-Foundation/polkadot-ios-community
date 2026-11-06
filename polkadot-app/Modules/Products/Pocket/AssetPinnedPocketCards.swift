@@ -36,6 +36,11 @@ struct AssetPinnedPocketCards: PinnedPocketCards {
     ]
     #endif
 
+    /// Whether the Pocket pins Humanity, which replaces the native identity card.
+    static var pinsHumanity: Bool {
+        definitions.contains { $0.cardId == "humanity" }
+    }
+
     private let tld: String
 
     init(tld: String) {
