@@ -5,6 +5,7 @@ import SubstrateSdk
 import PolkadotUI
 import FoundationExt
 import os
+import StructuredConcurrencyTestSupport
 @testable import polkadot_app
 
 struct ChainStatusProviderTests {
@@ -565,13 +566,13 @@ private extension ChainStatusProviderTests {
             finished.withLock { $0 = true }
         }
 
-        let deadline = ContinuousClock.now + .seconds(30)
+        let deadline = ContinuousClock.now + .hangGuard
         while !finished.withLock({ $0 }), ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(10))
         }
 
         if !finished.withLock({ $0 }) {
-            Issue.record("anchor probe did not finish within 30s", sourceLocation: sourceLocation)
+            Issue.record("anchor probe did not finish within \(Duration.hangGuard)", sourceLocation: sourceLocation)
         }
     }
 
