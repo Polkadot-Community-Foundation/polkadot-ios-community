@@ -104,7 +104,7 @@ private extension APPersonhoodHandlerFactory {
     func makeBuiltInPersonhoodKeys() -> BuiltInPersonhoodKeysProviding {
         BuiltInPersonhoodKeys(
             chainRegistry: chainRegistry,
-            peopleChainId: AppConfig.Chains.usernameChain,
+            peopleChainId: AppConfig.Chains.peopleChain,
             depsResolver: makeDepsResolver(),
             tldProvider: tldProvider,
             keyManagerFactory: BuiltInPersonhoodKeyManagerFactory(entropyManager: entropyManager)
