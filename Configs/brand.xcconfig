@@ -13,4 +13,4 @@ BRAND_CASH_SYMBOL = CASH
 BRAND_FIAT_SYMBOL = $
 BRAND_TERMS_HOST = pcf.network/legal/user-terms/
 BRAND_PRIVACY_HOST = pcf.network/legal/privacy/
-BRAND_CONTACT_EMAIL = info@pcf.network
+BRAND_CONTACT_EMAIL = help@pcf.network
