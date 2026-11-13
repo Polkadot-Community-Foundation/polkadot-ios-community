@@ -8,7 +8,11 @@ final class MainTabBarPresenter {
     let interactor: MainTabBarInteractorInputProtocol
 
     /// The four visible slots, left to right. The centre control is not a slot.
-    let slots: [TabBarSlot] = [.tab(.chat), .tab(.wallet), .tab(.browse), .action(.spaTabs)]
+    #if FEATURE_PRODUCTS
+        let slots: [TabBarSlot] = [.tab(.chat), .tab(.wallet), .tab(.browse), .action(.spaTabs)]
+    #else
+        let slots: [TabBarSlot] = [.tab(.chat), .tab(.wallet), .tab(.settings), .action(.connectionStatus)]
+    #endif
 
     private let chipViewModelFactory: SPATabChipViewModelFactory
     private let connectionStatusViewModel = ConnectionStatusSheetViewModel()
@@ -41,12 +45,24 @@ extension MainTabBarPresenter: MainTabBarPresenterProtocol {
         wireframe.showSettings(from: view)
     }
 
+    func didRequestBackupSettings() {
+        wireframe.showBackupSettings(from: view)
+    }
+
     func didFindChat(_ model: ChatOpenModel) {
         wireframe.openChat(model)
     }
 }
 
 extension MainTabBarPresenter: MainTabBarInteractorOutputProtocol {
+    func didReceivePaymentsSetupWaiting(_ isWaiting: Bool) {
+        wireframe.showPaymentsSetupNotice(isVisible: isWaiting)
+    }
+
+    func didReceiveRestoredBalanceWaiting(_ isWaiting: Bool) {
+        view?.showSettingsAttention(isWaiting)
+    }
+
     func didReceiveWidget(
         configuration: any HashableContentConfiguration,
         for extensionId: ChatExtension.Id

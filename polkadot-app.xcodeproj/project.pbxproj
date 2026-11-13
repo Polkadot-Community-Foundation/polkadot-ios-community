@@ -25,6 +25,7 @@
 		0CA60CC22FB20D4D008817A9 /* BulletinChain in Frameworks */ = {isa = PBXBuildFile; productRef = 0CA60CC12FB20D4D008817A9 /* BulletinChain */; };
 		0CEC59AC2F08EBFC0009CC37 /* FoundationExt in Frameworks */ = {isa = PBXBuildFile; productRef = 0CEC59AB2F08EBFC0009CC37 /* FoundationExt */; };
 		2D0A51D72FFE94810095ECAE /* BackgroundExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 2D0A51D62FFE94810095ECAE /* BackgroundExecution */; };
+		5DE11A012FF0000000000001 /* StatementDelivery in Frameworks */ = {isa = PBXBuildFile; productRef = 5DE11A022FF0000000000002 /* StatementDelivery */; };
 		A526CB302EBBA06D00D2987B /* PolkadotUI in Frameworks */ = {isa = PBXBuildFile; productRef = A526CB2F2EBBA06D00D2987B /* PolkadotUI */; };
 		A57CAF662F45ECB70066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF652F45ECB70066D722 /* StructuredConcurrency */; };
 		A57CAF682F45ED940066D722 /* StructuredConcurrency in Frameworks */ = {isa = PBXBuildFile; productRef = A57CAF672F45ED940066D722 /* StructuredConcurrency */; };
@@ -363,6 +364,7 @@
 				CC0CC0102FBA000100CCAA01 /* ChainRegistry in Frameworks */,
 				CC0CC0502FBA000100CCAA05 /* EventCenter in Frameworks */,
 				2D0A51D72FFE94810095ECAE /* BackgroundExecution in Frameworks */,
+				5DE11A012FF0000000000001 /* StatementDelivery in Frameworks */,
 				B1A2C3D42F8A000000000001 /* BlurHash in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -477,6 +479,7 @@
 				A5EDAAD12E93ECAF005DDA62 /* Sources */,
 				A5EDAAD22E93ECAF005DDA62 /* Frameworks */,
 				A5EDAAD32E93ECAF005DDA62 /* Resources */,
+				B57AC5000000000000000001 /* Bundle Trinity stacks */,
 				0C6EC9662EC629FB00C9B292 /* Embed Foundation Extensions */,
 				F06E600066544128849BC813 /* Upload Debug Symbols to Sentry */,
 			);
@@ -518,6 +521,7 @@
 				CC0CC0202FBA000100CCAA02 /* ChainRegistry */,
 				CC0CC0602FBA000100CCAA06 /* EventCenter */,
 				2D0A51D62FFE94810095ECAE /* BackgroundExecution */,
+				5DE11A022FF0000000000002 /* StatementDelivery */,
 				B1A2C3D42F8A000000000002 /* BlurHash */,
 				A5F553C23066BB820077443B /* IssueMonitoring */,
 			);
@@ -722,6 +726,36 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ \"${CONFIGURATION}\" == \"Debug\" || [ \"${CONFIGURATION}\" == \"Release\" ] ; then\necho \"Skip Sentry debug symbols upload for Debug\"\nexit 0\nfi\n\n# This script is responsible for uploading debug symbols and source context for Sentry.\nif which sentry-cli >/dev/null; then\n  export SENTRY_ORG=paritytech\n  export SENTRY_PROJECT=polkadot-ios\n  ERROR=$(sentry-cli debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)\n  if [ ! $? -eq 0 ]; then\n    echo \"warning: sentry-cli - $ERROR\"\n  fi\nelse\n  echo \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"\nfi\n";
+		};
+		B57AC5000000000000000001 /* Bundle Trinity stacks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../stacks/previewnet.link",
+				"$(SRCROOT)/../../stacks/previewnet.json",
+				"$(SRCROOT)/../../stacks/paseo-next-v2.link",
+				"$(SRCROOT)/../../stacks/paseo-next-v2.json",
+				"$(SRCROOT)/../../stacks/polkadot.link",
+				"$(SRCROOT)/../../stacks/polkadot.json",
+			);
+			name = "Bundle Trinity stacks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-previewnet.link",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-previewnet.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-paseo-next-v2.link",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-paseo-next-v2.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-polkadot.link",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-polkadot.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n\nstacks=\"${SRCROOT}/../../stacks\"\nresources=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nfor name in previewnet paseo-next-v2 polkadot; do\n    for extension in link json; do\n        cp \"${stacks}/${name}.${extension}\" \"${resources}/trinity-stack-${name}.${extension}\"\n    done\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1851,6 +1885,10 @@
 		2D0A51D62FFE94810095ECAE /* BackgroundExecution */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BackgroundExecution;
+		};
+		5DE11A022FF0000000000002 /* StatementDelivery */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = StatementDelivery;
 		};
 		A526CB2F2EBBA06D00D2987B /* PolkadotUI */ = {
 			isa = XCSwiftPackageProductDependency;

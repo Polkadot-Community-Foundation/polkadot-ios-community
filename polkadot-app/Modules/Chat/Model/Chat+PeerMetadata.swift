@@ -1,4 +1,5 @@
 import Foundation
+import struct TrUAPIHost.ProductId
 
 extension Chat {
     enum PeerMetadataInput: Equatable {
@@ -11,6 +12,7 @@ extension Chat {
         case incomingRequest
         case outgoingRequest
         case blockedUser
+        case productCard(messageType: String, payload: Data)
         case empty
 
         var isInputField: Bool {
@@ -65,6 +67,6 @@ extension Chat.PeerMetadata {
         case image(Data?)
         case bot
         /// The icon the product's manifest declares, loaded on demand.
-        case product(domain: String)
+        case product(domain: ProductId)
     }
 }

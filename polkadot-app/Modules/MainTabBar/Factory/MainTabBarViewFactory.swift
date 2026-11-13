@@ -10,13 +10,17 @@ enum MainTabBarViewFactory {
         userNotificationService: UserNotificationServicing,
         foregroundVisibilityReporter: PushForegroundVisibilityReporting? = nil,
         deepLinkHandling: DeferredLinkHandling,
-        flowStateProvider: any SPAFlowStateProviding
+        flowStateProvider: any SPAFlowStateProviding,
+        windowScene: UIWindowScene?
     ) -> MainTabBarViewProtocol? {
         let spaFlowState = flowStateProvider.flowState()
 
-        guard let serviceCoordinator = ServiceCoordinator.createDefault(spaFlowState: spaFlowState) else {
+        // Taking the lease starts the services; the interactor releases it.
+        guard let servicesLease = DashboardServices.manager.acquireInteractive() else {
             return nil
         }
+
+        let serviceCoordinator = servicesLease.coordinator
 
         let polkadotSignInService = PolkadotSignInService(
             polkadotHandshakeService: serviceCoordinator.polkadotHandshakeService
@@ -43,7 +47,7 @@ enum MainTabBarViewFactory {
 
         let browserCoordinator = createBrowserCoordinator(flowStateProvider: flowStateProvider)
         let interactor = MainTabBarInteractor(
-            serviceCoordinator: serviceCoordinator,
+            servicesLease: servicesLease,
             chainStatusProvider: serviceCoordinator.chainStatusProvider,
             userNotificationService: userNotificationService,
             urlHandlingService: urlHandler,
@@ -70,7 +74,8 @@ enum MainTabBarViewFactory {
         let wireframe = MainTabBarWireframe(
             serviceCoordinator: serviceCoordinator,
             tabFactory: tabFactory,
-            moduleNavigator: moduleNavigator
+            moduleNavigator: moduleNavigator,
+            windowScene: windowScene
         )
 
         let presenter = MainTabBarPresenter(
@@ -89,6 +94,9 @@ enum MainTabBarViewFactory {
             flowStateProvider: flowStateProvider
         )
 
+        qrHandler.closeEmbeddedScanner = { [weak view] in
+            view?.closeScanPanel()
+        }
         presenter.view = view
         presenter.configureViews()
 
@@ -128,6 +136,7 @@ enum MainTabBarViewFactory {
             notificationsCleaner: notificationsCleaner,
             coinageService: serviceCoordinator.coinageService,
             networkStatusService: serviceCoordinator.networkStatusService,
+            allowanceCleanupService: serviceCoordinator.allowanceManagerFacade.cleanupService,
             flowState: spaFlowState
         )
     }
@@ -153,9 +162,6 @@ enum MainTabBarViewFactory {
 
         let dimHandlers: [URLHandlingServiceProtocol] = []
 
-        let fiatOnrampRedirect = FiatOnrampRedirectService(
-            fiatOnrampTransactionTracking: serviceCoordinator.fiatOnrampTrackingService
-        )
         let payDeeplink = PayDeeplinkService(
             coinageService: serviceCoordinator.coinageService,
             moduleNavigator: moduleNavigator
@@ -187,7 +193,6 @@ enum MainTabBarViewFactory {
         return URLHandlingService(children: signInHandler + [
             chatService
         ] + dimHandlers + [
-            fiatOnrampRedirect,
             payDeeplink
         ] + productHandlers + [
             w3sPayDeeplink

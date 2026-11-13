@@ -46,24 +46,8 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
             presenter?.onAddMoney()
         }
 
-        viewModel.onFundingCompleted = { [weak presenter] in
-            presenter?.onFundingCompletedAction()
-        }
-
-        viewModel.onFundingFailed = { [weak presenter] in
-            presenter?.onFundingFailedAction()
-        }
-
-        viewModel.onBackupSync = { [weak presenter] in
-            presenter?.onBackupSync()
-        }
-
-        viewModel.onBackupCancel = { [weak presenter] in
-            presenter?.onBackupCancel()
-        }
-
-        viewModel.onBackupWhyUpdate = { [weak presenter] in
-            presenter?.onBackupWhyUpdate()
+        viewModel.onOpenBackupSettings = { [weak presenter] in
+            presenter?.onOpenBackupSettings()
         }
 
         viewModel.onTopUp = { [weak presenter] in
@@ -131,34 +115,18 @@ final class AssetDetailsViewBinding: AssetDetailsViewProtocol {
         }
     #endif
 
-    func didReceive(fundingStates: [AssetFundingStatusView.FundingState]) {
-        viewModel.fundingStates = fundingStates
-    }
-
     func didReceive(isRecoveryInProgress: Bool) {
         viewModel.isUpdating = isRecoveryInProgress
     }
 
-    func didReceive(isAccountBackupPending: Bool) {
-        withAnimation(.easeInOut) {
-            viewModel.showsAccountBackupPending = isAccountBackupPending
-        }
-    }
-
-    func didShowBackupNotification() {
+    func didReceive(showsRestoredBalanceHint: Bool) {
         guard animatesBackupNotificationUpdates else {
-            viewModel.showsBackupNotification = true
+            viewModel.showsRestoredBalanceHint = showsRestoredBalanceHint
             return
         }
 
         withAnimation(.easeInOut) {
-            viewModel.showsBackupNotification = true
-        }
-    }
-
-    func didHideBackupNotification() {
-        withAnimation(.easeInOut) {
-            viewModel.showsBackupNotification = false
+            viewModel.showsRestoredBalanceHint = showsRestoredBalanceHint
         }
     }
 
