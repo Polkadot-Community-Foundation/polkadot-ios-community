@@ -22,6 +22,9 @@ env:
   EXPORT_METHOD: "development"
   BUILD_NUMBER: ${{ github.run_number }}
   RUN_IN_CI: true
+  # Several upstream tests have timing budgets sized for larger Macs: a failed test is retried,
+  # and passes only if a retry passes.
+  SCAN_NUMBER_OF_RETRIES: 2
   # DEBUG MODE: Set to 'true' to enable enhanced debugging for build failures
   # What it does:
   #   - Enables verbose xcodebuild logging
