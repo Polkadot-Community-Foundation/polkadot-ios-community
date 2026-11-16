@@ -13,8 +13,8 @@ runs:
     - name: Generate Secrets.generated.swift
       shell: bash
       env:
-        SRCROOT: ${{ github.workspace }}
+        SRCROOT: ${{ github.workspace }}/hosts/ios
         SENTRY_DSN: ${{ inputs.sentry_dsn }}
       run: |
         set -euo pipefail
-        "${GITHUB_WORKSPACE:?}/Runscripts/generate_secrets.sh"
+        "${GITHUB_WORKSPACE:?}/hosts/ios/Runscripts/generate_secrets.sh"
