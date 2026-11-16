@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import BigInt
 import FoundationExt
@@ -65,7 +66,7 @@ public protocol CoinageServicing: Actor {
     /// Register an external payment identified by `(productId, paymentId)`.
     /// Throws `ExternalPaymentError.alreadyExists` on replay.
     func initiateExternalPayment(
-        productId: String,
+        productId: ProductId?,
         paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
@@ -74,7 +75,7 @@ public protocol CoinageServicing: Actor {
     /// Subscribe to the status of an external payment identified by `(productId, paymentId)`; the
     /// stream fails with `ExternalPaymentError.notFound` for an unknown identity.
     nonisolated func subscribeExternalPaymentStatus(
-        productId: String,
+        productId: ProductId?,
         paymentId: String
     ) -> AnyAsyncSequence<ExternalPaymentStatus>
 
@@ -100,6 +101,9 @@ public protocol CoinageServicing: Actor {
 
     /// Whether an allocation is waiting for that registration to complete.
     nonisolated func subscribeAwaitingInstallationBackup() -> AnyAsyncSequence<Bool>
+
+    /// The current installation once its on-chain registration has completed, as allocations get it.
+    nonisolated var backedUpInstallationProvider: any CoinageBackedUpInstallationProviding { get }
 
     /// See `TransferClaimServicing.transferCoinsFromSecretKeys`.
     func transferCoinsFromSecretKeys(
@@ -244,7 +248,7 @@ extension CoinageService: CoinageServicing {
     }
 
     public func initiateExternalPayment(
-        productId: String,
+        productId: ProductId?,
         paymentId: String,
         amountInPlanks: Balance,
         destination: AccountId
@@ -258,7 +262,7 @@ extension CoinageService: CoinageServicing {
     }
 
     public nonisolated func subscribeExternalPaymentStatus(
-        productId: String,
+        productId: ProductId?,
         paymentId: String
     ) -> AnyAsyncSequence<ExternalPaymentStatus> {
         externalPaymentService.subscribePaymentStatus(productId: productId, paymentId: paymentId)
@@ -451,6 +455,10 @@ extension CoinageService: CoinageServicing {
 
     public nonisolated func subscribeAwaitingInstallationBackup() -> AnyAsyncSequence<Bool> {
         backedUpInstallation.subscribeAwaitingBackup()
+    }
+
+    public nonisolated var backedUpInstallationProvider: any CoinageBackedUpInstallationProviding {
+        backedUpInstallation
     }
 
     public func recoverSpentCoinsOnChain() async throws -> BigUInt {

@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import ChainRegistry
 import Individuality
@@ -27,7 +28,7 @@ struct BuiltInPersonhoodKeysTests {
 
     @Test("Personhood owner lists the full and lite slots with their People rings")
     func entriesForPersonhoodOwner() async throws {
-        let entries = try await makeKeys().entries(owner: "peopl.paseo")
+        let entries = try await makeKeys().entries(owner: try! ProductId("peopl.paseo"))
 
         #expect(entries == [
             makeEntry(index: 0, collectionId: PeoplePallet.membersIdentifier),
@@ -37,7 +38,7 @@ struct BuiltInPersonhoodKeysTests {
 
     @Test("Any other owner has no entries")
     func entriesForOtherOwner() async throws {
-        let entries = try await makeKeys().entries(owner: "getcash.paseo")
+        let entries = try await makeKeys().entries(owner: try! ProductId("getcash.paseo"))
 
         #expect(entries.isEmpty)
     }
@@ -47,7 +48,7 @@ struct BuiltInPersonhoodKeysTests {
         depsResolver.membersPalletIndex = nil
 
         await #expect(throws: BuiltInPersonhoodKeyError.peopleChainUnavailable) {
-            try await makeKeys().entries(owner: "peopl.paseo")
+            try await makeKeys().entries(owner: try! ProductId("peopl.paseo"))
         }
     }
 
@@ -56,7 +57,7 @@ struct BuiltInPersonhoodKeysTests {
         chainRegistry.chainsById = [:]
 
         await #expect(throws: ChainRegistryError.self) {
-            try await makeKeys().entries(owner: "peopl.paseo")
+            try await makeKeys().entries(owner: try! ProductId("peopl.paseo"))
         }
     }
 
@@ -83,9 +84,9 @@ struct BuiltInPersonhoodKeysTests {
     @Test(
         "Unknown handles are not registered",
         arguments: [
-            RingVrfKeyHandle(productId: "peopl.paseo", index: .index(2)),
-            RingVrfKeyHandle(productId: "peopl.paseo", index: .raw(Data(repeating: 0, count: 32))),
-            RingVrfKeyHandle(productId: "getcash.paseo", index: .index(1))
+            RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(2)),
+            RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .raw(Data(repeating: 0, count: 32))),
+            RingVrfKeyHandle(productId: try! ProductId("getcash.paseo"), index: .index(1))
         ]
     )
     func unknownHandle(handle: RingVrfKeyHandle) {
@@ -126,7 +127,7 @@ private extension BuiltInPersonhoodKeysTests {
     }
 
     func handle(_ index: UInt32) -> RingVrfKeyHandle {
-        RingVrfKeyHandle(productId: "peopl.paseo", index: .index(index))
+        RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(index))
     }
 
     func ring(_ collectionId: Data) -> RingLocation {

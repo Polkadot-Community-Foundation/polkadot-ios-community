@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import KeyDerivation
 import Products
@@ -27,7 +28,7 @@ final class StubProductsNativeApi: ProductsNativeApiProtocol {
     ) async throws -> RingVrfProofResult { fatalError() }
 
     func listRingVrfKeys(
-        owner _: Products.ProductId,
+        owner _: ProductId,
         disclosure _: Products.RingVrfKeyDisclosure
     ) async throws -> [Products.RegisteredRingVrfKey] { fatalError() }
 

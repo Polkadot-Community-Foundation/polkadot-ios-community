@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import ChainRegistry
 import Individuality
@@ -54,7 +55,7 @@ final class BuiltInPersonhoodKeys: @unchecked Sendable {
 extension BuiltInPersonhoodKeys: BuiltInPersonhoodKeysProviding {
     func entries(owner: ProductId) async throws -> [RegisteredRingVrfKey] {
         let tld = try tldProvider.currentTldOrError()
-        let personhoodProductId = BuiltInProduct.personhood(for: tld)
+        let personhoodProductId = try BuiltInProduct.personhood(for: tld)
 
         guard owner == personhoodProductId else {
             return []
@@ -86,7 +87,7 @@ extension BuiltInPersonhoodKeys: BuiltInPersonhoodKeysProviding {
         let tld = try tldProvider.currentTldOrError()
 
         guard
-            handle.productId == BuiltInProduct.personhood(for: tld),
+            try handle.productId == BuiltInProduct.personhood(for: tld),
             case let .index(index) = handle.index,
             let slot = BuiltInPersonhoodSlot(rawValue: index)
         else {
@@ -99,7 +100,7 @@ extension BuiltInPersonhoodKeys: BuiltInPersonhoodKeysProviding {
             throw BuiltInPersonhoodKeyError.keyNotInRing
         }
 
-        return keyManagerFactory.makeKeyManager(for: slot, tld: tld)
+        return try keyManagerFactory.makeKeyManager(for: slot, tld: tld)
     }
 }
 
