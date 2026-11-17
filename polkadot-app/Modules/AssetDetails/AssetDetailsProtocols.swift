@@ -41,6 +41,7 @@ protocol AssetDetailsInteractorInputProtocol: AnyObject {
     func openTopUpProduct()
 
     #if TESTNET_FEATURE
+        func openFaucetProduct()
         func topUp()
     #endif
 }
@@ -64,6 +65,7 @@ protocol AssetDetailsInteractorOutputProtocol: AnyObject {
         denominations: DenominationBreakdownContext
     )
     #if TESTNET_FEATURE
+        func didResolveFaucetProduct(_ result: Result<ProductPage, Error>)
         func didCompleteTopUp(_ result: Result<Void, Error>)
     #endif
 }

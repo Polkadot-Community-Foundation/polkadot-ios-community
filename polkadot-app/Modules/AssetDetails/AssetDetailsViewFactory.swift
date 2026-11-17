@@ -35,6 +35,7 @@ enum AssetDetailsViewFactory {
                 provider: ChainRegistryFacade.sharedRegistry
             )
             interactor.topupService = TopUpService.create(for: chainAsset.chainAssetId)
+            interactor.faucetHostProvider = context.flowState.hostProvider
         #endif
 
         let wireframe = AssetDetailsWireframe(context: context, fundingDomainProvider: fundingDomainProvider)

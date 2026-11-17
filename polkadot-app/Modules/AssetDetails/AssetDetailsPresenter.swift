@@ -114,7 +114,7 @@ extension AssetDetailsPresenter: AssetDetailsPresenterProtocol {
         func onTestnetTopUp() {
             view?.didReceive(testnetTopUpLoading: true)
 
-            interactor?.topUp()
+            interactor?.openFaucetProduct()
         }
     #endif
 }
@@ -145,6 +145,18 @@ extension AssetDetailsPresenter: AssetDetailsInteractorOutputProtocol {
     }
 
     #if TESTNET_FEATURE
+        func didResolveFaucetProduct(_ result: Result<ProductPage, Error>) {
+            view?.didReceive(testnetTopUpLoading: false)
+
+            switch result {
+            case let .success(page):
+                wireframe.showProduct(page: page)
+            case let .failure(error):
+                guard !(error is CancellationError) else { return }
+                wireframe.present(error: error, from: view)
+            }
+        }
+
         func didCompleteTopUp(_ result: Result<Void, Error>) {
             view?.didReceive(testnetTopUpLoading: false)
 
