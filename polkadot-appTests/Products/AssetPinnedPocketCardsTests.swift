@@ -19,6 +19,12 @@ struct AssetPinnedPocketCardsTests {
         )])
     }
 
+    /// The Pocket draws the native identity card exactly when it pins no Humanity card.
+    @Test
+    func reportsWhetherItPinsHumanity() {
+        #expect(AssetPinnedPocketCards.pinsHumanity == pinned.cards().contains { $0.cardId == "humanity" })
+    }
+
     @Test
     func namesAPinnedCardWithoutAwaiting() {
         let key = PocketCardKey(productId: try! ProductId("peopl.paseo"), cardId: PocketCardId(value: "humanity"))

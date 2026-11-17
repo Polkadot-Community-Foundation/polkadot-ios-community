@@ -23,6 +23,7 @@ struct WalletView: View {
                         } action: {
                             viewModel.balanceCardFrame = $0
                         }
+                    identityCard
                     pocketCards
                 }
                 .padding(.horizontal, PocketCardSize.sideMargin)
@@ -48,7 +49,7 @@ struct WalletView: View {
             // peek a card shows is all of it that takes a press, the
             // rest is under the card above.
             PocketCollectionCardView(card: card)
-                .pocketMotion(motion(ofPosition: index + 1))
+                .pocketMotion(motion(ofPosition: index + hostCardCount))
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .global)
                 } action: {
@@ -64,6 +65,19 @@ struct WalletView: View {
 
                     viewModel.onRemovePocketCard?(card)
                 }
+        }
+    }
+
+    /// The native identity card, a peek below the Balance card, in a build whose Pocket pins no Humanity card.
+    @ViewBuilder
+    private var identityCard: some View {
+        if let identity = viewModel.identityDetailsViewModel {
+            IdentityDetailsCard(viewModel: identity)
+                // Every card takes a product card's height in the stack, so the next one peeks the same distance.
+                .frame(height: PocketCardSize.height, alignment: .top)
+                .pocketMotion(motion(ofPosition: 1))
+                .contentShape(RoundedRectangle(cornerRadius: PocketCardSize.cornerRadius))
+                .onTapGesture { viewModel.onIdentity?() }
         }
     }
 
@@ -83,6 +97,11 @@ struct WalletView: View {
 }
 
 private extension WalletView {
+    /// The cards the host draws above the product-backed ones: the Balance card, and the identity card when shown.
+    var hostCardCount: Int {
+        viewModel.identityDetailsViewModel == nil ? 1 : 2
+    }
+
     var isCardOpen: Bool {
         switch viewModel.openItem {
         case .balance,
@@ -94,13 +113,14 @@ private extension WalletView {
         }
     }
 
-    /// The position of the open item in the stack: the Balance card is first, and each Pocket card follows it.
+    /// The position of the open item in the stack: the Balance card is first, and each Pocket card follows the
+    /// host's own cards.
     var openPosition: Int? {
         switch viewModel.openItem {
         case .balance:
             0
         case let .card(key):
-            viewModel.pocketCards.firstIndex { $0.key == key }.map { $0 + 1 }
+            viewModel.pocketCards.firstIndex { $0.key == key }.map { $0 + hostCardCount }
         case .collectibles,
              nil:
             nil

@@ -44,10 +44,20 @@ enum WalletMainViewFactory {
 
         let view = WalletMainViewController(
             presenter: presenter,
-            assetDetailsScene: assetDetailsScene
+            assetDetailsScene: assetDetailsScene,
+            identityDetailsScene: makeIdentityDetailsScene(chain: chain)
         )
         presenter.view = view
 
         return view
+    }
+
+    /// The native identity card, for a build whose Pocket pins no Humanity card to stand in for it.
+    private static func makeIdentityDetailsScene(chain: ChainModel) -> IdentityDetailsScene? {
+        let walletRepo: WalletManagerRepositoryProtocol = .shared
+
+        guard !AssetPinnedPocketCards.pinsHumanity, let wallet = try? walletRepo.main() else { return nil }
+
+        return IdentityDetailsViewFactory.createEmbeddedScene(chainModel: chain, wallet: wallet)
     }
 }
