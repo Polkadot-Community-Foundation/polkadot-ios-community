@@ -10,6 +10,7 @@ import KeyDerivation
 import AsyncExtensions
 import AsyncAlgorithms
 import ChainRegistry
+import SubstrateSdkExt
 import BackgroundExecution
 import Products
 import UIKitExt
@@ -35,6 +36,7 @@ final class AssetDetailsInteractor: AnyProviderAutoCleaning {
     #if TESTNET_FEATURE
         var backgroundExecutor: BackgroundExecuting?
         var topupService: TopUpService?
+        var faucetHostProvider: ProductHostProviding?
         var faucetTask: Task<Void, Error>?
     #endif
 
@@ -82,6 +84,29 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
     }
 
     #if TESTNET_FEATURE
+        func openFaucetProduct() {
+            faucetTask?.cancel()
+            faucetTask = Task { [weak presenter, faucetHostProvider, chainAsset] in
+                guard let faucetHostProvider else {
+                    return
+                }
+                do {
+                    let walletRepo: WalletManagerRepositoryProtocol = .shared
+                    let recipient = try walletRepo.main()
+                        .getRawPublicKey()
+                        .toAddress(using: chainAsset.chain.chainFormat)
+                    guard let host = try await faucetHostProvider.resolveHost(label: "faucet") else {
+                        throw FaucetProductError.notOnNetwork
+                    }
+
+                    let page = ProductPage(host: host, page: "/?address=\(recipient)")
+                    await presenter?.didResolveFaucetProduct(.success(page))
+                } catch {
+                    await presenter?.didResolveFaucetProduct(.failure(error))
+                }
+            }
+        }
+
         func topUp() {
             faucetTask?.cancel()
             faucetTask = Task { [weak presenter, topupService, backgroundExecutor, coinageService] in
@@ -195,3 +220,9 @@ private extension AssetDetailsInteractor {
         }
     }
 }
+
+#if TESTNET_FEATURE
+    private enum FaucetProductError: Error {
+        case notOnNetwork
+    }
+#endif
