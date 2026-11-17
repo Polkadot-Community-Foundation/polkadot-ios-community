@@ -6,10 +6,6 @@ inputs:
     description: "Sentry DSN (TESTNET_FEATURE builds only)"
     required: false
     default: ""
-  meld_basic_auth_token:
-    description: "MELD fiat on-ramp Basic auth token"
-    required: false
-    default: ""
 
 runs:
   using: "composite"
@@ -17,9 +13,8 @@ runs:
     - name: Generate Secrets.generated.swift
       shell: bash
       env:
-        SRCROOT: ${{ github.workspace }}
+        SRCROOT: ${{ github.workspace }}/hosts/ios
         SENTRY_DSN: ${{ inputs.sentry_dsn }}
-        MELD_BASIC_AUTH_TOKEN: ${{ inputs.meld_basic_auth_token }}
       run: |
         set -euo pipefail
-        "${GITHUB_WORKSPACE:?}/Runscripts/generate_secrets.sh"
+        "${GITHUB_WORKSPACE:?}/hosts/ios/Runscripts/generate_secrets.sh"

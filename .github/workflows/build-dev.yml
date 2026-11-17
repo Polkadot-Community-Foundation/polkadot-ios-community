@@ -18,18 +18,39 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       RUN_IN_CI: 'true'   # the project's "Copy GoogleService-Info" build phase skips when set
-      TRUAPI_CORE_VERSION: '0.26.0'
-      TRUAPI_CORE_REVISION: e7ce413f6e851439b8d82767aebcfe3c33f2ebe8
+      TRUAPI_CORE_REF: a2eef84214a983e99d530cc675c140de52cf7250   # @parity/truapi@0.31.0
+      TRUAPI_USE_LOCAL_BINARY: '1'   # without it the core's manifest links its last published binary
+    defaults:
+      run:
+        working-directory: hosts/ios
     steps:
+      # The app builds inside the trinity-user-agents tree at TRUAPI_CORE_REF, as upstream builds it:
+      # its packages take TrUAPIHost from ../../../.. and the core is compiled from that source.
+      - name: Check out the TrUAPI core
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/trinity-user-agents
+          ref: ${{ env.TRUAPI_CORE_REF }}
+          persist-credentials: false
+
+      - name: Replace the core's hosts/ios with this app
+        working-directory: ${{ github.workspace }}
+        run: rm -rf hosts/ios
+
       - uses: actions/checkout@v4
+        with:
+          path: hosts/ios
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.4.1'
+
+      - name: Build the TrUAPI core
+        uses: ./.github/actions/bootstrap-ios-core
 
       - name: Provide GoogleService-Info.plist (.dev Firebase app)
         env:
@@ -90,33 +111,19 @@ jobs:
 
           exit $fail
 
-      # The TrUAPI core is the prebuilt xcframework of the trinity-user-agents SwiftPM tag.
-      # Trinity's Package.swift falls back to an older tag outside its monorepo, and without
-      # -DTRUAPI_RUNTIME_DEFAULT the Dev build quietly defaults to the native runtime.
-      - name: Verify the TrUAPI core pin and runtime default
+      # Without -DTRUAPI_RUNTIME_DEFAULT the Dev build quietly defaults to the native runtime.
+      - name: Verify the TrUAPI core and runtime default
         run: |
           set -o pipefail
           fail=0
 
-          python3 - \
-            polkadot-app.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
-            Packages/AppDependencies/Package.resolved <<'PY' || fail=1
-          import json, os, sys
-
-          want = {"version": os.environ["TRUAPI_CORE_VERSION"],
-                  "revision": os.environ["TRUAPI_CORE_REVISION"]}
-          status = 0
-          for path in sys.argv[1:]:
-              pins = [p for p in json.load(open(path))["pins"]
-                      if p["identity"] == "trinity-user-agents"]
-              got = {k: pins[0]["state"].get(k) for k in want} if len(pins) == 1 else None
-              if got == want:
-                  print(f"ok: {path} pins trinity-user-agents {want['version']} @ {want['revision']}")
-              else:
-                  print(f"::error::{path} pins trinity-user-agents at {got}, expected {want}")
-                  status = 1
-          sys.exit(status)
-          PY
+          core=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
+          if [ "$core" = "$TRUAPI_CORE_REF" ]; then
+            echo "ok: TrUAPI core built from trinity-user-agents @ $core"
+          else
+            echo "::error::the TrUAPI core checkout is at $core, expected $TRUAPI_CORE_REF"
+            fail=1
+          fi
 
           app_flags=$(awk '/^Build settings for action [a-z]+ and target /{target=$NF}
             target == "polkadot-app:" && /^OTHER_SWIFT_FLAGS = /' build-settings.txt)
@@ -190,24 +197,49 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dev-icon-evidence
-          path: icon-evidence
+          path: hosts/ios/icon-evidence
           retention-days: 7
           if-no-files-found: warn
 
   # Runs the Core Data migration from v36, the model older installs carry, on a simulator.
   storage-migration-tests:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       RUN_IN_CI: 'true'
+      TRUAPI_CORE_REF: a2eef84214a983e99d530cc675c140de52cf7250   # @parity/truapi@0.31.0
+      TRUAPI_USE_LOCAL_BINARY: '1'
+    defaults:
+      run:
+        working-directory: hosts/ios
     steps:
+      # The app builds inside the trinity-user-agents tree at TRUAPI_CORE_REF, as upstream builds it:
+      # its packages take TrUAPIHost from ../../../.. and the core is compiled from that source.
+      - name: Check out the TrUAPI core
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/trinity-user-agents
+          ref: ${{ env.TRUAPI_CORE_REF }}
+          persist-credentials: false
+
+      - name: Replace the core's hosts/ios with this app
+        working-directory: ${{ github.workspace }}
+        run: rm -rf hosts/ios
+
       - uses: actions/checkout@v4
+        with:
+          path: hosts/ios
 
       # Matches upstream's test toolchain (.github/actions/install).
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.4.1'
+
+      - name: Build the TrUAPI core (simulator)
+        uses: ./.github/actions/bootstrap-ios-core
+        with:
+          sim-only: 'true'
 
       - name: Provide GoogleService-Info.plist (.dev Firebase app)
         env:
@@ -375,7 +407,7 @@ jobs:
         with:
           name: storage-migration-test-results
           path: |
-            TestResults.xcresult
-            xcodebuild-test.log
+            hosts/ios/TestResults.xcresult
+            hosts/ios/xcodebuild-test.log
           retention-days: 7
           if-no-files-found: warn

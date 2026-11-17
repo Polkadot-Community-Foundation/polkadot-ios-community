@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import Individuality
 import Products
@@ -10,9 +11,9 @@ final class APPersonhoodTestEnvironment {
     let message = Data.random(of: 64)!
     let liteCollectionId = PeopleLitePallet.membersIdentifier
 
-    let liteHandle = RingVrfKeyHandle(productId: "peopl.paseo", index: .index(1))
-    let sameProductContext = ProductProofContext(productId: "caller.product", suffix: .index(0))
-    let crossProductContext = ProductProofContext(productId: "other.product", suffix: .index(0))
+    let liteHandle = RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(1))
+    let sameProductContext = ProductProofContext(productId: try! ProductId("caller.product.dot"), suffix: .index(0))
+    let crossProductContext = ProductProofContext(productId: try! ProductId("other.product.dot"), suffix: .index(0))
 
     let keyManager = MockBandersnatchKeyManager()
     let builtInKeys = MockBuiltInPersonhoodKeys()
@@ -36,7 +37,8 @@ final class APPersonhoodTestEnvironment {
         )
     }
 
-    func makeCreateProofHandler(callingProductId: ProductId? = "caller.product") -> APCreateProofHandler {
+    func makeCreateProofHandler(callingProductId: ProductId? = try! ProductId("caller.product.dot"))
+        -> APCreateProofHandler {
         APCreateProofHandler(
             callingProductId: callingProductId,
             builtInKeys: builtInKeys,
@@ -46,7 +48,7 @@ final class APPersonhoodTestEnvironment {
         )
     }
 
-    func makeAliasHandler(callingProductId: ProductId? = "caller.product") -> APAliasHandler {
+    func makeAliasHandler(callingProductId: ProductId? = try! ProductId("caller.product.dot")) -> APAliasHandler {
         APAliasHandler(
             callingProductId: callingProductId,
             builtInKeys: builtInKeys,

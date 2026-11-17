@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import Products
 import SubstrateSdk
@@ -19,7 +20,7 @@ struct RingVrfKeyCodingTests {
     func anonymizedEntryShape() throws {
         let collectionId = Data(repeating: 0x07, count: 32)
         let entry = RegisteredRingVrfKey(
-            handle: RingVrfKeyHandle(productId: "peopl.paseo", index: .index(1)),
+            handle: RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(1)),
             rings: [
                 RingLocation(
                     chainId: Data(repeating: 0x01, count: 32),
@@ -39,7 +40,7 @@ struct RingVrfKeyCodingTests {
     @Test("Entry round-trips through JSON with a public key")
     func entryRoundTripWithPublicKey() throws {
         let entry = RegisteredRingVrfKey(
-            handle: RingVrfKeyHandle(productId: "peopl.paseo", index: .index(0)),
+            handle: RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(0)),
             rings: [RingLocation(chainId: Data(repeating: 0x02, count: 32), junctions: [.palletInstance(50)])],
             publicKey: Data(repeating: 0xAB, count: 32)
         )
@@ -52,7 +53,7 @@ struct RingVrfKeyCodingTests {
 
     @Test("Handle encodes as the [productId, index] tuple")
     func handleTupleShape() throws {
-        let handle = RingVrfKeyHandle(productId: "peopl.paseo", index: .index(1))
+        let handle = RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(1))
 
         let data = try JSONEncoder().encode(handle)
 
@@ -66,7 +67,7 @@ struct RingVrfKeyCodingTests {
 
         let decoded = try JSONDecoder().decode(RegisteredRingVrfKey.self, from: Data(json.utf8))
 
-        #expect(decoded.handle == RingVrfKeyHandle(productId: "peopl.paseo", index: .index(1)))
+        #expect(decoded.handle == RingVrfKeyHandle(productId: try! ProductId("peopl.paseo"), index: .index(1)))
         #expect(decoded.publicKey == nil)
     }
 

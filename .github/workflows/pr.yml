@@ -80,20 +80,46 @@ jobs:
     needs: check-skip-label
     if: needs.check-skip-label.outputs.skip == 'false' && !startsWith(github.head_ref, 'release/')
     runs-on: macos-26
+    env:
+      TRUAPI_CORE_REF: a2eef84214a983e99d530cc675c140de52cf7250   # @parity/truapi@0.31.0
+      TRUAPI_USE_LOCAL_BINARY: '1'   # without it the core's manifest links its last published binary
+    defaults:
+      run:
+        working-directory: hosts/ios
     steps:
+      # The app builds inside the trinity-user-agents tree at TRUAPI_CORE_REF, as upstream builds it:
+      # its packages take TrUAPIHost from ../../../.. and the core is compiled from that source.
+      - name: Check out the TrUAPI core
+        uses: actions/checkout@v6
+        with:
+          repository: paritytech/trinity-user-agents
+          ref: ${{ env.TRUAPI_CORE_REF }}
+          persist-credentials: false
+
+      - name: Replace the core's hosts/ios with this app
+        working-directory: ${{ github.workspace }}
+        run: rm -rf hosts/ios
+
       - uses: actions/checkout@v6
+        with:
+          path: hosts/ios
 
       - name: Setup iOS Environment
-        uses: ./.github/actions/install
+        uses: ./hosts/ios/.github/actions/install
+
+      - name: Build the TrUAPI core (simulator)
+        uses: ./.github/actions/bootstrap-ios-core
+        with:
+          sim-only: 'true'
 
       - name: Configure Google services
-        uses: ./.github/actions/configure-google-services
+        uses: ./hosts/ios/.github/actions/configure-google-services
         with:
           google_service_info_base64: ${{ secrets.GOOGLESERVICE_INFO_PLIST_DEV_BASE64 }}
           expected_bundle_id: ${{ env.IOS_BUNDLE_ID }}
 
       - name: Configure secrets
-        uses: ./.github/actions/configure-secrets
+        uses: ./hosts/ios/.github/actions/configure-secrets
         with:
           sentry_dsn: ${{ secrets.SENTRY_DSN }}
           meld_basic_auth_token: ${{ secrets.MELD_BASIC_AUTH_TOKEN }}
@@ -113,7 +139,7 @@ jobs:
         if: always()
         uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
         with:
-          report_paths: ./fastlane/test_output/report.junit
+          report_paths: ./hosts/ios/fastlane/test_output/report.junit
           check_name: Unit tests
           detailed_summary: true
           include_passed: false
@@ -125,7 +151,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ github.run_number }}
-          path: ./fastlane/test_output/
+          path: ./hosts/ios/fastlane/test_output/
           retention-days: 3
 
       # Upload test artifacts for debugging - only when DEBUG_CI is enabled
@@ -135,6 +161,6 @@ jobs:
         with:
           name: test-artifacts-${{ github.run_number }}
           path: |
-            ./fastlane/test_output/
-            ./fastlane/build_logs/
+            ./hosts/ios/fastlane/test_output/
+            ./hosts/ios/fastlane/build_logs/
           retention-days: 3

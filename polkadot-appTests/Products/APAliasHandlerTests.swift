@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import Products
 import SubstrateSdk
@@ -69,7 +70,7 @@ struct APAliasHandlerTests {
             try await getAlias(env, context: env.crossProductContext)
         }
 
-        #expect(env.accountAccess.recordedProductIds == ["caller.product"])
+        #expect(env.accountAccess.recordedProductIds == [try! ProductId("caller.product.dot")])
     }
 }
 

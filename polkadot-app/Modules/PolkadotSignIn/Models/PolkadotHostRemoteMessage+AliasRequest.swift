@@ -1,3 +1,4 @@
+import struct TrUAPIHost.ProductId
 import Foundation
 import MessageExchangeKit
 import Products
@@ -16,14 +17,14 @@ extension PolkadotHostRemoteMessage {
 
 extension PolkadotHostRemoteMessage.AliasRequest: MessageExchange.CodableMessage {
     init(scaleDecoder: any ScaleDecoding) throws {
-        callingProductId = try String(scaleDecoder: scaleDecoder)
+        callingProductId = try ProductId(String(scaleDecoder: scaleDecoder))
         keyHandle = try RingVrfKeyHandle(scaleDecoder: scaleDecoder)
         context = try ProductProofContext(scaleDecoder: scaleDecoder)
         ring = try RingLocation(scaleDecoder: scaleDecoder)
     }
 
     func encode(scaleEncoder: any ScaleEncoding) throws {
-        try callingProductId.encode(scaleEncoder: scaleEncoder)
+        try callingProductId.rawValue.encode(scaleEncoder: scaleEncoder)
         try keyHandle.encode(scaleEncoder: scaleEncoder)
         try context.encode(scaleEncoder: scaleEncoder)
         try ring.encode(scaleEncoder: scaleEncoder)

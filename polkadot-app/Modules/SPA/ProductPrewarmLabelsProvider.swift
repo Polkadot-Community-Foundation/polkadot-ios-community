@@ -10,7 +10,11 @@ struct ProductPrewarmLabelsProvider {
 
 extension ProductPrewarmLabelsProvider: ProductPrewarmLabelsProviding {
     func labels() async -> [String] {
-        let staticProducts = [AppConfig.DotNs.dotNsBrowse]
+        #if FEATURE_PRODUCTS
+            let staticProducts = [AppConfig.DotNs.dotNsBrowse]
+        #else
+            let staticProducts: [String] = []
+        #endif
 
         let fundingProvider = FundingDomainProvider(
             hostProvider: flowStateProvider.flowState().hostProvider
