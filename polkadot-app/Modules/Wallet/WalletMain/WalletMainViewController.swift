@@ -8,10 +8,16 @@ final class WalletMainViewController: UIHostingController<WalletView>, RootScree
     var hidesNavigationBar: Bool { true }
 
     private var assetDetailsScene: AssetDetailsScene
+    private let identityDetailsScene: IdentityDetailsScene?
 
-    init(presenter: WalletMainPresenterProtocol, assetDetailsScene: AssetDetailsScene) {
+    init(
+        presenter: WalletMainPresenterProtocol,
+        assetDetailsScene: AssetDetailsScene,
+        identityDetailsScene: IdentityDetailsScene? = nil
+    ) {
         self.presenter = presenter
         self.assetDetailsScene = assetDetailsScene
+        self.identityDetailsScene = identityDetailsScene
         super.init(rootView: WalletView())
     }
 
@@ -37,15 +43,21 @@ final class WalletMainViewController: UIHostingController<WalletView>, RootScree
         navigationControlling?.setNavigationBarHidden(hidesNavigationBar, animated: true)
 
         assetDetailsScene.attachNavigationHost(self)
+        identityDetailsScene?.attachNavigationHost(self)
         setupHandlers()
         presenter.setup()
     }
 
     private func setupHandlers() {
         rootView.viewModel.assetDetailsViewModel = assetDetailsScene.viewModel
+        rootView.viewModel.identityDetailsViewModel = identityDetailsScene?.viewModel
 
         rootView.viewModel.onBalance = { [weak presenter] in
             presenter?.showBalanceCard()
+        }
+
+        rootView.viewModel.onIdentity = { [weak self] in
+            self?.openIdentityCard()
         }
 
         rootView.viewModel.onCollectibles = { [weak self] in
@@ -114,6 +126,13 @@ extension WalletMainViewController: WalletMainViewProtocol {
             viewModel.openPocketCardOffset = offset
             viewModel.isPocketCleared = clearingPocket
         }
+    }
+
+    private func openIdentityCard() {
+        guard let identityDetailsScene, navigationController?.topViewController === self else { return }
+
+        let screen = IdentityCardScreenViewController(scene: identityDetailsScene, pocket: self)
+        navigationController?.pushViewController(screen, animated: true)
     }
 
     private func openCollectibles() {

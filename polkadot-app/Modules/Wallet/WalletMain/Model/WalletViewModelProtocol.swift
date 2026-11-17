@@ -11,6 +11,7 @@ enum CollectiblesPeek: Equatable {
 
 protocol WalletViewModelProtocol: AnyObject, Observation.Observable {
     var assetDetailsViewModel: AssetDetailsViewModel { get set }
+    var identityDetailsViewModel: IdentityDetailsViewModel? { get set }
     var isCollectiblesAvailable: Bool { get set }
     var pocketCards: [PocketCardViewModel] { get set }
     var pocketCardFrames: [PocketCardKey: CGRect] { get set }
@@ -22,6 +23,7 @@ protocol WalletViewModelProtocol: AnyObject, Observation.Observable {
     var collectiblesFrame: CGRect { get set }
 
     var onBalance: (() -> Void)? { get set }
+    var onIdentity: (() -> Void)? { get set }
     var onCollectibles: (() -> Void)? { get set }
     var onOpenPocketCard: ((PocketCardViewModel) -> Void)? { get set }
     var onRemovePocketCard: ((PocketCardViewModel) -> Void)? { get set }
@@ -30,6 +32,8 @@ protocol WalletViewModelProtocol: AnyObject, Observation.Observable {
 @Observable
 class WalletViewModel: WalletViewModelProtocol {
     var assetDetailsViewModel: AssetDetailsViewModel = .init()
+    /// The native identity card, drawn only by a build whose Pocket pins no Humanity card.
+    var identityDetailsViewModel: IdentityDetailsViewModel?
     var isCollectiblesAvailable: Bool = false
     var pocketCards: [PocketCardViewModel] = []
     /// Where each card is in the window, for its screen to fly from. Read on
@@ -50,6 +54,7 @@ class WalletViewModel: WalletViewModelProtocol {
     @ObservationIgnored var collectiblesFrame: CGRect = .zero
 
     var onBalance: (() -> Void)?
+    var onIdentity: (() -> Void)?
     var onCollectibles: (() -> Void)?
     var onOpenPocketCard: ((PocketCardViewModel) -> Void)?
     var onRemovePocketCard: ((PocketCardViewModel) -> Void)?
