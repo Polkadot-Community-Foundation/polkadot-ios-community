@@ -160,7 +160,12 @@ struct TrUAPIHostRuntimeProviderConfigTests {
     /// Tests run in one build only, so the stacks the other builds run are
     /// started here as well: a copy refreshed without its link, or a
     /// reserved-values flag that refuses its stack, fails before it ships.
-    @Test(arguments: [TrUAPIBundledStack.previewnet, TrUAPIBundledStack.paseoNextV2, TrUAPIBundledStack.polkadot])
+    @Test(arguments: [
+        TrUAPIBundledStack.previewnet,
+        TrUAPIBundledStack.paseoNextV2,
+        TrUAPIBundledStack.pcfDevnet,
+        TrUAPIBundledStack.polkadot,
+    ])
     func everyBundledStackStartsTheCore(stack: TrUAPIBundledStack.Definition) throws {
         let config = try HostRuntimeConfig(
             hostName: "Polkadot App",
