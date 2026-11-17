@@ -6,8 +6,8 @@ import TrUAPIHost
 /// Each stack ships as two resources: `<resource>.link`, the stack's pointer,
 /// and `<resource>.json`, its signed descriptor. The app target's "Bundle
 /// Trinity stacks" build phase copies both from the repository's `stacks/`,
-/// which `scripts/update-stacks.sh` refreshes. The core checks the descriptor
-/// against the pointer's key when the runtime starts.
+/// taken from the truapi release the core is pinned at. The core checks the
+/// descriptor against the pointer's key when the runtime starts.
 enum TrUAPIBundledStack {
     enum Error: Swift.Error, Equatable {
         case missingResource(name: String)
@@ -34,7 +34,9 @@ enum TrUAPIBundledStack {
 
     static let paseoNextV2 = Definition(resource: "trinity-stack-paseo-next-v2", allowsReservedValues: false)
 
-    /// The only stack allowed Polkadot's reserved values.
+    /// PCF Devnet serves the `dot` TLD, one of Polkadot's reserved values.
+    static let pcfDevnet = Definition(resource: "trinity-stack-pcf-devnet", allowsReservedValues: true)
+
     static let polkadot = Definition(resource: "trinity-stack-polkadot", allowsReservedValues: true)
 
     /// The stack this build runs.
@@ -43,6 +45,8 @@ enum TrUAPIBundledStack {
             previewnet
         #elseif NIGHTLY || SAFETYNET
             paseoNextV2
+        #elseif DEV
+            pcfDevnet
         #else
             polkadot
         #endif

@@ -736,12 +736,14 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/../../stacks/previewnet.link",
-				"$(SRCROOT)/../../stacks/previewnet.json",
-				"$(SRCROOT)/../../stacks/paseo-next-v2.link",
-				"$(SRCROOT)/../../stacks/paseo-next-v2.json",
-				"$(SRCROOT)/../../stacks/polkadot.link",
-				"$(SRCROOT)/../../stacks/polkadot.json",
+				"$(SRCROOT)/stacks/previewnet.link",
+				"$(SRCROOT)/stacks/previewnet.json",
+				"$(SRCROOT)/stacks/paseo-next-v2.link",
+				"$(SRCROOT)/stacks/paseo-next-v2.json",
+				"$(SRCROOT)/stacks/polkadot.link",
+				"$(SRCROOT)/stacks/polkadot.json",
+				"$(SRCROOT)/stacks/pcf-devnet.link",
+				"$(SRCROOT)/stacks/pcf-devnet.json",
 			);
 			name = "Bundle Trinity stacks";
 			outputFileListPaths = (
@@ -753,10 +755,12 @@
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-paseo-next-v2.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-polkadot.link",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-polkadot.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-pcf-devnet.link",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/trinity-stack-pcf-devnet.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\n\nstacks=\"${SRCROOT}/../../stacks\"\nresources=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nfor name in previewnet paseo-next-v2 polkadot; do\n    for extension in link json; do\n        cp \"${stacks}/${name}.${extension}\" \"${resources}/trinity-stack-${name}.${extension}\"\n    done\ndone\n";
+			shellScript = "set -eu\n\nstacks=\"${SRCROOT}/stacks\"\nresources=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nfor name in previewnet paseo-next-v2 polkadot pcf-devnet; do\n    for extension in link json; do\n        cp \"${stacks}/${name}.${extension}\" \"${resources}/trinity-stack-${name}.${extension}\"\n    done\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
