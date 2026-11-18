@@ -139,11 +139,7 @@ struct AssetDetailsView: View {
 
     private func actions() -> some View {
         HStack(spacing: DSSpacings.small) {
-            // The funding (Get CASH) entry point is hidden on testnet builds; the faucet button
-            // below is a separate feature.
-            #if !TESTNET_FEATURE
-                getButton()
-            #endif
+            getButton()
             sendButton()
         }
     }
