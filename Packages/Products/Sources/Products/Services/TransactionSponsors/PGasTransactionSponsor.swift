@@ -11,6 +11,9 @@ import SubstrateOperation
 import SDKLogger
 
 public protocol PGasTransactionSponsoring {
+    /// The transferable PGAS balance below which a product account gets another PGAS claim.
+    func sufficientBalance() async throws -> BigUInt
+
     func sponsorIfNeeded(
         productAccount: ProductAccountId,
         callData: Data,
@@ -53,6 +56,11 @@ public final class PGasTransactionSponsor {
 }
 
 extension PGasTransactionSponsor: PGasTransactionSponsoring {
+    public func sufficientBalance() async throws -> BigUInt {
+        let claimAmount = try await fetchPgasClaimAmount()
+        return BigRational.percent(of: Self.sufficientBalancePercent).mul(value: claimAmount)
+    }
+
     public func sponsorIfNeeded(
         productAccount: ProductAccountId,
         callData: Data,
@@ -79,8 +87,7 @@ extension PGasTransactionSponsor: PGasTransactionSponsoring {
             assetParams: queryType
         )
 
-        let claimAmount = try await fetchPgasClaimAmount()
-        let threshold = BigRational.percent(of: Self.sufficientBalancePercent).mul(value: claimAmount)
+        let threshold = try await sufficientBalance()
 
         guard balance.transferable < threshold else { return }
 
