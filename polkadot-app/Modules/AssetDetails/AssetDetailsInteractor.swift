@@ -92,7 +92,7 @@ extension AssetDetailsInteractor: AssetDetailsInteractorInputProtocol {
                 }
                 do {
                     let walletRepo: WalletManagerRepositoryProtocol = .shared
-                    let recipient = try walletRepo.main()
+                    let recipient = try walletRepo.depositWallet()
                         .getRawPublicKey()
                         .toAddress(using: chainAsset.chain.chainFormat)
                     guard let host = try await faucetHostProvider.resolveHost(label: "faucet") else {
