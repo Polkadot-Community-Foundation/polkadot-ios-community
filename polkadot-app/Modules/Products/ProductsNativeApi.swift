@@ -52,6 +52,16 @@ final class ProductsNativeApi: ProductsNativeApiProtocol, @unchecked Sendable {
         logger: logger
     )
 
+    #if TESTNET_FEATURE
+        lazy var getCashClaimSigner: GetCashClaimSigner? = GetCashClaimSigner.make(
+            callerProductId: productId,
+            accountManager: accountManager,
+            pgasSponsor: sponsorFactory.makePGasSponsor(),
+            chainRegistry: chainRegistry,
+            logger: logger
+        )
+    #endif
+
     lazy var accountResolver: IdentityAccountResolving = IdentityAccountResolver()
     lazy var navigationTargetResolver: ProductNavigationTargetResolving = ProductNavigationTargetResolver(
         hostProvider: hostProvider

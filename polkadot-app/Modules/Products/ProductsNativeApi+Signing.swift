@@ -70,6 +70,12 @@ extension ProductsNativeApi {
     func createTransaction(
         _ payload: CreateTransactionPayload<ProductAccountId>
     ) async throws -> CreateTransactionResult {
+        #if TESTNET_FEATURE
+            if let result = try await getCashClaimSigner?.createTransactionIfClaim(payload) {
+                return result
+            }
+        #endif
+
         let model: PolkadotHostSigningModel = .createTransaction(payload)
 
         let context = ProductSigningContext(
