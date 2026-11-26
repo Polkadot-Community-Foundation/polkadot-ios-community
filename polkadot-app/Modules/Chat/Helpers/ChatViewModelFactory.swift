@@ -32,6 +32,7 @@ final class ChatViewModelFactory {
 
     let timeFormatter: TimestampFormatting
     let balanceFactory: TransferAmountViewModelFactoryProtocol
+    let fiatAmountFactory: TransferAmountViewModelFactoryProtocol
     let dateSeparatorFormatter: ChatDateSeparatorFormatter
     let layoutContextCalculator: MessageLayoutContextCalculator
 
@@ -45,6 +46,7 @@ final class ChatViewModelFactory {
     init(
         timeFormatter: TimestampFormatting = MessageTimestampFormatter(),
         balanceFactory: TransferAmountViewModelFactoryProtocol,
+        fiatAmountFactory: TransferAmountViewModelFactoryProtocol,
         dateSeparatorFormatter: ChatDateSeparatorFormatter = ChatDateSeparatorFormatter(),
         layoutContextCalculator: MessageLayoutContextCalculator = MessageLayoutContextCalculator(),
         customDecoders: [ChatMessageCustomDecoding],
@@ -56,6 +58,7 @@ final class ChatViewModelFactory {
     ) {
         self.timeFormatter = timeFormatter
         self.balanceFactory = balanceFactory
+        self.fiatAmountFactory = fiatAmountFactory
         self.dateSeparatorFormatter = dateSeparatorFormatter
         self.layoutContextCalculator = layoutContextCalculator
         self.attachmentViewModelFactory = attachmentViewModelFactory
@@ -78,7 +81,7 @@ extension ChatViewModelFactory: ChatViewModelMaking {
     ) -> ChatViewLayout.ViewModel {
         let headerConfiguration = metadata.chatMetadata.chatContactInfo
 
-        let inputConfiguration = makeInputConfiguration(for: metadata.chatMetadata, actions: actions)
+        let inputConfiguration = makeInputConfiguration(for: metadata, actions: actions)
 
         let scrollDownConfiguration = ChatViewLayout.ViewModel.ScrollDownButtonConfiguration(
             available: true,
@@ -269,10 +272,12 @@ private extension ChatViewModelFactory {
         layoutContext: MessageLayoutContext
     ) -> [IdentifiableAnyContentConfiguration<ChatViewLayout.ItemIdentifierType>] {
         let status = message.status
+        let isSeenByPeer = metadata.isSeenByPeer(message)
         let latestEdit = listModel.getLatestEdit(for: message.messageId)
         let isEdited = listModel.isEdited(message.messageId)
 
-        let deliveryDate: Date? = (layoutContext.showTimestamp || isEdited)
+        let hidesTime = listModel.outOfDayMessageIds.contains(message.messageId)
+        let deliveryDate: Date? = (layoutContext.showTimestamp || isEdited) && !hidesTime
             ? Date.fromChatTimestamp(message.timestamp)
             : nil
 
@@ -291,6 +296,7 @@ private extension ChatViewModelFactory {
                         isEdited: isEdited
                     ),
                     status: status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     layoutContext: layoutContext,
                     reactions: reactions,
@@ -310,6 +316,7 @@ private extension ChatViewModelFactory {
                         isEdited: isEdited
                     ),
                     status: status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     layoutContext: layoutContext,
                     attachments: richText.attachments,
@@ -358,6 +365,7 @@ private extension ChatViewModelFactory {
                     peerMetadata: metadata.peerMetadata,
                     content: claimContent,
                     status: message.status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     reactions: reactions,
                     actions: actions
@@ -400,6 +408,7 @@ private extension ChatViewModelFactory {
                         isEdited: isEdited
                     ),
                     status: status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     layoutContext: layoutContext,
                     replyInfo: replyInfo,
@@ -452,6 +461,7 @@ private extension ChatViewModelFactory {
                     text: String(localized: .chatUnsupportedContent),
                     messageActions: [],
                     status: status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     layoutContext: layoutContext,
                     reactions: reactions,
@@ -465,6 +475,7 @@ private extension ChatViewModelFactory {
                 for: payload,
                 message: message,
                 status: status,
+                isSeenByPeer: isSeenByPeer,
                 deliveryDate: deliveryDate,
                 actions: actions
             )
@@ -498,6 +509,7 @@ private extension ChatViewModelFactory {
                     peerMetadata: metadata.peerMetadata,
                     content: content,
                     status: message.status,
+                    isSeenByPeer: isSeenByPeer,
                     deliveryDate: deliveryDate,
                     reactions: reactions,
                     actions: actions
@@ -579,6 +591,7 @@ private extension ChatViewModelFactory {
         text: String,
         messageActions: [ChatMessageBubbleAction],
         status: Chat.LocalMessage.Status,
+        isSeenByPeer: Bool,
         deliveryDate: Date?,
         layoutContext: MessageLayoutContext = .standard,
         replyInfo: ChatMessageContainerConfiguration.ReplyInfo? = nil,
@@ -651,6 +664,7 @@ private extension ChatViewModelFactory {
             attachments: attachmentViewModels,
             productLinkPreview: productLinkPreview,
             status: status,
+            isSeenByPeer: isSeenByPeer,
             deliveryDate: deliveryDate,
             layoutContext: layoutContext,
             replyInfo: replyInfo,
@@ -709,17 +723,24 @@ private extension ChatViewModelFactory {
         peerMetadata: Chat.PeerMetadata,
         content: Chat.LocalMessage.Content.Transfer,
         status: Chat.LocalMessage.Status,
+        isSeenByPeer: Bool,
         deliveryDate: Date?,
         reactions: [ReactionViewModel],
         actions: ChatViewModelActions
     ) -> IdentifiableAnyContentConfiguration<ChatViewLayout.ItemIdentifierType> {
         // TODO: fetch info by content.assetId + verify on real transfer
         let projection = content.bubbleProjection
-        let amountString = balanceFactory.amount(from: projection.displayedValue)
+        let amountString = fiatAmountFactory.amount(from: projection.displayedValue)
         let tokenSymbol = balanceFactory.symbol
         let originalAmountString: String? = projection.originalValue.flatMap {
-            balanceFactory.amount(from: $0)
+            fiatAmountFactory.amount(from: $0)
         }
+        let reclaimedAmountString = content.partialReclaimedValue.map { fiatAmountFactory.amount(from: $0) }
+        let reclaimAction = content.isReclaimable
+            ? ChatTransferMessageConfiguration.ReclaimAction(onReclaim: { [messageId, actions] in
+                actions.reclaimTransfer(messageId)
+            })
+            : nil
 
         let statusConfiguration: ChatMessageStatusViewConfiguration
         var configuration: ChatMessageContainerConfiguration
@@ -749,7 +770,6 @@ private extension ChatViewModelFactory {
             statusConfiguration = .inbox(date: deliveryDate, formatter: timeFormatter)
 
             configuration = ChatTransferMessageConfiguration.inbox(
-                currencySymbol: AppConfig.Brand.fiatSymbol,
                 amount: amountString,
                 tokenSymbol: tokenSymbol,
                 originalAmount: originalAmountString,
@@ -764,18 +784,19 @@ private extension ChatViewModelFactory {
             statusConfiguration = .outbox(
                 date: deliveryDate,
                 formatter: timeFormatter,
-                status: outgoingStatus.configurationStatus()
+                status: outgoingStatus.configurationStatus(isSeenByPeer: isSeenByPeer)
             )
 
             configuration = ChatTransferMessageConfiguration.outbox(
-                currencySymbol: AppConfig.Brand.fiatSymbol,
                 amount: amountString,
                 tokenSymbol: tokenSymbol,
                 originalAmount: originalAmountString,
-                state: content.outgoingViewState,
+                to: peerMetadata.name,
+                state: content.outgoingViewState(reclaimedAmount: reclaimedAmountString),
                 statusConfiguration: statusConfiguration,
                 addReaction: addReaction,
-                messageReaction: messageReaction
+                messageReaction: messageReaction,
+                reclaimAction: reclaimAction
             )
         }
 
@@ -863,6 +884,7 @@ private extension ChatViewModelFactory {
                 text: text,
                 messageActions: messageActions,
                 status: status,
+                isSeenByPeer: metadata.isSeenByPeer(message),
                 deliveryDate: deliveryDate,
                 layoutContext: layoutContext,
                 reactions: reactions,
@@ -982,11 +1004,11 @@ private extension ChatViewModelFactory {
 }
 
 extension Chat.LocalMessage.Status.OutgoingStatus {
-    func configurationStatus() -> ChatMessageStatusViewConfiguration.OutboxStatus {
+    func configurationStatus(isSeenByPeer: Bool) -> ChatMessageStatusViewConfiguration.OutboxStatus {
         switch self {
         case .new: .pending
-        case .sent: .sent
-        case .delivered: .delivered
+        case .sent: isSeenByPeer ? .seen : .sent
+        case .delivered: isSeenByPeer ? .seen : .delivered
         case .failed: .failed
         }
     }

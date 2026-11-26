@@ -103,7 +103,8 @@ final class FirebaseApplicationService: RemoteConfigManaging {
             offrampUrl: fundingConfigValue(.offrampUrl),
             accountDataStoreContract: accountDataStoreContractAddress(),
             paymentAsset: paymentAssetConfig(),
-            appSharingUrl: url(for: .appSharingUrl)
+            appSharingUrl: url(for: .appSharingUrl),
+            coinagePrivacyConfig: coinagePrivacyConfigData()
         )
     }
 
@@ -179,6 +180,11 @@ private extension FirebaseApplicationService {
     func paymentAssetConfig() -> PaymentAssetConfig? {
         guard let json = remoteConfig[.paymentAssetConfig].jsonValue as? [String: String] else { return nil }
         return PaymentAssetConfig(json: json)
+    }
+
+    func coinagePrivacyConfigData() -> Data? {
+        let data = remoteConfig[.coinagePrivacyConfig].dataValue
+        return data.isEmpty ? nil : data
     }
 
     func dotNsConfigEntry(_ field: String, treatingEmptyAsMissing: Bool = false) -> String? {
@@ -291,5 +297,6 @@ private extension String {
     static let accountDataStoreConfig = "account_data_store_config"
     static let contractAddress = "contractAddress"
     static let paymentAssetConfig = "payment_asset_config"
+    static let coinagePrivacyConfig = "coinage_privacy_config"
     static let appSharingUrl = "app_sharing_url"
 }
